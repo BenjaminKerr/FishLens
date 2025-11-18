@@ -1,6 +1,39 @@
-# tracking/deepsort_tracker.py
+from deep_sort_realtime.deepsort_tracker import DeepSort
+import numpy as np
 
-# Temporary placeholder for Day 1
 class DeepSortTracker:
     def __init__(self):
-        pass
+        # Use default embedder
+        self.tracker = DeepSort(
+            max_age=30,
+            n_init=1,
+            max_iou_distance=0.7,
+            max_cosine_distance=0.2
+        )
+
+    def update(self, detections):
+        """
+        detections: list of [x1, y1, x2, y2, confidence, class_id]
+        """
+        formatted = []
+        for det in detections:
+            x1, y1, x2, y2, conf, class_id = det
+            formatted.append(([x1, y1, x2, y2], conf, class_id))
+
+        # Create a fake frame for testing
+        fake_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        # Update tracks using the fake frame
+        tracks = self.tracker.update_tracks(formatted, frame=fake_frame)
+
+        results = []
+        for track in tracks:
+            if not track.is_confirmed():
+                continue
+            results.append({
+                "track_id": track.track_id,
+                "bbox": track.to_ltrb(),
+                "class_id": track.get_det_class(),
+                "confidence": track.get_det_conf()
+            })
+        return results
