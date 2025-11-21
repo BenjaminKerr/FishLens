@@ -17,17 +17,32 @@ from ultralytics import YOLO
 # Standard YOLOv8 model
 model = YOLO("yolov8n.pt") 
 
-
 # Input folder: sample_images
 # Output folder: results/trial1, where trial1 is auto-incremented
 # each time the program is run.
+# Warning: Setting save_txt to true will create a .txt file for each
+# frame of video.
 results = model.predict(
     source="sample_images/",
     show=True, 
     save=True, 
+    save_txt=False,
     project="results", 
     name="trial"
 ) 
+
+# Frames with high confidence are added to an array and printed
+detections = []
+
+for frame_index, r in enumerate(results):
+    for box in r.boxes:
+        cls_id = int(box.cls[0])
+        conf = float(box.conf[0].item())
+        conf_trunc = f"{conf:.2f}"
+        if conf >= 0.5:
+            detections.append((frame_index, cls_id, conf_trunc))
+
+print (detections)
 
 # Displays image with bounding boxes
 results[0].plot()
