@@ -1,0 +1,6 @@
+[theme]
+base="light"
+headingFont="serif"
+
+[theme.sidebar]
+backgroundColor="DarkCyan"
