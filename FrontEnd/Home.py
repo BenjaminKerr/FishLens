@@ -20,13 +20,14 @@ if 'vids' not in st.session_state:
 if not st.session_state.vids: # Initial upload
     vids = st.file_uploader("", accept_multiple_files=True, type=["mp4", "asf"])
     if vids:
+        # Display uploaded videos
         st.session_state.vids = list(vids)
+
+        # Save uploaded videos to SavedVids folder
         for vid in vids:
-            bytes = vid.getvalue()
             name = vid.name
-            # response = requests.post(API_URL + "/upload_video", files={"file": (name, bytes, "video/mp4")})
             with open(os.path.join("SavedVids", vid.name),"wb") as f:
-                f.write(vid.getbuffer()) # Save uploaded video to SavedVids folder
+                f.write(vid.getbuffer())
         st.rerun()
 else: # Subsequent uploads
     vids = st.session_state.vids
