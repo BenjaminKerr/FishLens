@@ -211,3 +211,4 @@ trial*/
 
 # Temporary video storage, don't ignore folder just contents
 SavedVids/*
+!SavedVids/.gitkeep
