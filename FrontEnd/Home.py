@@ -1,6 +1,8 @@
 # APP.PY: FishLens - A Streamlit frontend for the FishLens fish identifier
 
 # Import necessary libraries
+import os
+import requests
 import streamlit as st # Streamlit for web app
 import pandas as pd # Pandas for data manipulation
 import numpy as np # NumPy for numerical operations
@@ -19,6 +21,12 @@ if not st.session_state.vids: # Initial upload
     vids = st.file_uploader("", accept_multiple_files=True, type=["mp4", "asf"])
     if vids:
         st.session_state.vids = list(vids)
+        for vid in vids:
+            bytes = vid.getvalue()
+            name = vid.name
+            # response = requests.post(API_URL + "/upload_video", files={"file": (name, bytes, "video/mp4")})
+            with open(os.path.join("SavedVids", vid.name),"wb") as f:
+                f.write(vid.getbuffer()) # Save uploaded video to SavedVids folder
         st.rerun()
 else: # Subsequent uploads
     vids = st.session_state.vids
