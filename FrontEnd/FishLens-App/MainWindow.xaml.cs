@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -28,36 +29,72 @@ namespace FishLens_App
         }
 
         // ************* Open Folder Click Function *************
-        //  Displays and saves videos uploaded by the user.
+        //  Saves videos uploaded by the user.
         private void openFolder_Click(object sender, RoutedEventArgs e)
         {
             //  Display
             OpenFileDialog openFileDialog = new OpenFileDialog();
             openFileDialog.Filter = "MP4 Video|*.mp4|ASF Video|*.asf";
+            openFileDialog.Title = "Select a video file for analysis";
+            string sourceFilePath = string.Empty;
             if (openFileDialog.ShowDialog() == true)
             {
-                VideoPlayer.Source = new Uri(openFileDialog.FileName);
+                sourceFilePath = openFileDialog.FileName;
+                VideoPlayer.Source = new Uri(sourceFilePath);
                 VideoPlayer.Play();
             }
 
+
             // Save
-            byte[] videoData = File.ReadAllBytes(openFileDialog.FileName);
-            SaveFileDialog saveFileDialog = new SaveFileDialog();
-            saveFileDialog.Filter = "Media Files|*.mp4;*.asf";
-            saveFileDialog.InitialDirectory = @"SavedVids";
-            if (saveFileDialog.ShowDialog() == true && saveFileDialog.FileName != "")
+
+            // Determine Save Directory
+            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;               //FishLens/FrontEnd/FishLens-App/bin/Debug
+            string projectRoot = System.IO.Path.GetDirectoryName(baseDirectory);        //FishLens/FrontEnd/FishLens-App/bin
+            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens/FrontEnd/FishLens-App
+            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens/FrontEnd
+            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens
+            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens      ******One more for some reason?? It works like this????******
+            string saveDirectory = System.IO.Path.Combine(projectRoot, "SavedVids");    //FishLens/SavedVids
+
+            // If directory has been deleted, create it.
+            if (!Directory.Exists(saveDirectory))
             {
-                using (System.IO.FileStream fs = (System.IO.FileStream)saveFileDialog.OpenFile())
-                { 
-                    try
-                    {
-                        fs.Write(videoData, 0, videoData.Length);
-                    }
-                    catch (IOException ex)
-                    {
-                        MessageBox.Show($"Error Saving File {ex.Message}", "Save Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    }
+                try
+                {
+                    System.IO.Directory.CreateDirectory(saveDirectory);
                 }
+                catch (System.UnauthorizedAccessException)
+                {
+                    MessageBox.Show(
+                    "Cannot create the 'SavedVids' folder due to permission restrictions. Run the application as Administrator, or choose a different save path.",
+                    "Permission Denied",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(
+                    $"Fatal Error: Could not create analysis directory. Details: {ex.Message}",
+                    "Directory Creation Failed",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+            }
+
+            string fileName = System.IO.Path.GetFileName(sourceFilePath);
+            string destinationPath = System.IO.Path.Combine(saveDirectory, fileName);
+
+            try
+            {
+                System.IO.File.Copy(sourceFilePath, destinationPath, true);
+            }
+            catch (IOException ex)
+            {
+                MessageBox.Show($"Error Saving File: {ex.Message}", "Save Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            catch (SecurityException)
+            {
+                MessageBox.Show("Insufficient permissions to copy the file.", "Permission Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
