@@ -1,0 +1,16 @@
+C:\Users\benja\FishLens\FrontEnd\FishLens-App\bin\Debug\FishLens-App.exe.config
+C:\Users\benja\FishLens\FrontEnd\FishLens-App\bin\Debug\FishLens-App.exe
+C:\Users\benja\FishLens\FrontEnd\FishLens-App\bin\Debug\FishLens-App.pdb
+C:\Users\benja\FishLens\FrontEnd\FishLens-App\obj\Debug\FishLens-App.csproj.AssemblyReference.cache
+C:\Users\benja\FishLens\FrontEnd\FishLens-App\obj\Debug\MainWindow.g.cs
+C:\Users\benja\FishLens\FrontEnd\FishLens-App\obj\Debug\App.g.cs
+C:\Users\benja\FishLens\FrontEnd\FishLens-App\obj\Debug\FishLens-App_MarkupCompile.cache
+C:\Users\benja\FishLens\FrontEnd\FishLens-App\obj\Debug\FishLens-App_MarkupCompile.lref
+C:\Users\benja\FishLens\FrontEnd\FishLens-App\obj\Debug\MainWindow.baml
+C:\Users\benja\FishLens\FrontEnd\FishLens-App\obj\Debug\FishLens-App.g.resources
+C:\Users\benja\FishLens\FrontEnd\FishLens-App\obj\Debug\FishLens_App.Properties.Resources.resources
+C:\Users\benja\FishLens\FrontEnd\FishLens-App\obj\Debug\FishLens-App.csproj.GenerateResource.cache
+C:\Users\benja\FishLens\FrontEnd\FishLens-App\obj\Debug\FishLens-App.csproj.CoreCompileInputs.cache
+C:\Users\benja\FishLens\FrontEnd\FishLens-App\obj\Debug\FishLens-App.exe
+C:\Users\benja\FishLens\FrontEnd\FishLens-App\obj\Debug\FishLens-App.pdb
+C:\Users\benja\FishLens\FrontEnd\FishLens-App\obj\Debug\FishLens-App.exe.config

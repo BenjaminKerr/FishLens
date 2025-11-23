@@ -1,0 +1,36 @@
+﻿<Window x:Class="FishLens_App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:FishLens_App"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="{x:Static SystemParameters.PrimaryScreenHeight}" Width="{x:Static SystemParameters.PrimaryScreenWidth}"
+        Background="#F2F0EF">
+    
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="1*"/>
+            <ColumnDefinition Width="3*"/>
+        </Grid.ColumnDefinitions>
+        
+        
+        <!--File Upload + Media Viewer-->
+        <StackPanel Grid.Column="1" Margin="10">
+            <TextBlock Name="Title" FontSize="60" FontFamily="Georgia" HorizontalAlignment="Left" Margin="10,10,10,0">FishLens</TextBlock>
+            <Button Name="openFolder" Click="openFolder_Click" HorizontalAlignment="Left" Margin="10,10,10,10" Padding="5,5,5,5" Background="DarkSlateGray" Foreground="White">
+                    Choose a Folder
+            </Button>
+            <MediaElement Name="VideoPlayer" Width="800" Height="450" Margin="10,30,10,10" LoadedBehavior="Manual"></MediaElement>
+        </StackPanel>
+        
+        <!--Sidebar: Media Selector + App Navigation-->
+        <StackPanel Grid.Column="0">
+            <Border CornerRadius="10">
+                <WrapPanel Margin="0" Background="DarkCyan" Height="{x:Static SystemParameters.PrimaryScreenHeight}">
+                    <ScrollViewer Name="videoList"/>
+                </WrapPanel>
+            </Border>
+        </StackPanel>
+    </Grid>
+</Window>
