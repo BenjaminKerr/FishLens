@@ -1,6 +1,8 @@
 # APP.PY: FishLens - A Streamlit frontend for the FishLens fish identifier
 
 # Import necessary libraries
+import os
+import requests
 import streamlit as st # Streamlit for web app
 import pandas as pd # Pandas for data manipulation
 import numpy as np # NumPy for numerical operations
@@ -18,7 +20,14 @@ if 'vids' not in st.session_state:
 if not st.session_state.vids: # Initial upload
     vids = st.file_uploader("", accept_multiple_files=True, type=["mp4", "asf"])
     if vids:
+        # Display uploaded videos
         st.session_state.vids = list(vids)
+
+        # Save uploaded videos to SavedVids folder
+        for vid in vids:
+            name = vid.name
+            with open(os.path.join("SavedVids", vid.name),"wb") as f:
+                f.write(vid.getbuffer())
         st.rerun()
 else: # Subsequent uploads
     vids = st.session_state.vids
