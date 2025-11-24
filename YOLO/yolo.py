@@ -23,13 +23,14 @@ model = YOLO("yolov8n.pt")
 # each time the program is run.
 # Warning: Setting save_txt to true will create a .txt file for each
 # vid_stride: Changes how many frames to skip before analyzing video
+#       Changing the value will also affect the overall confidence of the object being detected
 # frame of video.
 results = model.predict(
     source="sample_data/",
     show=True, 
-    save=False, 
+    save=True, 
     save_txt=False,
-    vid_stride=20,
+    vid_stride=10,
     project="results", 
     name="trial"
 ) 
