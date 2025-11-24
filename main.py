@@ -1,7 +1,9 @@
 import cv2
+import os
 import numpy as np
 from YOLO.detector import YoloDetector
 from tracking.deepsort_tracker import DeepSortTracker
+from YOLO.yolo import analyze_videos
 
 print("MAIN.PY IS RUNNING...")
 
@@ -100,4 +102,7 @@ def run_video_tracker(video_path):
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    run_video_tracker("sample_data/SAMPLE_FISH_VIDEO.mp4")
+    analyze_videos()
+    for filename in os.listdir("results/has_fish/"):
+        video_path = os.path.join("results/has_fish/", filename)
+        run_video_tracker(video_path)
