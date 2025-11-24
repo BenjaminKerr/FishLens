@@ -14,7 +14,7 @@ class DeepSortTracker:
         self.track_positions = {}
         self.previous_directions = {}
 
-    def _get_direction(self, track_id, centroid, history=5, threshold=5):
+    def _get_direction(self, track_id, centroid, history=5, threshold=10):
         """
         Calculate direction of a track using its recent centroids.
         Returns 'upstream' or 'downstream'.

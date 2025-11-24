@@ -3,7 +3,7 @@ import os
 import numpy as np
 from YOLO.detector import YoloDetector
 from tracking.deepsort_tracker import DeepSortTracker
-from YOLO.yolo import analyze_videos
+#from YOLO.yolo import analyze_videos
 
 print("MAIN.PY IS RUNNING...")
 
@@ -92,7 +92,7 @@ def run_video_tracker(video_path):
 
 
 if __name__ == "__main__":
-    analyze_videos()
+    #analyze_videos()
 
     for filename in os.listdir("results/has_fish/"):
         video_path = os.path.join("results/has_fish/", filename)
