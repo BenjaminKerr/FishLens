@@ -8,16 +8,20 @@
 
 import msal
 import requests
+import webbrowser
 
 CLIENT_ID = "aed2d2f8-02e0-413c-a365-cdf377f5c329"
 AUTHORITY = "https://login.microsoftonline.com/common"
-SCOPES = ["User.Read", "Files.Read"]
+SCOPES = ["User.Read", "Files.ReadWrite"]
 
 app = msal.PublicClientApplication(client_id=CLIENT_ID, authority=AUTHORITY)
 
 flow = app.initiate_device_flow(scopes=SCOPES)
+
+webbrowser.open(flow["verification_uri"])
 print("\n--- Microsoft Login ---")
-print(flow["message"])
+print("The login window will now open for you\n")
+print("Where asked enter this code", flow["user_code"])
 
 result = app.acquire_token_by_device_flow(flow)
 
@@ -72,6 +76,97 @@ def select_excel_sheet(access_token):
                 return excel_items[idx - 1]
         print("That wasn’t one of the options, try again.")
 
+# Function: open_selected_sheet
+# Purpose: This function will open the spreadsheet in the users browser they had selected
+# 
+def open_selected_sheet(selected_item):
+    if not selected_item:
+        return
+
+    url = selected_item.get("webUrl")
+    if not url:
+        print("Couldn’t find the link to open this file")
+        return
+
+    print(f"\nOpening '{selected_item.get('name')}' in your browser")
+    webbrowser.open(url)
+
+
+# Function: add_row_to_selected_sheet
+# Purpose: This function will add a single row of data based on user input, it also pulls current column names so user knows what to input
+# 
+def add_row_to_selected_sheet(access_token, selected_item):
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+
+    file_id = selected_item["id"]
+
+  
+    ws_resp = requests.get(
+        f"https://graph.microsoft.com/v1.0/me/drive/items/{file_id}/workbook/worksheets",
+        headers=headers
+    )
+    ws_resp.raise_for_status()
+    worksheets = ws_resp.json().get("value", [])
+    if not worksheets:
+        print("No worksheets found in that spreadsheet")
+        return
+
+    sheet_id = worksheets[0]["id"]
+    sheet_name = worksheets[0]["name"]
+    print(f"\nUsing sheet: {sheet_name}")
+
+    
+    used_resp = requests.get(
+        f"https://graph.microsoft.com/v1.0/me/drive/items/{file_id}/workbook/worksheets/{sheet_id}/usedRange(valuesOnly=true)",
+        headers=headers
+    )
+    used_resp.raise_for_status()
+    values = used_resp.json().get("values", [])
+
+    if not values or len(values) < 1:
+        print("Sheet is empty, no column names written")
+        return
+
+    
+    column_names = values[0]
+    print("\nColumns found:")
+    for c in column_names:
+        print(c)
+
+   
+    new_row = []
+    print("\nEnter the value for each column:")
+    for c in column_names:
+        val = input(f"{c}: ")
+        new_row.append(val)
+
+    
+    next_row_number = len(values) + 1  
+
+    def col_letter(n):
+        s = ""
+        while n > 0:
+            n, r = divmod(n - 1, 26)
+            s = chr(65 + r) + s
+        return s
+
+    last_col_letter = col_letter(len(column_names))
+    address = f"A{next_row_number}:{last_col_letter}{next_row_number}"
+
+    patch_resp = requests.patch(
+        f"https://graph.microsoft.com/v1.0/me/drive/items/{file_id}/workbook/worksheets/{sheet_id}/range(address='{address}')",
+        headers=headers,
+        json={"values": [new_row]}
+    )
+    patch_resp.raise_for_status()
+
+    print("\nNew row added in row", next_row_number)
+
+
+
 if "access_token" in result:
     print("\nLogin worked token recieved")
     selected = select_excel_sheet(result["access_token"])
@@ -80,6 +175,8 @@ if "access_token" in result:
         print("\nYou picked:")
         print(f"• {selected['name']}")
         print("(Will use file ID later to add data)")
+        open_selected_sheet(selected)
+        add_row_to_selected_sheet(result["access_token"], selected)
 else:
     print("\nLogin failed")
     print(result.get("error_description"))
