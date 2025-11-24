@@ -25,7 +25,8 @@ def analyze_videos():
             show=False,      # Set to true to show analysis in realtime
             save=False,     # Set to true to save images/videos with detections drawn
             iou=0.5,      
-            save_txt=False, # Set to true to save detection results as .txt files (One file per frame)
+            save_txt=False,
+            stream=True, # Set to true to save detection results as .txt files (One file per frame)
         project="results", 
         name="trial"        # Each video will have it's own folder (trial, trial2, etc) if save=True
         ) 
