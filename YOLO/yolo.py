@@ -22,12 +22,14 @@ model = YOLO("yolov8n.pt")
 # Output folder: results/trial1, where trial1 is auto-incremented
 # each time the program is run.
 # Warning: Setting save_txt to true will create a .txt file for each
+# vid_stride: Changes how many frames to skip before analyzing video
 # frame of video.
 results = model.predict(
     source="sample_data/",
     show=True, 
-    save=True, 
+    save=False, 
     save_txt=False,
+    vid_stride=20,
     project="results", 
     name="trial"
 ) 
