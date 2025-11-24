@@ -10,47 +10,19 @@ print("MAIN.PY IS RUNNING...")
 # Initialize YOLO and DeepSort
 detector = YoloDetector(weights_path="YOLO/yolov8n.pt")
 tracker = DeepSortTracker()
-track_history = {}  # To store centroids for direction tracking
 
-#currently taking moving up as upstream and down (y axis) as downstream
-def get_direction(track_id, centroid):
-    if track_id not in track_history:
-        track_history[track_id] = [centroid]
-        return None
+# Parameters
+HISTORY_LENGTH = 5        # number of previous positions to smooth direction
+DIRECTION_THRESHOLD = 5   # minimum pixel movement to count as direction change
 
-    track_history[track_id].append(centroid)
-
-    # Use total movement over last N frames
-    N = min(5, len(track_history[track_id]))
-    y_start = track_history[track_id][-N][1]
-    y_end = centroid[1]
-
-    if y_end < y_start - 2:  # add a small threshold to avoid jitter
-        return "upstream"
-    elif y_end > y_start + 2:
-        return "downstream"
-    else:
-        return "stationary"
-
-# def get_direction(track_id, centroid):
-#     """Determine upstream/downstream direction based on previous centroid positions."""
-#     if track_id not in track_history:
-#         track_history[track_id] = [centroid]
-#         return None
-#     prev_y = track_history[track_id][-1][1]
-#     track_history[track_id].append(centroid)
-#     if centroid[1] < prev_y:
-#         return "upstream"
-#     elif centroid[1] > prev_y:
-#         return "downstream"
-#     else:
-#         return "stationary"
 
 def run_video_tracker(video_path):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        print("Error: Could not open video.")
+        print(f"Error: Could not open video: {video_path}")
         return
+
+    print(f"Tracking video: {video_path}")
 
     while True:
         ret, frame = cap.read()
@@ -59,41 +31,58 @@ def run_video_tracker(video_path):
 
         h, w, _ = frame.shape
 
-        # 1. Detect fish using YOLO
-        detections = detector.detect(frame)  # [x1, y1, x2, y2, conf, class_id]
+        # 1. ---- YOLO DETECTION ----
+        detections = detector.detect(frame)  
+        # detections = [x1, y1, x2, y2, conf, cls]
 
-        # 2. Clamp bounding boxes and prepare for DeepSort
-        ds_dets = []
+        # clamp and ensure proper format
+        cleaned_dets = []
         for det in detections:
             x1, y1, x2, y2, conf, cls_id = det
-            x1 = max(0, min(x1, w-1))
-            x2 = max(0, min(x2, w-1))
-            y1 = max(0, min(y1, h-1))
-            y2 = max(0, min(y2, h-1))
-            ds_dets.append([x1, y1, x2, y2, conf, int(cls_id)])
 
-        # 3. Update tracker only if detections exist
-        if len(ds_dets) > 0:
-            tracks = tracker.update(ds_dets, frame=frame)  # pass actual frame for embeddings
-        else:
-            tracks = []
+            x1 = max(0, min(int(x1), w - 1))
+            x2 = max(0, min(int(x2), w - 1))
+            y1 = max(0, min(int(y1), h - 1))
+            y2 = max(0, min(int(y2), h - 1))
 
-        # 4. Draw tracks and directions
+            # Optional: filter tiny boxes to reduce duplicates
+            if (x2 - x1) * (y2 - y1) < 100:  # adjust 100 to your min fish size
+                continue
+
+            cleaned_dets.append([x1, y1, x2, y2, float(conf), int(cls_id)])
+
+        # 2. ---- UPDATE DEEPSORT ----
+        tracks = tracker.update(cleaned_dets, frame)
+
+        # 3. ---- DRAW TRACKS ----
         for track in tracks:
             track_id = track["track_id"]
-            x1, y1, x2, y2 = map(int, track["bbox"])
-            centroid = ((x1 + x2) // 2, (y1 + y2) // 2)
-            direction = get_direction(track_id, centroid)
+            x1, y1, x2, y2 = track["bbox"]
 
-            # Draw bounding box and label
+            # --- update track position history ---
+            x_center = int((x1 + x2) / 2)
+            y_center = int((y1 + y2) / 2)
+            if "positions" not in track:
+                track["positions"] = []
+                track["previous_direction"] = "downstream"  # default
+
+            track["positions"].append((x_center, y_center))
+            if len(track["positions"]) > HISTORY_LENGTH:
+                track["positions"].pop(0)
+
+            # --- calculate smoothed direction ---
+            direction = track["direction"] 
+
+            # Draw bounding box
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            label = f"ID:{track_id}"
-            if direction:
-                label += f" {direction}"
-            cv2.putText(frame, label, (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-        # 5. Display video
+            # Label
+            label = f"ID:{track_id} {direction}"
+            cv2.putText(frame, label, (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5, (0, 255, 0), 2)
+
+        # 4. ---- SHOW FRAME ----
         cv2.imshow("Fish Tracker", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
@@ -101,8 +90,10 @@ def run_video_tracker(video_path):
     cap.release()
     cv2.destroyAllWindows()
 
+
 if __name__ == "__main__":
     analyze_videos()
+
     for filename in os.listdir("results/has_fish/"):
         video_path = os.path.join("results/has_fish/", filename)
         run_video_tracker(video_path)
