@@ -19,19 +19,19 @@ def analyze_videos():
     # Standard YOLOv8 model
     model = YOLO("yolov8n.pt") 
 
-# Input folder: sample_data
-# Output folder: results/trial1, where trial1 is auto-incremented
-# each time the program is run.
-# Warning: Setting save_txt to true will create a .txt file for each
-# frame of video.
-results = model.predict(
-    source="sample_data/",
-    show=True, 
-    save=True, 
-    save_txt=False,
-    project="results", 
-    name="trial"
-) 
+    for filename in os.listdir("sample_data/"):
+        results = model.predict(
+            source=os.path.join("sample_data", filename),
+            show=False,      # Set to true to show analysis in realtime
+            save=False,     # Set to true to save images/videos with detections drawn
+            iou=0.5,      
+            save_txt=False,
+            stream=True,
+            vid_stride=30,
+             # Set to true to save detection results as .txt files (One file per frame)
+        project="results", 
+        name="trial"        # Each video will have it's own folder (trial, trial2, etc) if save=True
+        ) 
 
         # Frames with detections are added to an array and printed
         detections = []
@@ -68,6 +68,3 @@ results = model.predict(
         print("--------------------------------------------------------------")
         print(f"Video most likely contains a {most_common_class} (Confidence: {avg_confidence:.2f}%).")
         print("--------------------------------------------------------------")
-
-
-
