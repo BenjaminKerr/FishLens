@@ -1,52 +1,76 @@
 import numpy as np
 from deep_sort_realtime.deepsort_tracker import DeepSort
+import torch
+from torchvision.ops import nms
 
 class DeepSortTracker:
     def __init__(self):
         self.tracker = DeepSort(
-            max_age=50,
-            n_init=5,
-            max_iou_distance=0.7,
+            max_age=50,          # remove old tracks faster
+            n_init=15,            # fewer detections to confirm a track
+            max_iou_distance=0.9,
             max_cosine_distance=0.2
         )
 
-        # Track history: track_id → list of centroids
+        # track_id → list of centroid tuples
         self.track_positions = {}
+        # track_id → last known direction
         self.previous_directions = {}
+        # track_id → list of detection dictionaries
+        self.detection_history = {}
 
-    def _get_direction(self, track_id, centroid, history=5, threshold=10):
+    def filter_overlaps(self, detections, iou_thresh=0.5):
         """
-        Calculate direction of a track using its recent centroids.
-        Returns 'upstream' or 'downstream'.
+    Remove overlapping boxes, keeping the highest confidence.
+    detections = [[x1, y1, x2, y2, conf, cls_id], ...]
         """
-        # Get or initialize positions history
+        if not detections:
+            return []
+
+        # Ensure all detections are valid lists/tuples with at least 5 elements
+        detections = [d for d in detections if isinstance(d, (list, tuple)) and len(d) >= 5]
+
+        if not detections:
+            return []
+
+        boxes = torch.tensor([d[:4] for d in detections], dtype=torch.float32)
+        scores = torch.tensor([d[4] for d in detections], dtype=torch.float32)
+
+        keep_idxs = nms(boxes, scores, iou_thresh)
+        return [detections[i] for i in keep_idxs]
+
+    def _get_direction(self, track_id, centroid):
+        """
+        Compute horizontal direction using first and last position
+        Returns 'upstream' (left) or 'downstream' (right)
+        """
         positions = self.track_positions.get(track_id, [])
         positions.append(centroid)
-
-        # Keep only last N positions
-        if len(positions) > history:
-            positions = positions[-history:]
         self.track_positions[track_id] = positions
 
-        # Not enough data yet
         if len(positions) < 2:
-            return self.previous_directions.get(track_id, "downstream")
+            return "unknown"
 
-        dy = positions[-1][1] - positions[0][1]
-        if abs(dy) < threshold:
-            return self.previous_directions.get(track_id, "downstream")
+        dx = positions[-1][0] - positions[0][0]  # horizontal movement
+        if abs(dx) < 5:  # minimal movement threshold
+            return "stationary"
 
-        direction = "upstream" if dy < 0 else "downstream"
+        direction = "upstream" if dx < 0 else "downstream"
         self.previous_directions[track_id] = direction
         return direction
 
     def update(self, detections, frame):
         """
-        Update DeepSort tracks with new detections.
-        detections: list of [x1, y1, x2, y2, conf, cls]
+        Update DeepSort with new detections.
+        detections = [x1, y1, x2, y2, conf, cls]
         """
-        # Format detections for DeepSort
-        formatted = [([x1, y1, x2, y2], conf, cls) for x1, y1, x2, y2, conf, cls in detections]
+        # Filter tiny boxes
+        detections = [d for d in detections if (d[2]-d[0])*(d[3]-d[1]) > 100]
+
+        formatted = [
+            ([x1, y1, x2, y2], conf, cls)
+            for x1, y1, x2, y2, conf, cls in detections
+        ]
 
         tracks = self.tracker.update_tracks(formatted, frame=frame)
         results = []
@@ -55,22 +79,59 @@ class DeepSortTracker:
             if not t.is_confirmed():
                 continue
 
-            # Bounding box
+            track_id = t.track_id
             x1, y1, x2, y2 = map(int, t.to_ltrb())
-
-            # Centroid
             centroid = ((x1 + x2) // 2, (y1 + y2) // 2)
 
-            # Calculate smoothed direction
-            direction = self._get_direction(t.track_id, centroid)
+            direction = self._get_direction(track_id, centroid)
+
+            # Log detections
+            if track_id not in self.detection_history:
+                self.detection_history[track_id] = []
+
+            det_conf = t.get_det_conf()
+            det_conf = float(det_conf) if det_conf is not None else 0.0
+
+            self.detection_history[track_id].append({
+                "confidence": det_conf,
+                "class_id": t.det_class,
+                "centroid": centroid
+            })
 
             results.append({
-                "track_id": t.track_id,
+                "track_id": track_id,
                 "bbox": (x1, y1, x2, y2),
                 "centroid": centroid,
                 "direction": direction,
-                "class_id": t.det_class,
-                "confidence": t.det_conf
+                "confidence": det_conf,
+                "class_id": t.det_class
             })
 
         return results
+
+    def get_track_summaries(self, min_frames=3):
+        """
+        Summarize confirmed tracks with minimal frames.
+        Only tracks lasting >= min_frames will be exported.
+        """
+        summaries = []
+        min_frames = 10
+        for track_id, centroids in self.track_positions.items():
+            if len(centroids) < min_frames:
+                continue  # ignore short tracks
+
+            detection_list = self.detection_history.get(track_id, [])
+            confidences = [d["confidence"] for d in detection_list if d["confidence"] is not None]
+            avg_conf = float(np.mean(confidences)) if confidences else 0.0
+            class_id = detection_list[0]["class_id"] if detection_list else None
+            direction = self.previous_directions.get(track_id, "unknown")
+
+            summaries.append({
+                "track_id": track_id,
+                "direction": direction,
+                "avg_confidence": avg_conf,
+                "detections_count": len(detection_list),
+                "class_id": class_id
+            })
+
+        return summaries
