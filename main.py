@@ -10,11 +10,13 @@ FPS_DEFAULT = 30  # fallback if video FPS cannot be read
 # YOLO model
 model = YOLO("yolov8n.pt")
 
-# DeepSort tracker
-tracker = DeepSortTracker()
+# NOTE: create a tracker per-video inside run_video_tracker to avoid
+# carrying tracker state (track IDs, histories) across multiple files.
 
 def run_video_tracker(video_path):
     import cv2
+    # create a fresh tracker for each video to avoid ID/history leakage
+    tracker = DeepSortTracker()
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print(f"Error: Could not open video: {video_path}")
@@ -24,6 +26,7 @@ def run_video_tracker(video_path):
     frame_index = 0
     active_tracks = {}
     finished_tracks = []
+    found_fish = False
 
     while True:
         ret, frame = cap.read()
@@ -44,9 +47,17 @@ def run_video_tracker(video_path):
                 cls_id = int(cls_arr[0]) if cls_arr.size > 0 and cls_arr[0] is not None else -1
                 if (x2 - x1)*(y2 - y1) < 100:
                     continue
+                # mark if YOLO detected a bird in any frame of this video
+                try:
+                    cls_name = model.names[cls_id].lower()
+                except Exception:
+                    cls_name = str(cls_id)
+                if "bird" in cls_name:
+                    found_fish = True
                 detections.append([x1, y1, x2, y2, conf, cls_id])
 
-        detections = tracker.filter_overlaps(detections, iou_thresh=0.5)
+        # use the tracker's default iou threshold (tuned in the tracker)
+        detections = tracker.filter_overlaps(detections)
         tracked_objects = tracker.update(detections, frame)
         current_track_ids = set()
 
@@ -64,24 +75,37 @@ def run_video_tracker(video_path):
             active_tracks[track_id]["confidences"].append(obj["confidence"])
             active_tracks[track_id]["directions"].append(obj["direction"])
 
-        # finalize disappeared tracks
+        # finalize disappeared tracks - only export if track lasted long enough
         disappeared_ids = set(active_tracks.keys()) - current_track_ids
         for tid in disappeared_ids:
             track_data = active_tracks.pop(tid)
-            confidences = [c for c in track_data["confidences"] if c is not None]
-            avg_conf = sum(confidences)/len(confidences) if confidences else 0.0
+            
+            # Only export if track lasted at least 0.5 seconds (helps filter noise)
+            duration_sec = (frame_index - track_data["start_frame"]) / video_fps
+            if duration_sec < 1.0:
+                continue
+
+            det_hist = tracker.detection_history.get(tid, [])
+            confs = [d["confidence"] for d in det_hist if d["confidence"] is not None]
+            avg_conf = sum(confs) / len(confs) if confs else 0.0
+
             finished_tracks.append({
                 "track_id": tid,
-                "start_time_sec": track_data["start_frame"]/video_fps,
-                "end_time_sec": frame_index/video_fps,
+                "start_time_sec": track_data["start_frame"] / video_fps,
+                "end_time_sec": frame_index / video_fps,
                 "avg_confidence": avg_conf,
-                "direction": track_data["directions"][-1] if track_data["directions"] else "unknown"
+                "direction": tracker.previous_directions.get(tid, "unknown")
             })
 
         frame_index += 1
 
     # finalize remaining active tracks
     for tid, track_data in active_tracks.items():
+        # Only export if track lasted long enough
+        duration_sec = (frame_index - track_data["start_frame"]) / video_fps
+        if duration_sec < 1.0:
+            continue
+            
         confidences = [c for c in track_data["confidences"] if c is not None]
         avg_conf = sum(confidences)/len(confidences) if confidences else 0.0
         finished_tracks.append({
@@ -93,6 +117,11 @@ def run_video_tracker(video_path):
         })
 
     cap.release()
+    # If YOLO never detected a bird in this video, don't export any tracks
+    if not found_fish:
+        print(f"No fish detected in {video_path} — skipping export.")
+        return []
+
     return finished_tracks
 
 

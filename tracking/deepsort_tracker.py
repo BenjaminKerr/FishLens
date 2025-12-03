@@ -6,10 +6,10 @@ from torchvision.ops import nms
 class DeepSortTracker:
     def __init__(self):
         self.tracker = DeepSort(
-            max_age=50,          # remove old tracks faster
-            n_init=15,            # fewer detections to confirm a track
-            max_iou_distance=0.9,
-            max_cosine_distance=0.2
+            max_age=50,          # tracks persist 50 frames after last detection before dying
+            n_init=10,            # require only 3 detections to confirm track (reduce fragmentation)
+            max_iou_distance=0.6,  # stricter spatial matching - prevents distant objects from merging
+            max_cosine_distance=0.4  # looser appearance matching - allows same object to have appearance variations
         )
 
         # track_id → list of centroid tuples
@@ -19,7 +19,7 @@ class DeepSortTracker:
         # track_id → list of detection dictionaries
         self.detection_history = {}
 
-    def filter_overlaps(self, detections, iou_thresh=0.5):
+    def filter_overlaps(self, detections, iou_thresh=0.7):
         """
     Remove overlapping boxes, keeping the highest confidence.
     detections = [[x1, y1, x2, y2, conf, cls_id], ...]
@@ -64,8 +64,8 @@ class DeepSortTracker:
         Update DeepSort with new detections.
         detections = [x1, y1, x2, y2, conf, cls]
         """
-        # Filter tiny boxes
-        detections = [d for d in detections if (d[2]-d[0])*(d[3]-d[1]) > 100]
+        # Filter tiny boxes and low-confidence detections
+        detections = [d for d in detections if (d[2]-d[0])*(d[3]-d[1]) > 100 and d[4] > 0.5]
 
         formatted = [
             ([x1, y1, x2, y2], conf, cls)
