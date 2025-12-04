@@ -3,4 +3,5 @@ from YOLO.yolo import run_yolo
 
 FILEPATH = "sample_data/"
 
-run_yolo()
+for file in os.listdir(FILEPATH):
+    run_yolo(file)
