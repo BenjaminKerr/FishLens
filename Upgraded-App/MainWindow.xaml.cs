@@ -36,14 +36,11 @@ namespace FishLens_App
 
             // Get script directory
             string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;               //FishLens/FrontEnd/FishLens-App/bin/Debug
-            string projectRoot = System.IO.Path.GetDirectoryName(baseDirectory);        //FishLens/FrontEnd/FishLens-App/bin
-            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens/FrontEnd/FishLens-App
-            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens/FrontEnd
-            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens
-            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens
+            var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.FullName;
             string scriptDirectory = System.IO.Path.Combine(projectRoot, "YOLO");       //FishLens/YOLO
             scriptDirectory = System.IO.Path.Combine(scriptDirectory, "yolo.py");       //FishLens/YOLO/yolo.py
-            start.FileName = scriptDirectory;
+            start.FileName = "python";
+            start.Arguments = $"\"{scriptDirectory}\"";
 
             //start.Arguments = string.Format
 
@@ -88,11 +85,7 @@ namespace FishLens_App
 
             // Determine Save Directory
             string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;               //FishLens/FrontEnd/FishLens-App/bin/Debug
-            string projectRoot = System.IO.Path.GetDirectoryName(baseDirectory);        //FishLens/FrontEnd/FishLens-App/bin
-            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens/FrontEnd/FishLens-App
-            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens/FrontEnd
-            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens      ******One more for some reason?? It works like this????******
-            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens      ******Two more now!?!?!?******
+            var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.FullName; //
             string saveDirectory = System.IO.Path.Combine(projectRoot, "SavedVids");    //FishLens/SavedVids
 
             // If directory has been deleted, create it.
