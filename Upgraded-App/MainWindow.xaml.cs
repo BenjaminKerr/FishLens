@@ -41,7 +41,6 @@ namespace FishLens_App
             projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens/FrontEnd
             projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens
             projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens
-            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens
             string scriptDirectory = System.IO.Path.Combine(projectRoot, "YOLO");       //FishLens/YOLO
             scriptDirectory = System.IO.Path.Combine(scriptDirectory, "yolo.py");       //FishLens/YOLO/yolo.py
             start.FileName = scriptDirectory;
@@ -92,7 +91,6 @@ namespace FishLens_App
             string projectRoot = System.IO.Path.GetDirectoryName(baseDirectory);        //FishLens/FrontEnd/FishLens-App/bin
             projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens/FrontEnd/FishLens-App
             projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens/FrontEnd
-            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens
             projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens      ******One more for some reason?? It works like this????******
             projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens      ******Two more now!?!?!?******
             string saveDirectory = System.IO.Path.Combine(projectRoot, "SavedVids");    //FishLens/SavedVids

@@ -125,11 +125,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\benja\\FishLens\\FrontEnd\\Upgraded-App\\Upgraded-App.csproj",
+      "projectUniqueName": "C:\\Users\\benja\\FishLens\\Upgraded-App\\Upgraded-App.csproj",
       "projectName": "Upgraded-App",
-      "projectPath": "C:\\Users\\benja\\FishLens\\FrontEnd\\Upgraded-App\\Upgraded-App.csproj",
+      "projectPath": "C:\\Users\\benja\\FishLens\\Upgraded-App\\Upgraded-App.csproj",
       "packagesPath": "C:\\Users\\benja\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\benja\\FishLens\\FrontEnd\\Upgraded-App\\obj\\",
+      "outputPath": "C:\\Users\\benja\\FishLens\\Upgraded-App\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
