@@ -159,9 +159,26 @@
                    FontSize="24" 
                    FontWeight="SemiBold"
                    Foreground="#0D3640"
-                   Margin="0,0,0,15"/>
+                   Margin="0,0,0,8"/>
 
-                        <!-- Data Fields Side by Side -->
+                        <!-- Video Info - Small and Gray -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                            <TextBlock x:Name="videoName" 
+                       Text="--" 
+                       FontSize="12" 
+                       Foreground="#8BA5AE"
+                       Margin="0,0,15,0"/>
+                            <TextBlock Text="•" 
+                       FontSize="12" 
+                       Foreground="#8BA5AE"
+                       Margin="0,0,15,0"/>
+                            <TextBlock x:Name="videoDateTime" 
+                       Text="--" 
+                       FontSize="12" 
+                       Foreground="#8BA5AE"/>
+                        </StackPanel>
+
+                        <!-- Analysis Data -->
                         <Grid Margin="0,0,0,20">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -170,7 +187,7 @@
 
                             <!-- Fish Present -->
                             <StackPanel Grid.Column="0" Margin="0,0,15,0">
-                                <TextBlock Text="Fish Presence" 
+                                <TextBlock Text="Fish Present" 
                            FontSize="16" 
                            FontWeight="SemiBold"
                            Foreground="#0D3640"
@@ -178,14 +195,22 @@
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="Status: " 
                                FontSize="14" 
-                               Foreground="#8BA5AE"/>
-                                    <TextBlock x:Name="fishPresentStatus" 
-                               Text="--" 
-                               FontSize="14" 
-                               FontWeight="Medium"
-                               Foreground="#0D3640"/>
+                               Foreground="#8BA5AE"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                                    <ComboBox x:Name="fishPresentStatus" 
+                              FontSize="14" 
+                              FontWeight="Medium"
+                              Foreground="#0D3640"
+                              BorderBrush="#8BA5AE"
+                              BorderThickness="1"
+                              Padding="8,4"
+                              MinWidth="120">
+                                        <ComboBoxItem Content="Present"/>
+                                        <ComboBoxItem Content="Not Present"/>
+                                    </ComboBox>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <TextBlock Text="Confidence: " 
                                FontSize="14" 
                                Foreground="#8BA5AE"/>
@@ -207,15 +232,59 @@
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="Direction: " 
                                FontSize="14" 
-                               Foreground="#8BA5AE"/>
-                                    <TextBlock x:Name="travelDirection" 
-                               Text="--" 
-                               FontSize="14" 
-                               FontWeight="Medium"
-                               Foreground="#0D3640"/>
+                               Foreground="#8BA5AE"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                                    <ComboBox x:Name="travelDirection" 
+                              FontSize="14" 
+                              FontWeight="Medium"
+                              Foreground="#0D3640"
+                              BorderBrush="#8BA5AE"
+                              BorderThickness="1"
+                              Padding="8,4"
+                              MinWidth="120">
+                                        <ComboBoxItem Content="Upstream"/>
+                                        <ComboBoxItem Content="Downstream"/>
+                                    </ComboBox>
                                 </StackPanel>
                             </StackPanel>
                         </Grid>
+
+                        <!-- Save Button -->
+                        <Button x:Name="saveButton" 
+                Content="Save Changes" 
+                Click="SaveButton_Click"
+                Background="#0D3640"
+                Foreground="White"
+                FontSize="14"
+                FontWeight="SemiBold"
+                Padding="20,10"
+                BorderThickness="0"
+                Cursor="Hand"
+                HorizontalAlignment="Left"
+                Margin="0,0,0,20">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}"
+                                        CornerRadius="6"
+                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="#165666"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
                     </StackPanel>
                 </ScrollViewer>
             </Border>

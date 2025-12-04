@@ -65,6 +65,8 @@ namespace FishLens_App
         {
             // TODO: Parse data file here
 
+            videoName.Text = "Video 1";
+            videoDateTime.Text = "12/3/2025 17:34";
             fishPresentStatus.Text = "Present";
             fishPresentConfidence.Text = "70%";
             travelDirection.Text = "Upstream";
@@ -178,6 +180,11 @@ namespace FishLens_App
             videoPlayer.Play();
 
             enter_data();
+        }
+
+        private void SaveButton_Click(object sender, RoutedEventArgs e)
+        {
+
         }
     }
 }
