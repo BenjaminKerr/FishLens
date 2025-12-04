@@ -36,24 +36,31 @@ namespace FishLens_App
 
             // Get script directory
             string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;               //FishLens/FrontEnd/FishLens-App/bin/Debug
-            var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.FullName;
-            string scriptDirectory = System.IO.Path.Combine(projectRoot, "YOLO");       //FishLens/YOLO
-            scriptDirectory = System.IO.Path.Combine(scriptDirectory, "yolo.py");       //FishLens/YOLO/yolo.py
+            var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
+            string scriptDirectory = System.IO.Path.Combine(projectRoot, "main.py");       //FishLens/main.py
             start.FileName = "python";
-            start.Arguments = $"\"{scriptDirectory}\"";
-
-            //start.Arguments = string.Format
+            string sampleDataPath = System.IO.Path.Combine(projectRoot, "sample_data");   //FishLens/sample_data
+            start.Arguments = $"\"{scriptDirectory}\" \"{sampleDataPath}\""; //argv[1] = sample_data
+            start.RedirectStandardOutput = true; //Comment out to supress Python output
+            start.RedirectStandardError = true; //Comment out to supress Python errors
 
             // Run Script
             start.UseShellExecute = false;
             try
             {
                 Process process = Process.Start(start);
+                string output = process.StandardOutput.ReadToEnd(); //Error handling
+                string error = process.StandardError.ReadToEnd();   //Error handling
+                process.WaitForExit();
+                MessageBox.Show($"Output:\n{output}\n\nErrors:\n{error}");
             }
+
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "Could not process videos.", MessageBoxButton.OK);
             }
+
+
         }
 
         // ************* Puts Data into Analysis Bar *************

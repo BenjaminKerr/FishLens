@@ -209,6 +209,8 @@ __marimo__/
 # Misc
 trial*/
 Upgraded-App/.vs/
+Upgraded-App/bin/
+Upgraded-App/obj/
 
 # Temporary video storage, don't ignore folder just contents
 SavedVids/*

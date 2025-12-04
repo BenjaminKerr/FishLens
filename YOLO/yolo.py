@@ -12,11 +12,19 @@
 #------------------------------------------------------------------
 
 # Import any nessecary libraries
+import sys
 from ultralytics import YOLO
 from collections import Counter
 
 # Standard YOLOv8 model
-model = YOLO("yolov8n.pt") 
+model = YOLO("yolov8n.pt")
+
+# Filepath can be set as a command line argument (from front page)
+if len(sys.argv) > 1:  
+    filepath = sys.argv[1]
+else:
+    filepath = "sample_data/"
+
 
 # Input folder: sample_data
 # Output folder: results/trial1, where trial1 is auto-incremented
@@ -24,12 +32,12 @@ model = YOLO("yolov8n.pt")
 # Warning: Setting save_txt to true will create a .txt file for each
 # frame of video.
 results = model.predict(
-    source="sample_data/",
+    source=filepath,
     show=True, 
-    save=True, 
+    save=False, 
     save_txt=False,
-    project="results", 
-    name="trial"
+    #project="results", 
+    #name="trial"
 ) 
 
 # Frames with detections are added to an array and printed
