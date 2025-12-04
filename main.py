@@ -1,7 +1,10 @@
 import os
 from YOLO.yolo import run_yolo
 
-FILEPATH = "sample_data/"
+if len(os.sys.argv) > 1:
+    FILEPATH = os.sys.argv[1]
+else:
+    FILEPATH = "sample_data/"
 
 for file in os.listdir(FILEPATH):
-    run_yolo(file)
+    run_yolo(file, FILEPATH + file)
