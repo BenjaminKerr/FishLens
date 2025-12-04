@@ -1,6 +1,7 @@
 ﻿using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security;
@@ -26,6 +27,47 @@ namespace FishLens_App
         public MainWindow()
         {
             InitializeComponent();
+        }
+
+        // ************* Runs Yolo and Collects Data *************
+        private void run_yolo()
+        {
+            ProcessStartInfo start = new ProcessStartInfo();
+
+            // Get script directory
+            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;               //FishLens/FrontEnd/FishLens-App/bin/Debug
+            string projectRoot = System.IO.Path.GetDirectoryName(baseDirectory);        //FishLens/FrontEnd/FishLens-App/bin
+            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens/FrontEnd/FishLens-App
+            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens/FrontEnd
+            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens
+            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens
+            projectRoot = System.IO.Path.GetDirectoryName(projectRoot);                 //FishLens
+            string scriptDirectory = System.IO.Path.Combine(projectRoot, "YOLO");       //FishLens/YOLO
+            scriptDirectory = System.IO.Path.Combine(scriptDirectory, "yolo.py");       //FishLens/YOLO/yolo.py
+            start.FileName = scriptDirectory;
+
+            //start.Arguments = string.Format
+
+            // Run Script
+            start.UseShellExecute = false;
+            try
+            {
+                Process process = Process.Start(start);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Could not process videos.", MessageBoxButton.OK);
+            }
+        }
+
+        // ************* Puts Data into Analysis Bar *************
+        private void enter_data()
+        {
+            // TODO: Parse data file here
+
+            fishPresentStatus.Text = "Present";
+            fishPresentConfidence.Text = "70%";
+            travelDirection.Text = "Upstream";
         }
 
         // ************* Open Folder Click Function *************
@@ -97,9 +139,10 @@ namespace FishLens_App
                 {
                     MessageBox.Show("Insufficient permissions to copy the file.", "Permission Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
-
-
             }
+
+            // Run YOLO on the video folder
+            run_yolo();
 
             // Get each saved video's name and make a button on the sidebar for it.
             DirectoryInfo vidsInfo = new DirectoryInfo(saveDirectory);
@@ -133,6 +176,8 @@ namespace FishLens_App
             string videoPath = clickedButton.Tag.ToString();
             videoPlayer.Source = new Uri(videoPath);
             videoPlayer.Play();
+
+            enter_data();
         }
     }
 }

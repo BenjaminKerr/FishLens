@@ -153,17 +153,69 @@
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.15"/>
                 </Border.Effect>
-
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel x:Name="dataPanel" Margin="30">
                         <TextBlock Text="Analysis" 
-                                   FontSize="24" 
-                                   FontWeight="SemiBold"
-                                   Foreground="#0D3640"
-                                   Margin="0,0,0,15"/>
-                        <TextBlock Text="Video data and analysis results will appear here" 
-                                   FontSize="14" 
-                                   Foreground="#8BA5AE"/>
+                   FontSize="24" 
+                   FontWeight="SemiBold"
+                   Foreground="#0D3640"
+                   Margin="0,0,0,15"/>
+
+                        <!-- Data Fields Side by Side -->
+                        <Grid Margin="0,0,0,20">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Fish Present -->
+                            <StackPanel Grid.Column="0" Margin="0,0,15,0">
+                                <TextBlock Text="Fish Presence" 
+                           FontSize="16" 
+                           FontWeight="SemiBold"
+                           Foreground="#0D3640"
+                           Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Status: " 
+                               FontSize="14" 
+                               Foreground="#8BA5AE"/>
+                                    <TextBlock x:Name="fishPresentStatus" 
+                               Text="--" 
+                               FontSize="14" 
+                               FontWeight="Medium"
+                               Foreground="#0D3640"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                    <TextBlock Text="Confidence: " 
+                               FontSize="14" 
+                               Foreground="#8BA5AE"/>
+                                    <TextBlock x:Name="fishPresentConfidence" 
+                               Text="--" 
+                               FontSize="14" 
+                               FontWeight="Medium"
+                               Foreground="#0D3640"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Direction of Travel -->
+                            <StackPanel Grid.Column="1" Margin="15,0,0,0">
+                                <TextBlock Text="Direction of Travel" 
+                           FontSize="16" 
+                           FontWeight="SemiBold"
+                           Foreground="#0D3640"
+                           Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Direction: " 
+                               FontSize="14" 
+                               Foreground="#8BA5AE"/>
+                                    <TextBlock x:Name="travelDirection" 
+                               Text="--" 
+                               FontSize="14" 
+                               FontWeight="Medium"
+                               Foreground="#0D3640"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
                     </StackPanel>
                 </ScrollViewer>
             </Border>

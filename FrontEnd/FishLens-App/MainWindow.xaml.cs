@@ -32,6 +32,7 @@ namespace FishLens_App
         //  Saves videos uploaded by the user.
         private void openFolder_Click(object sender, RoutedEventArgs e)
         {
+            
             //  Display
             OpenFileDialog openFileDialog = new OpenFileDialog();
             openFileDialog.Filter = "MP4 Video|*.mp4|ASF Video|*.asf";
@@ -40,10 +41,9 @@ namespace FishLens_App
             if (openFileDialog.ShowDialog() == true)
             {
                 sourceFilePath = openFileDialog.FileName;
-                VideoPlayer.Source = new Uri(sourceFilePath);
-                VideoPlayer.Play();
+                //VideoPlayer.Source = new Uri(sourceFilePath);
+                //VideoPlayer.Play();
             }
-
 
             // Save
 
@@ -81,20 +81,27 @@ namespace FishLens_App
                 }
             }
 
-            string fileName = System.IO.Path.GetFileName(sourceFilePath);
-            string destinationPath = System.IO.Path.Combine(saveDirectory, fileName);
+            DirectoryInfo dirInfo = new DirectoryInfo(sourceFilePath);
+            FileInfo[] info = dirInfo.GetFiles("*");
+            foreach (FileInfo file in info)
+            {
+                string fileName = System.IO.Path.GetFileName(file.FullName);
+                string destinationPath = System.IO.Path.Combine(saveDirectory, file.FullName);
 
-            try
-            {
-                System.IO.File.Copy(sourceFilePath, destinationPath, true);
-            }
-            catch (IOException ex)
-            {
-                MessageBox.Show($"Error Saving File: {ex.Message}", "Save Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            catch (SecurityException)
-            {
-                MessageBox.Show("Insufficient permissions to copy the file.", "Permission Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                try
+                {
+                    System.IO.File.Copy(sourceFilePath, destinationPath, true);
+                }
+                catch (IOException ex)
+                {
+                    MessageBox.Show($"Error Saving File: {ex.Message}", "Save Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                catch (SecurityException)
+                {
+                    MessageBox.Show("Insufficient permissions to copy the file.", "Permission Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+
+
             }
         }
     }
