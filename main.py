@@ -2,6 +2,7 @@ import os
 import csv
 from ultralytics import YOLO
 from tracking.deepsort_tracker import DeepSortTracker
+from collections import Counter
 
 VIDEO_FOLDER = "sample_data/"
 OUTPUT_CSV = "fish_summary.csv"
@@ -55,6 +56,24 @@ def run_video_tracker(video_path):
                 if "bird" in cls_name:
                     found_fish = True
                 detections.append([x1, y1, x2, y2, conf, cls_id])
+            
+        if detections:
+            # Frames with detections are analyzed to determine what 
+            # object the video most likely contains.
+            # Note: This assumes the video contains only one type of object.
+            ids = [d[5] for d in detections]
+            id_counter = Counter(ids)
+            most_common_id = id_counter.most_common(1)[0][0]
+            most_common_class = model.names[most_common_id]
+
+            # Average confidence is determined based on how often the most
+            # common object is detected.
+            confidence = [d[4] for d in detections if d[5] == most_common_id]
+
+            if len(confidence) > 0:
+                avg_confidence = (sum(confidence) / len(confidence)) * 100
+            else:
+                avg_confidence = 0.0
 
         # use the tracker's default iou threshold (tuned in the tracker)
         detections = tracker.filter_overlaps(detections)
@@ -90,7 +109,10 @@ def run_video_tracker(video_path):
             avg_conf = sum(confs) / len(confs) if confs else 0.0
 
             finished_tracks.append({
+                "video_file": filename,
                 "track_id": tid,
+                "likely_class": most_common_class,
+                "confidence": f"{avg_confidence:.2f}%",
                 "start_time_sec": track_data["start_frame"] / video_fps,
                 "end_time_sec": frame_index / video_fps,
                 "avg_confidence": avg_conf,
@@ -109,9 +131,12 @@ def run_video_tracker(video_path):
         confidences = [c for c in track_data["confidences"] if c is not None]
         avg_conf = sum(confidences)/len(confidences) if confidences else 0.0
         finished_tracks.append({
+            "video_file": filename,
             "track_id": tid,
-            "start_time_sec": track_data["start_frame"]/video_fps,
-            "end_time_sec": frame_index/video_fps,
+            "likely_class": most_common_class,
+            "confidence": f"{avg_confidence:.2f}%",
+            "start_time_sec": track_data["start_frame"] / video_fps,
+            "end_time_sec": frame_index / video_fps,
             "avg_confidence": avg_conf,
             "direction": track_data["directions"][-1] if track_data["directions"] else "unknown"
         })
@@ -136,7 +161,7 @@ for filename in os.listdir(VIDEO_FOLDER):
 
 # Export CSV
 if all_tracks:
-    keys = ["video_file", "track_id", "start_time_sec", "end_time_sec", "avg_confidence", "direction"]
+    keys = ["video_file", "track_id", "likely_class", "confidence", "start_time_sec", "end_time_sec", "avg_confidence", "direction"]
     with open(OUTPUT_CSV, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=keys)
         writer.writeheader()
