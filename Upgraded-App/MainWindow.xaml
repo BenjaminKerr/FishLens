@@ -6,6 +6,7 @@
         xmlns:local="clr-namespace:FishLens_App"
         mc:Ignorable="d"
         Title="FishLens" Height="{x:Static SystemParameters.PrimaryScreenHeight}" Width="{x:Static SystemParameters.PrimaryScreenWidth}"
+        WindowState="Maximized"
         Background="#E8F4F8">
 
     <Grid>
@@ -54,6 +55,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
@@ -70,8 +72,48 @@
                                Margin="2,5,0,0"/>
                 </StackPanel>
 
+            <!-- Export Button (initially hidden) -->
+                <Button Name="exportData" 
+            Grid.Column="1"
+            Click="exportData_Click" 
+            VerticalAlignment="Center"
+            Padding="20,12" 
+            Background="#1B4F5C" 
+            Foreground="White"
+            FontSize="14"
+            FontWeight="Medium"
+            BorderThickness="0"
+            Cursor="Hand"
+            Margin="0,0,15,0"
+            Visibility="Collapsed">
+                    <Button.Effect>
+                        <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.3"/>
+                    </Button.Effect>
+                    <Button.Resources>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" 
+                                    CornerRadius="6"
+                                    Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#2D7A8F"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Resources>
+                    📊 Export Data to Excel
+                </Button>
+
                 <Button Name="openFolder" 
-                        Grid.Column="1"
+                        Grid.Column="2"
                         Click="openFolder_Click" 
                         VerticalAlignment="Center"
                         Padding="20,12" 

@@ -16,14 +16,32 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using ClosedXML.Excel;
 
 namespace FishLens_App
 {
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
+    /// 
+
+    public class Video
+    {
+        public string video {  get; set; }
+        public string trackId { get; set; }
+        public string likelyClass { get; set; }
+        public string confidence { get; set; }
+        public string startTime { get; set; }
+        public string endTime { get; set; }
+        public double avgConfidence { get; set; }
+        public string direction { get; set; }
+    }
+
     public partial class MainWindow : Window
     {
+        // This is the confidence threshold that determines if a button is red or not.
+        // TO-DO: Make this editable in a settings page.
+        public double threshold = 0.7;
         public MainWindow()
         {
             InitializeComponent();
@@ -38,7 +56,12 @@ namespace FishLens_App
             string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;               //FishLens/FrontEnd/FishLens-App/bin/Debug
             var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
             string scriptDirectory = System.IO.Path.Combine(projectRoot, "main.py");       //FishLens/main.py
-            start.FileName = "python";
+
+
+            //start.FileName = "python";
+            start.FileName = System.IO.Path.Combine(projectRoot, "Python", "python.exe");
+
+
             string sampleDataPath = System.IO.Path.Combine(projectRoot, "sample_data");   //FishLens/sample_data
             start.Arguments = $"\"{scriptDirectory}\" \"{sampleDataPath}\""; //argv[1] = sample_data
             start.RedirectStandardOutput = true; //Comment out to supress Python output
@@ -63,16 +86,71 @@ namespace FishLens_App
 
         }
 
-        // ************* Puts Data into Analysis Bar *************
-        private void enter_data()
+        // ************* Gets a video's data in a Video object *************
+        private Video get_data(string videoFileName)
         {
-            // TODO: Parse data file here
+            Video vid = new Video();
+            // Get the path to yolo_output.csv
+            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
+            string csvPath = System.IO.Path.Combine(projectRoot, "yolo_output.csv");
 
-            videoName.Text = "Video 1";
-            videoDateTime.Text = "12/3/2025 17:34";
-            fishPresentStatus.Text = "Present";
-            fishPresentConfidence.Text = "70%";
-            travelDirection.Text = "Upstream";
+            // Check if the CSV file exists
+            if (!File.Exists(csvPath))
+            {
+                MessageBox.Show("Analysis data file not found.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return vid;
+            }
+
+            try
+            {
+                // Read all lines from the CSV
+                string[] lines = File.ReadAllLines(csvPath);
+
+                // Skip header and find the matching video
+                for (int i = 1; i < lines.Length; i++)
+                {
+                    string[] columns = lines[i].Split(',');
+
+                    // Check if this row matches the video we're looking for
+                    if (columns[0].Trim() == videoFileName)
+                    {
+                        // Parse the data
+                        vid.video = columns[0].Trim();
+                        vid.trackId = columns[1].Trim();
+                        vid.likelyClass = columns[2].Trim();
+                        vid.confidence = columns[3].Trim();
+                        vid.startTime = columns[4].Trim();
+                        vid.endTime = columns[5].Trim();
+                        vid.avgConfidence = double.Parse(columns[6].Trim());
+                        vid.direction = columns[7].Trim();
+
+                        return vid;
+                    }
+                }
+
+                // If we get here, the video wasn't found in the CSV
+                MessageBox.Show($"No analysis data found for {videoFileName}", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error reading analysis data: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+
+            return vid;
+        }
+
+        // ************* Puts Data into Analysis Bar *************
+        private void enter_data(string videoFileName)
+        {
+            Video vid = get_data(videoFileName);
+
+            // Update the UI elements
+            videoName.Text = vid.video;
+            videoDateTime.Text = $"Duration: {vid.startTime}s - {vid.endTime}s";
+            fishPresentStatus.Text = vid.likelyClass == "fish" ? "Present" : "Not Present";
+            fishPresentConfidence.Text = vid.avgConfidence.ToString();
+            travelDirection.Text = char.ToUpper(vid.direction[0]) + vid.direction.Substring(1); // Capitalize first letter
         }
 
         // ************* Open Folder Click Function *************
@@ -153,19 +231,41 @@ namespace FishLens_App
                 string extension = vid.Extension.ToLower();
                 if (extension != ".mp4" && extension != ".asf") continue;
 
-                Button button = new Button()
+                Video data = get_data(vid.Name);
+                if (data.avgConfidence < threshold)
                 {
-                    Content = $"{vid.Name}",
-                    Margin = new Thickness(5),
-                    Padding = new Thickness(5),
-                    Background = new SolidColorBrush(Colors.WhiteSmoke),
-                    Height = 40,
-                    Tag = vid.FullName
-                };
+                    Button button = new Button()
+                    {
+                        Content = $"{vid.Name}",
+                        Margin = new Thickness(5),
+                        Padding = new Thickness(5),
+                        Background = new SolidColorBrush(Colors.Red),
+                        Height = 40,
+                        Tag = vid.FullName
+                    };
 
-                button.Click += Button_Click;
-                videoList.Children.Add(button);
+                    button.Click += Button_Click;
+                    videoList.Children.Add(button);
+                }
+                else
+                {
+                    Button button = new Button()
+                    {
+                        Content = $"{vid.Name}",
+                        Margin = new Thickness(5),
+                        Padding = new Thickness(5),
+                        Background = new SolidColorBrush(Colors.WhiteSmoke),
+                        Height = 40,
+                        Tag = vid.FullName
+                    };
+
+                    button.Click += Button_Click;
+                    videoList.Children.Add(button);
+                }
             }
+
+            // Make the export button visible
+            exportData.Visibility = Visibility.Visible;
         }
 
         // ************* Display Video Button *************
@@ -177,7 +277,87 @@ namespace FishLens_App
             videoPlayer.Source = new Uri(videoPath);
             videoPlayer.Play();
 
-            enter_data();
+            string videoFileName = System.IO.Path.GetFileName(videoPath);
+            enter_data(videoFileName);
+        }
+
+        // ************* Data Export Button *************
+        // Saves the csv file as an excel sheet 
+        private void exportData_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Get the path to yolo_output.csv
+                string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+                var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
+                string csvPath = System.IO.Path.Combine(projectRoot, "yolo_output.csv");
+
+                // Check if the CSV file exists
+                if (!File.Exists(csvPath))
+                {
+                    MessageBox.Show("No analysis data found to export.", "Export Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                // Let user choose where to save the Excel file
+                SaveFileDialog saveFileDialog = new SaveFileDialog
+                {
+                    Filter = "Excel Files (*.xlsx)|*.xlsx",
+                    DefaultExt = ".xlsx",
+                    FileName = $"FishLens_Analysis_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"
+                };
+
+                if (saveFileDialog.ShowDialog() == true)
+                {
+                    string excelPath = saveFileDialog.FileName;
+
+                    // Read the CSV file
+                    string[] lines = File.ReadAllLines(csvPath);
+
+                    // Create a new Excel workbook
+                    using (var workbook = new ClosedXML.Excel.XLWorkbook())
+                    {
+                        var worksheet = workbook.Worksheets.Add("Analysis Data");
+
+                        // Write the data
+                        for (int i = 0; i < lines.Length; i++)
+                        {
+                            string[] columns = lines[i].Split(',');
+                            for (int j = 0; j < columns.Length; j++)
+                            {
+                                worksheet.Cell(i + 1, j + 1).Value = columns[j].Trim();
+                            }
+                        }
+
+                        // Format header row
+                        if (lines.Length > 0)
+                        {
+                            var headerRow = worksheet.Row(1);
+                            headerRow.Style.Font.Bold = true;
+                            headerRow.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightBlue;
+                        }
+
+                        // Auto-fit columns
+                        worksheet.Columns().AdjustToContents();
+
+                        // Save the workbook
+                        workbook.SaveAs(excelPath);
+                    }
+
+                    MessageBox.Show($"Data exported successfully to:\n{excelPath}", "Export Successful", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                    // Optionally open the file
+                    var result = MessageBox.Show("Would you like to open the exported file?", "Open File", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        Process.Start(new ProcessStartInfo(excelPath) { UseShellExecute = true });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error exporting data: {ex.Message}", "Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void SaveButton_Click(object sender, RoutedEventArgs e)
