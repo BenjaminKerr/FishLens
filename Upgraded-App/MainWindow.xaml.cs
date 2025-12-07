@@ -222,9 +222,13 @@ namespace FishLens_App
             // Run YOLO on the video folder
             run_yolo();
 
-            // Get each saved video's name and make a button on the sidebar for it.
+            // Get each saved video's name and create a list to sort by confidence
             DirectoryInfo vidsInfo = new DirectoryInfo(saveDirectory);
             FileInfo[] fileInfos = vidsInfo.GetFiles("*");
+
+            // Create a list to hold video data with confidence for sorting
+            List<(FileInfo vid, Video data)> videoDataList = new List<(FileInfo, Video)>();
+
             foreach (FileInfo vid in fileInfos)
             {
                 // Get only mp4 and asf files
@@ -232,6 +236,15 @@ namespace FishLens_App
                 if (extension != ".mp4" && extension != ".asf") continue;
 
                 Video data = get_data(vid.Name);
+                videoDataList.Add((vid, data));
+            }
+
+            // Sort by confidence (least to most)
+            videoDataList = videoDataList.OrderBy(x => x.data.avgConfidence).ToList();
+
+            // Now create buttons in sorted order
+            foreach (var (vid, data) in videoDataList)
+            {
                 if (data.avgConfidence < threshold)
                 {
                     Button button = new Button()
@@ -267,6 +280,7 @@ namespace FishLens_App
             // Make the export button visible
             exportData.Visibility = Visibility.Visible;
         }
+
 
         // ************* Display Video Button *************
         // Displays the video associated with a button on the sidebar.
