@@ -5,6 +5,12 @@ from tracking.deepsort_tracker import DeepSortTracker
 from collections import Counter
 
 VIDEO_FOLDER = "sample_data/"
+
+if len(os.sys.argv) > 1:
+    VIDEO_FOLDER = os.sys.argv[1]
+else:
+    VIDEO_FOLDER = "sample_data/"
+
 OUTPUT_CSV = "fish_summary.csv"
 FPS_DEFAULT = 30  # fallback if video FPS cannot be read
 
