@@ -26,7 +26,9 @@ namespace FishLens_App
     {
         public MainWindow()
         {
-            InitializeComponent();
+            this.WindowState = WindowState.Maximized;
+            this.WindowStyle = WindowStyle.SingleBorderWindow;
+            this.ResizeMode = ResizeMode.CanResize;
         }
 
         // ************* Runs Yolo and Collects Data *************
