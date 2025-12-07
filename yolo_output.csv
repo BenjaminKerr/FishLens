@@ -1,1 +1,3 @@
-SAMPLE_FISH_VIDEO.mp4,bird,63.97%
+video_name,track_id,likely_class,confidence,start_time_sec,end_time_sec,avg_confidence,direction
+BirdTest.mp4,1,bird,33.32%,0.3,4.83,0.62,downstream
+Supernatural VR Premium Version Gameplay - Funout Songs and Scene (Oculus Quest footage) - YouTube - Google Chrome 2022-11-10 14-07-24.mp4,1,bird,70.8%,0.5,5.00,0.7,upstream
