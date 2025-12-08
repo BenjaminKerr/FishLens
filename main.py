@@ -3,13 +3,16 @@ import csv
 from ultralytics import YOLO
 from tracking.deepsort_tracker import DeepSortTracker
 from collections import Counter
+import os
 
-VIDEO_FOLDER = "sample_data/"
+project_root = os.path.dirname(os.path.abspath(__file__))
+VIDEO_FOLDER = os.path.join(project_root, "sample_data")
+os.makedirs(VIDEO_FOLDER, exist_ok=True)
 
 if len(os.sys.argv) > 1:
     VIDEO_FOLDER = os.sys.argv[1]
 else:
-    VIDEO_FOLDER = "sample_data/"
+    VIDEO_FOLDER = os.path.join(project_root, "sample_data")
 
 OUTPUT_CSV = "fish_summary.csv"
 FPS_DEFAULT = 30  # fallback if video FPS cannot be read
@@ -157,6 +160,7 @@ def run_video_tracker(video_path):
 
 
 # Process all videos
+os.makedirs("no_fish", exist_ok=True)
 all_tracks = []
 for filename in os.listdir(VIDEO_FOLDER):
     video_path = os.path.join(VIDEO_FOLDER, filename)
