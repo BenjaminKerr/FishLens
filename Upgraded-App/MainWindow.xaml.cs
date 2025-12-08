@@ -93,7 +93,7 @@ namespace FishLens_App
             // Get the path to yolo_output.csv
             string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
             var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
-            string csvPath = System.IO.Path.Combine(projectRoot, "yolo_output.csv");
+            string csvPath = System.IO.Path.Combine(projectRoot, "fish_summary.csv");
 
             // Check if the CSV file exists
             if (!File.Exists(csvPath))
@@ -239,6 +239,8 @@ namespace FishLens_App
 
             foreach (FileInfo vid in fileInfos)
             {
+                if (!File.Exists(vid.FullName)) continue;
+
                 // Get only mp4 and asf files
                 string extension = vid.Extension.ToLower();
                 if (extension != ".mp4" && extension != ".asf") continue;
