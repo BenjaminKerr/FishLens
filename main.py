@@ -1,13 +1,21 @@
-# This main represents the minimum integration that will be needed in the actual main.
-# File path is passed from FE as argv[1]. 
-# File name and path are needed seperately for different parts of YOLO function.
 import os
 import csv
+import shutil
 from ultralytics import YOLO
 from tracking.deepsort_tracker import DeepSortTracker
 from collections import Counter
+import shutil
+import os
 
-VIDEO_FOLDER = "sample_data/"
+project_root = os.path.dirname(os.path.abspath(__file__))
+VIDEO_FOLDER = os.path.join(project_root, "sample_data")
+os.makedirs(VIDEO_FOLDER, exist_ok=True)
+
+if len(os.sys.argv) > 1:
+    VIDEO_FOLDER = os.sys.argv[1]
+else:
+    VIDEO_FOLDER = os.path.join(project_root, "sample_data")
+
 OUTPUT_CSV = "fish_summary.csv"
 FPS_DEFAULT = 30  # fallback if video FPS cannot be read
 
@@ -148,12 +156,14 @@ def run_video_tracker(video_path):
     # If YOLO never detected a bird in this video, don't export any tracks
     if not found_fish:
         print(f"No fish detected in {video_path} — skipping export.")
+        shutil.move(video_path, "no_fish")
         return []
 
     return finished_tracks
 
 
 # Process all videos
+os.makedirs("no_fish", exist_ok=True)
 all_tracks = []
 for filename in os.listdir(VIDEO_FOLDER):
     video_path = os.path.join(VIDEO_FOLDER, filename)
