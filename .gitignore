@@ -211,3 +211,6 @@ results*/
 
 # Temporary video storage
 SavedVids/
+Upgraded-App/bin/
+Upgraded-App/obj/
+Upgraded-App/.vs/
