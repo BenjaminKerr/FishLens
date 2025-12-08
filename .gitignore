@@ -208,6 +208,13 @@ __marimo__/
 
 # Misc
 results*/
+Upgraded-App/.vs/
+Upgraded-App/bin/
+Upgraded-App/obj/
+
+# Temporary video storage, don't ignore folder just contents
+SavedVids/*
+!SavedVids/.gitkeep
 
 # Temporary video storage
 SavedVids/
