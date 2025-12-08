@@ -1,10 +1,8 @@
 import os
 import csv
-import shutil
 from ultralytics import YOLO
 from tracking.deepsort_tracker import DeepSortTracker
 from collections import Counter
-import shutil
 import os
 
 project_root = os.path.dirname(os.path.abspath(__file__))
@@ -156,7 +154,6 @@ def run_video_tracker(video_path):
     # If YOLO never detected a bird in this video, don't export any tracks
     if not found_fish:
         print(f"No fish detected in {video_path} — skipping export.")
-        shutil.move(video_path, "no_fish")
         return []
 
     return finished_tracks

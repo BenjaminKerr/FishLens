@@ -27,7 +27,7 @@ namespace FishLens_App
 
     public class Video
     {
-        public string video {  get; set; }
+        public string video { get; set; }
         public string trackId { get; set; }
         public string likelyClass { get; set; }
         public string confidence { get; set; }
@@ -58,8 +58,8 @@ namespace FishLens_App
             string scriptDirectory = System.IO.Path.Combine(projectRoot, "main.py");       //FishLens/main.py
 
 
-            //start.FileName = "python";
-            start.FileName = System.IO.Path.Combine(projectRoot, "Python", "python.exe");
+            start.FileName = "python";
+            //start.FileName = System.IO.Path.Combine(projectRoot, "Python", "python.exe");
 
 
             string sampleDataPath = System.IO.Path.Combine(projectRoot, "sample_data");   //FishLens/sample_data
@@ -130,7 +130,15 @@ namespace FishLens_App
                 }
 
                 // If we get here, the video wasn't found in the CSV
-                MessageBox.Show($"No analysis data found for {videoFileName}", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+                vid.video = videoFileName;
+                vid.trackId = "-1";
+                vid.likelyClass = "N/A";
+                vid.confidence = "00.00%";
+                vid.startTime = "00.00";
+                vid.endTime = "00.00";
+                vid.avgConfidence = 00.00;
+                vid.direction = "Unknown";
+                return vid;
             }
             catch (Exception ex)
             {
