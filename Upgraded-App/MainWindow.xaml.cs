@@ -239,8 +239,6 @@ namespace FishLens_App
 
             foreach (FileInfo vid in fileInfos)
             {
-                if (!File.Exists(vid.FullName)) continue;
-
                 // Get only mp4 and asf files
                 string extension = vid.Extension.ToLower();
                 if (extension != ".mp4" && extension != ".asf") continue;
