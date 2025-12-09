@@ -60,8 +60,8 @@ namespace FishLens_App
             string scriptDirectory = System.IO.Path.Combine(projectRoot, "main.py");       //FishLens/main.py
 
 
-            start.FileName = "python";
-            //start.FileName = System.IO.Path.Combine(projectRoot, "Python", "python.exe");
+            //start.FileName = "python";
+            start.FileName = System.IO.Path.Combine(projectRoot, "Python", "python.exe");
 
 
             string sampleDataPath = System.IO.Path.Combine(projectRoot, "sample_data");   //FishLens/sample_data
