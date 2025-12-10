@@ -17,6 +17,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using ClosedXML.Excel;
+using Microsoft.Identity.Client;
 
 namespace FishLens_App
 {
@@ -42,12 +43,16 @@ namespace FishLens_App
         // This is the confidence threshold that determines if a button is red or not.
         // TO-DO: Make this editable in a settings page.
         public double threshold = 0.7;
-        public MainWindow()
+        private IPublicClientApplication Mapp;
+        private AuthenticationResult Result;
+        public MainWindow(IPublicClientApplication app, AuthenticationResult result)
         {
            
             this.WindowState = WindowState.Maximized;
             this.WindowStyle = WindowStyle.SingleBorderWindow;
             this.ResizeMode = ResizeMode.CanResize;
+            Mapp = app;
+            Result = result;
             InitializeComponent();
 
         }

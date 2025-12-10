@@ -38,7 +38,7 @@ namespace FishLens_App
             InitializeComponent();
         }
 
-        public async Task<String> Signin()
+        public async Task<AuthenticationResult> Signin()
         {
             try
             {
@@ -48,7 +48,7 @@ namespace FishLens_App
                     .ExecuteAsync();
 
                 // Return the clients access token
-                return result.AccessToken;
+                return result;
             }
 
             catch (MsalException ex)
@@ -60,10 +60,10 @@ namespace FishLens_App
 
         private async void signinbutton(object sender, RoutedEventArgs e)
         {
-            String token = await Signin();
-            if(token != null) {
+            var result = await Signin();
+            if(result != null) {
                 MessageBox.Show("Sign in successful!");
-                MainWindow main = new MainWindow();
+                MainWindow main = new MainWindow(app, result);
                 main.Show();
                 this.Close();
 
