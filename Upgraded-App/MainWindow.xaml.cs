@@ -44,9 +44,12 @@ namespace FishLens_App
         public double threshold = 0.7;
         public MainWindow()
         {
+           
             this.WindowState = WindowState.Maximized;
             this.WindowStyle = WindowStyle.SingleBorderWindow;
             this.ResizeMode = ResizeMode.CanResize;
+            InitializeComponent();
+
         }
 
         // ************* Runs Yolo and Collects Data *************
