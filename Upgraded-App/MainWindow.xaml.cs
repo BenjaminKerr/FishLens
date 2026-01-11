@@ -47,7 +47,20 @@ namespace FishLens_App
             InitializeComponent();
         }
 
-        // ************* Runs Yolo and Collects Data *************
+        // ************* Helper Functions ************************************************************************************************
+        private string get_project_root()
+        {
+            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;               //FishLens/FrontEnd/FishLens-App/bin/Debug
+            var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
+            return projectRoot;
+        }
+        // *******************************************************************************************************************************
+
+
+
+
+
+        // ************* Runs Yolo and Collects Data *************************************************************************************
         private void run_yolo()
         {
             ProcessStartInfo start = new ProcessStartInfo();
@@ -84,17 +97,13 @@ namespace FishLens_App
             string scriptDirectory = System.IO.Path.Combine(projectRoot, "main.py");       //FishLens/main.py
             return scriptDirectory;
         }
-
-        private string get_project_root()
-        {
-            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;               //FishLens/FrontEnd/FishLens-App/bin/Debug
-            var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
-            return projectRoot;
-        }
-        // ******************************************************************
+        // ******************************************************************************************************************************************
 
 
-        // ************* Open Folder and Put Data Into Database *************
+
+
+
+        // ************* Open Folder and Put Data Into Database *************************************************************************************
         //  Saves videos uploaded by the user.
         private void open_folder_click(object sender, RoutedEventArgs e)
         {
@@ -115,9 +124,17 @@ namespace FishLens_App
             display_data_in_ui(saveDirectory);
             enter_data_in_file(sourceFolderPath, saveDirectory);
             run_yolo();
+            List<(FileInfo vid, Video data)> videoDataList = create_sorted_list_of_videos(saveDirectory);
+            create_video_buttons(videoDataList);
 
+            // Make the export button visible
+            exportData.Visibility = Visibility.Visible;
+        }
+
+        private List<(FileInfo vid, Video data)> create_sorted_list_of_videos(string directory)
+        {
             // Get each saved video's name and create a list to sort by confidence
-            DirectoryInfo vidsInfo = new DirectoryInfo(saveDirectory);
+            DirectoryInfo vidsInfo = new DirectoryInfo(directory);
             FileInfo[] fileInfos = vidsInfo.GetFiles("*");
 
             // Create a list to hold video data with confidence for sorting
@@ -135,46 +152,8 @@ namespace FishLens_App
 
             // Sort by confidence (least to most)
             videoDataList = videoDataList.OrderBy(x => x.data.avgConfidence).ToList();
-
-            // Now create buttons in sorted order
-            foreach (var (vid, data) in videoDataList)
-            {
-                if (data.avgConfidence < confidenceThreshold)
-                {
-                    Button button = new Button()
-                    {
-                        Content = $"{vid.Name}",
-                        Margin = new Thickness(5),
-                        Padding = new Thickness(5),
-                        Background = new SolidColorBrush(Colors.Red),
-                        Height = 40,
-                        Tag = vid.FullName
-                    };
-
-                    button.Click += video_button_click;
-                    videoList.Children.Add(button);
-                }
-                else
-                {
-                    Button button = new Button()
-                    {
-                        Content = $"{vid.Name}",
-                        Margin = new Thickness(5),
-                        Padding = new Thickness(5),
-                        Background = new SolidColorBrush(Colors.WhiteSmoke),
-                        Height = 40,
-                        Tag = vid.FullName
-                    };
-
-                    button.Click += video_button_click;
-                    videoList.Children.Add(button);
-                }
-            }
-
-            // Make the export button visible
-            exportData.Visibility = Visibility.Visible;
+            return videoDataList;
         }
-
 
         private Video get_data(string videoFileName)
         {
@@ -291,20 +270,20 @@ namespace FishLens_App
                 }
             }
         }
-        // ******************************************************************
+        // ******************************************************************************************************************************************
 
 
 
-        
-        // ************* Save and Export Data *******************************
+
+
+        // ************* Save and Export Data *******************************************************************************************************
         private void export_data_click(object sender, RoutedEventArgs e)
         {
             try
             {
-                // Get the path to fish_summary.csv
-                string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
-                var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
+                var projectRoot = get_project_root();
                 string csvPath = System.IO.Path.Combine(projectRoot, "fish_summary.csv");
+
 
                 // Check if the CSV file exists
                 if (!File.Exists(csvPath))
@@ -323,49 +302,7 @@ namespace FishLens_App
 
                 if (saveFileDialog.ShowDialog() == true)
                 {
-                    string excelPath = saveFileDialog.FileName;
-
-                    // Read the CSV file
-                    string[] lines = File.ReadAllLines(csvPath);
-
-                    // Create a new Excel workbook
-                    using (var workbook = new ClosedXML.Excel.XLWorkbook())
-                    {
-                        var worksheet = workbook.Worksheets.Add("Analysis Data");
-
-                        // Write the data
-                        for (int i = 0; i < lines.Length; i++)
-                        {
-                            string[] columns = lines[i].Split(',');
-                            for (int j = 0; j < columns.Length; j++)
-                            {
-                                worksheet.Cell(i + 1, j + 1).Value = columns[j].Trim();
-                            }
-                        }
-
-                        // Format header row
-                        if (lines.Length > 0)
-                        {
-                            var headerRow = worksheet.Row(1);
-                            headerRow.Style.Font.Bold = true;
-                            headerRow.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightBlue;
-                        }
-
-                        // Auto-fit columns
-                        worksheet.Columns().AdjustToContents();
-
-                        // Save the workbook
-                        workbook.SaveAs(excelPath);
-                    }
-
-                    MessageBox.Show($"Data exported successfully to:\n{excelPath}", "Export Successful", MessageBoxButton.OK, MessageBoxImage.Information);
-
-                    // Optionally open the file
-                    var result = MessageBox.Show("Would you like to open the exported file?", "Open File", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                    if (result == MessageBoxResult.Yes)
-                    {
-                        Process.Start(new ProcessStartInfo(excelPath) { UseShellExecute = true });
-                    }
+                    make_excel_sheet_and_insert_data(saveFileDialog, csvPath);
                 }
             }
             catch (Exception ex)
@@ -374,14 +311,64 @@ namespace FishLens_App
             }
         }
 
+        private void make_excel_sheet_and_insert_data(SaveFileDialog saveFileDialog, string csvPath)
+        {
+            string excelPath = saveFileDialog.FileName;
+
+            // Read the CSV file
+            string[] lines = File.ReadAllLines(csvPath);
+
+            // Create a new Excel workbook
+            using (var workbook = new ClosedXML.Excel.XLWorkbook())
+            {
+                var worksheet = workbook.Worksheets.Add("Analysis Data");
+
+                // Write the data
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    string[] columns = lines[i].Split(',');
+                    for (int j = 0; j < columns.Length; j++)
+                    {
+                        worksheet.Cell(i + 1, j + 1).Value = columns[j].Trim();
+                    }
+                }
+
+                // Format header row
+                if (lines.Length > 0)
+                {
+                    var headerRow = worksheet.Row(1);
+                    headerRow.Style.Font.Bold = true;
+                    headerRow.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightBlue;
+                }
+
+                // Auto-fit columns
+                worksheet.Columns().AdjustToContents();
+
+                // Save the workbook
+                workbook.SaveAs(excelPath);
+            }
+
+            MessageBox.Show($"Data exported successfully to:\n{excelPath}", "Export Successful", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            // Optionally open the file
+            var result = MessageBox.Show("Would you like to open the exported file?", "Open File", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (result == MessageBoxResult.Yes)
+            {
+                Process.Start(new ProcessStartInfo(excelPath) { UseShellExecute = true });
+            }
+        }
+
         private void save_button_click(object sender, RoutedEventArgs e)
         {
 
         }
-        // **********************************************************************
+        // ******************************************************************************************************************************************
 
 
-        // ********************* Display Data to User ***************************
+
+
+
+        // ********************* Display Data to User ***********************************************************************************************
         private void video_button_click(object sender, RoutedEventArgs e)
         {
             Button clickedButton = (Button)sender;
@@ -403,6 +390,43 @@ namespace FishLens_App
             fishPresentConfidence.Text = vid.avgConfidence.ToString();
             travelDirection.Text = char.ToUpper(vid.direction[0]) + vid.direction.Substring(1); // Capitalize first letter
         }
-        // **********************************************************************
+        private void create_video_buttons(List<(FileInfo vid, Video data)> videoDataList)
+        {
+            // Now create buttons in sorted order
+            foreach (var (vid, data) in videoDataList)
+            {
+                if (data.avgConfidence < confidenceThreshold)
+                {
+                    Button button = new Button()
+                    {
+                        Content = $"{vid.Name}",
+                        Margin = new Thickness(5),
+                        Padding = new Thickness(5),
+                        Background = new SolidColorBrush(Colors.Red),
+                        Height = 40,
+                        Tag = vid.FullName
+                    };
+
+                    button.Click += video_button_click;
+                    videoList.Children.Add(button);
+                }
+                else
+                {
+                    Button button = new Button()
+                    {
+                        Content = $"{vid.Name}",
+                        Margin = new Thickness(5),
+                        Padding = new Thickness(5),
+                        Background = new SolidColorBrush(Colors.WhiteSmoke),
+                        Height = 40,
+                        Tag = vid.FullName
+                    };
+
+                    button.Click += video_button_click;
+                    videoList.Children.Add(button);
+                }
+            }
+        }
+        // ******************************************************************************************************************************************
     }
 }
