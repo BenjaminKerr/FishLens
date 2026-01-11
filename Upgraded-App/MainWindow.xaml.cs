@@ -17,42 +17,37 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using ClosedXML.Excel;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
+using FishLens_App.Interfaces;
+
 
 namespace FishLens_App
 {
-    /// <summary>
-    /// Interaction logic for MainWindow.xaml
-    /// </summary>
-    /// 
-
-    public class Video
-    {
-        public string video { get; set; }
-        public string trackId { get; set; }
-        public string likelyClass { get; set; }
-        public string confidence { get; set; }
-        public string startTime { get; set; }
-        public string endTime { get; set; }
-        public double avgConfidence { get; set; }
-        public string direction { get; set; }
-    }
-
     public partial class MainWindow : Window
     {
-        // This is the confidence threshold that determines if a button is red or not.
-        // TO-DO: Make this editable in a settings page.
-        public double confidenceThreshold = 0.7;
-        public MainWindow()
+        private readonly IProjectPathResolver _pathResolver;
+        private readonly IFileSystemManager _fileSystemManager;
+        private readonly ILogger<MainWindow> _logger;
+        AppConfiguration config = new AppConfiguration();
+
+        public MainWindow(IProjectPathResolver pathresolver, IFileSystemManager fileSystemManager, ILogger<MainWindow> logger)
         {
+            _logger = logger;
+            _pathResolver = pathresolver;
+            _fileSystemManager = fileSystemManager;
             InitializeComponent();
         }
 
         // ************* Helper Functions ************************************************************************************************
-        private string get_project_root()
+        private string GetProjectRoot()
         {
-            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;               //FishLens/FrontEnd/FishLens-App/bin/Debug
-            var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
-            return projectRoot;
+            return _pathResolver.ResolveProjectRoot();
+        }
+
+        private string GetYoloScriptDirectory()
+        {
+            return _pathResolver.ResolveYoloScriptPath();
         }
         // *******************************************************************************************************************************
 
@@ -61,14 +56,14 @@ namespace FishLens_App
 
 
         // ************* Runs Yolo and Collects Data *************************************************************************************
-        private void run_yolo()
+        private void RunYolo()
         {
             ProcessStartInfo start = new ProcessStartInfo();
 
-            string yoloScriptDirectory = get_yolo_script_directory();
+            string yoloScriptDirectory = GetYoloScriptDirectory();
 
             start.FileName = "python";
-            string sampleDataPath = System.IO.Path.Combine(get_project_root(), "sample_data");   //FishLens/sample_data
+            string sampleDataPath = System.IO.Path.Combine(GetProjectRoot(), "sample_data");   //FishLens/sample_data
             start.Arguments = $"\"{yoloScriptDirectory}\" \"{sampleDataPath}\""; //argv[1] = sample_data
             start.RedirectStandardOutput = true; //Comment out to supress Python output
             start.RedirectStandardError = true; //Comment out to supress Python errors
@@ -89,14 +84,6 @@ namespace FishLens_App
                 MessageBox.Show(ex.Message, "Could not process videos.", MessageBoxButton.OK);
             }
         }
-
-        private string get_yolo_script_directory()
-        {
-            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;               //FishLens/FrontEnd/FishLens-App/bin/Debug
-            var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
-            string scriptDirectory = System.IO.Path.Combine(projectRoot, "main.py");       //FishLens/main.py
-            return scriptDirectory;
-        }
         // ******************************************************************************************************************************************
 
 
@@ -105,7 +92,22 @@ namespace FishLens_App
 
         // ************* Open Folder and Put Data Into Database *************************************************************************************
         //  Saves videos uploaded by the user.
-        private void open_folder_click(object sender, RoutedEventArgs e)
+        private void OpenFolderClick(object sender, RoutedEventArgs e)
+        {
+            string sourceFolderPath = GetSourceFolderPath();
+            if (string.IsNullOrEmpty(sourceFolderPath)) return;
+
+            // Determine Save Directory
+            var projectRoot = GetProjectRoot();
+            string saveDirectory = System.IO.Path.Combine(projectRoot, "SavedVids");    //FishLens/SavedVids
+
+            ProcessVideos(sourceFolderPath, saveDirectory);
+
+            // Make the export button visible
+            exportData.Visibility = Visibility.Visible;
+        }
+        
+        private string GetSourceFolderPath()
         {
             // User opens a folder full of videos
             OpenFolderDialog openFolderDialog = new OpenFolderDialog();
@@ -115,23 +117,20 @@ namespace FishLens_App
             {
                 sourceFolderPath = openFolderDialog.FolderName;
             }
-
-            // Determine Save Directory
-            var projectRoot = get_project_root();
-            string saveDirectory = System.IO.Path.Combine(projectRoot, "SavedVids");    //FishLens/SavedVids
-
-            make_directory_if_not_exists(saveDirectory);
-            display_data_in_ui(saveDirectory);
-            enter_data_in_file(sourceFolderPath, saveDirectory);
-            run_yolo();
-            List<(FileInfo vid, Video data)> videoDataList = create_sorted_list_of_videos(saveDirectory);
-            create_video_buttons(videoDataList);
-
-            // Make the export button visible
-            exportData.Visibility = Visibility.Visible;
+            return sourceFolderPath;
         }
 
-        private List<(FileInfo vid, Video data)> create_sorted_list_of_videos(string directory)
+        private void ProcessVideos(string inputFolder, string outputDirectory)
+        {
+            MakeDirectoryIfNotExists(outputDirectory);
+            DisplayDataInUi(outputDirectory);
+            EnterDataInFile(inputFolder, outputDirectory);
+            RunYolo();
+            List<(FileInfo vid, Video data)> videoDataList = CreateSortedListOfVideos(outputDirectory);
+            CreateVideoButtonsList(videoDataList);
+        }
+
+        private List<(FileInfo vid, Video data)> CreateSortedListOfVideos(string directory)
         {
             // Get each saved video's name and create a list to sort by confidence
             DirectoryInfo vidsInfo = new DirectoryInfo(directory);
@@ -146,7 +145,7 @@ namespace FishLens_App
                 string extension = vid.Extension.ToLower();
                 if (extension != ".mp4" && extension != ".asf") continue;
 
-                Video data = get_data(vid.Name);
+                Video data = GetData(vid.Name);
                 videoDataList.Add((vid, data));
             }
 
@@ -155,11 +154,11 @@ namespace FishLens_App
             return videoDataList;
         }
 
-        private Video get_data(string videoFileName)
+        private Video GetData(string videoFileName)
         {
             Video vid = new Video();
 
-            var projectRoot = get_project_root();
+            var projectRoot = GetProjectRoot();
             string csvPath = System.IO.Path.Combine(projectRoot, "fish_summary.csv");
 
             // Check if the CSV file exists
@@ -171,7 +170,7 @@ namespace FishLens_App
 
             try
             {
-                vid = get_video_file_values(vid, csvPath, videoFileName);
+                vid = GetVideoFileValues(vid, csvPath, videoFileName);
                 return vid;
             }
             catch (Exception ex)
@@ -180,7 +179,7 @@ namespace FishLens_App
             }
             return vid;
         }
-        private Video get_video_file_values(Video vid, string csvPath, string videoFileName)
+        private Video GetVideoFileValues(Video vid, string csvPath, string videoFileName)
         {
             // Read all lines from the CSV
             string[] lines = File.ReadAllLines(csvPath);
@@ -219,7 +218,7 @@ namespace FishLens_App
             return vid;
         }
 
-        private void make_directory_if_not_exists(string directory)
+        private void MakeDirectoryIfNotExists(string directory)
         {
             // If directory has been deleted, create it.
             if (!Directory.Exists(directory))
@@ -228,26 +227,30 @@ namespace FishLens_App
                 {
                     System.IO.Directory.CreateDirectory(directory);
                 }
-                catch (System.UnauthorizedAccessException)
+                catch (System.UnauthorizedAccessException ex)
                 {
-                    MessageBox.Show(
-                    "Cannot create the 'SavedVids' folder due to permission restrictions. Run the application as Administrator, or choose a different save path.",
-                    "Permission Denied",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
+                    _logger.LogError("Permission denied creating directory", ex);
+                    HandleDirectoryCreationError("InsufficientPermissions");
+
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(
-                    $"Fatal Error: Could not create analysis directory. Details: {ex.Message}",
-                    "Directory Creation Failed",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
+                    _logger.LogError("Failed to create directory", ex);
+                    HandleDirectoryCreationError(ex.Message);
                 }
             }
         }
+        private void HandleDirectoryCreationError(string errorMessage)
+        {
+            MessageBox.Show(
+                $"Cannot create directory: {errorMessage}",
+                "Directory Creation Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error
+            );
+        }
 
-        private void enter_data_in_file(string inputFolder, string outputDirectory)
+        private void EnterDataInFile(string inputFolder, string outputDirectory)
         {
             DirectoryInfo dirInfo = new DirectoryInfo(inputFolder);
             FileInfo[] info = dirInfo.GetFiles("*");
@@ -277,11 +280,11 @@ namespace FishLens_App
 
 
         // ************* Save and Export Data *******************************************************************************************************
-        private void export_data_click(object sender, RoutedEventArgs e)
+        private void ExportDataClick(object sender, RoutedEventArgs e)
         {
             try
             {
-                var projectRoot = get_project_root();
+                var projectRoot = GetProjectRoot();
                 string csvPath = System.IO.Path.Combine(projectRoot, "fish_summary.csv");
 
 
@@ -302,7 +305,7 @@ namespace FishLens_App
 
                 if (saveFileDialog.ShowDialog() == true)
                 {
-                    make_excel_sheet_and_insert_data(saveFileDialog, csvPath);
+                    MakeExcelSheetAndInsertData(saveFileDialog, csvPath);
                 }
             }
             catch (Exception ex)
@@ -311,7 +314,7 @@ namespace FishLens_App
             }
         }
 
-        private void make_excel_sheet_and_insert_data(SaveFileDialog saveFileDialog, string csvPath)
+        private void MakeExcelSheetAndInsertData(SaveFileDialog saveFileDialog, string csvPath)
         {
             string excelPath = saveFileDialog.FileName;
 
@@ -358,7 +361,7 @@ namespace FishLens_App
             }
         }
 
-        private void save_button_click(object sender, RoutedEventArgs e)
+        private void SaveButtonClick(object sender, RoutedEventArgs e)
         {
 
         }
@@ -369,7 +372,7 @@ namespace FishLens_App
 
 
         // ********************* Display Data to User ***********************************************************************************************
-        private void video_button_click(object sender, RoutedEventArgs e)
+        private void VideoButtonClick(object sender, RoutedEventArgs e)
         {
             Button clickedButton = (Button)sender;
             string videoPath = clickedButton.Tag.ToString();
@@ -377,11 +380,11 @@ namespace FishLens_App
             videoPlayer.Play();
 
             string videoFileName = System.IO.Path.GetFileName(videoPath);
-            get_data(videoFileName);
+            GetData(videoFileName);
         }
-        private void display_data_in_ui(string videoFileName)
+        private void DisplayDataInUi(string videoFileName)
         {
-            Video vid = get_data(videoFileName);
+            Video vid = GetData(videoFileName);
 
             // Update the UI elements
             videoName.Text = vid.video;
@@ -390,41 +393,31 @@ namespace FishLens_App
             fishPresentConfidence.Text = vid.avgConfidence.ToString();
             travelDirection.Text = char.ToUpper(vid.direction[0]) + vid.direction.Substring(1); // Capitalize first letter
         }
-        private void create_video_buttons(List<(FileInfo vid, Video data)> videoDataList)
+
+        private Button CreateSingleVideoButton(FileInfo videoFile, Video videoData)
+        {
+            bool isLowConfidence = videoData.avgConfidence < config.ConfidenceThreshold;
+            return new Button
+            {
+                Content = videoFile.Name,
+                Background = isLowConfidence
+                    ? new SolidColorBrush(Colors.Red)
+                    : new SolidColorBrush(Colors.WhiteSmoke),
+                Margin = new Thickness(5),
+                Padding = new Thickness(5),
+                Height = 40,
+                Tag = videoFile.FullName,
+            };
+        }
+
+        private void CreateVideoButtonsList(List<(FileInfo videoFile, Video videoData)> videoDataList)
         {
             // Now create buttons in sorted order
-            foreach (var (vid, data) in videoDataList)
+            foreach (var (videoFile, videoData) in videoDataList)
             {
-                if (data.avgConfidence < confidenceThreshold)
-                {
-                    Button button = new Button()
-                    {
-                        Content = $"{vid.Name}",
-                        Margin = new Thickness(5),
-                        Padding = new Thickness(5),
-                        Background = new SolidColorBrush(Colors.Red),
-                        Height = 40,
-                        Tag = vid.FullName
-                    };
-
-                    button.Click += video_button_click;
-                    videoList.Children.Add(button);
-                }
-                else
-                {
-                    Button button = new Button()
-                    {
-                        Content = $"{vid.Name}",
-                        Margin = new Thickness(5),
-                        Padding = new Thickness(5),
-                        Background = new SolidColorBrush(Colors.WhiteSmoke),
-                        Height = 40,
-                        Tag = vid.FullName
-                    };
-
-                    button.Click += video_button_click;
-                    videoList.Children.Add(button);
-                }
+                Button button = CreateSingleVideoButton(videoFile, videoData);
+                button.Click += VideoButtonClick;
+                videoList.Children.Add(button);
             }
         }
         // ******************************************************************************************************************************************

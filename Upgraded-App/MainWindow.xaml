@@ -75,7 +75,7 @@
                 <!-- Export Button (initially hidden) -->
                 <Button Name="exportData" 
             Grid.Column="1"
-            Click="export_data_click" 
+            Click="ExportDataClick" 
             VerticalAlignment="Center"
             Padding="20,12" 
             Background="#1B4F5C" 
@@ -114,7 +114,7 @@
 
                 <Button Name="openFolder" 
                         Grid.Column="2"
-                        Click="open_folder_click" 
+                        Click="OpenFolderClick" 
                         VerticalAlignment="Center"
                         Padding="20,12" 
                         Background="#1B4F5C" 
@@ -329,7 +329,7 @@
                         <!-- Save Button -->
                         <Button x:Name="saveButton" 
                                 Content="Save Changes" 
-                                Click="save_button_click"
+                                Click="SaveButtonClick"
                                 Background="#0D3640"
                                 Foreground="White"
                                 FontSize="14"
