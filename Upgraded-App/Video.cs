@@ -8,7 +8,7 @@ namespace FishLens_App
 {
     public class Video
     {
-        public string video { get; set; }
+        public string video { get; set; } // This is the name of the video
         public string trackId { get; set; }
         public string likelyClass { get; set; }
         public string confidence { get; set; }

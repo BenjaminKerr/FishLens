@@ -11,5 +11,7 @@ namespace FishLens_App.Interfaces
         public abstract string ResolveProjectRoot();
         public abstract string ResolvePath(string subdirectory);
         public abstract string ResolveYoloScriptPath();
+        public abstract string ResolveCsvScriptDirectory();
+        public abstract string ResolveSourceFolder();
     }
 }
