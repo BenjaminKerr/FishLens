@@ -12,9 +12,21 @@ namespace FishLens_App.Services
     internal class StandardFileSystemManager : IFileSystemManager
     {
         private readonly ILogger _logger;
+
+        public StandardFileSystemManager() : this(GetDefaultLogger())
+        {
+        }
+        private static ILogger<StandardFileSystemManager> GetDefaultLogger()
+        {
+            using var loggerFactory = LoggerFactory.Create(builder =>
+            {
+                builder.SetMinimumLevel(LogLevel.Information);
+            });
+            return loggerFactory.CreateLogger<StandardFileSystemManager>();
+        }
         public StandardFileSystemManager(ILogger<StandardFileSystemManager> logger)
         {
-            _logger = logger;
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public override bool CopyFile(string sourcePath, string destinationPath)

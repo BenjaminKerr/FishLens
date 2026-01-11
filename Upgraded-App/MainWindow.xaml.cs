@@ -20,6 +20,7 @@ using ClosedXML.Excel;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using FishLens_App.Interfaces;
+using FishLens_App.Services;
 
 
 namespace FishLens_App
@@ -33,13 +34,36 @@ namespace FishLens_App
 
         public MainWindow(IProjectPathResolver pathresolver, IFileSystemManager fileSystemManager, ILogger<MainWindow> logger)
         {
-            _logger = logger;
-            _pathResolver = pathresolver;
-            _fileSystemManager = fileSystemManager;
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _pathResolver = pathresolver ?? throw new ArgumentNullException(nameof(pathresolver));
+            _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
             InitializeComponent();
         }
 
+        public MainWindow() : this(
+            GetDefaultProjectPathResolver(),
+            GetDefaultFileSystemManager(),
+            GetDefaultLogger())
+        {
+        }
+
         // ************* Helper Functions ************************************************************************************************
+        private static IProjectPathResolver GetDefaultProjectPathResolver()
+        {
+            return new DefaultProjectPathResolver();
+        }
+        private static IFileSystemManager GetDefaultFileSystemManager()
+        {
+            return new StandardFileSystemManager();
+        }
+        private static ILogger<MainWindow> GetDefaultLogger()
+        {
+            using var loggerFactory = LoggerFactory.Create(builder =>
+            {
+                builder.SetMinimumLevel(LogLevel.Information);
+            });
+            return loggerFactory.CreateLogger<MainWindow>();
+        }
         private string GetProjectRoot()
         {
             return _pathResolver.ResolveProjectRoot();

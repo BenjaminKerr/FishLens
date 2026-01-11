@@ -10,16 +10,16 @@ namespace FishLens_App.Services
 {
     public class DefaultProjectPathResolver : IProjectPathResolver
     {
-        public string ResolveProjectRoot()
+        public override string ResolveProjectRoot()
         {
             string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
             return Directory.GetParent(baseDirectory).Parent.Parent.Parent.Parent.FullName;
         }
-        public string ResolvePath(string subdirectory)
+        public override string ResolvePath(string subdirectory)
         {
             return Path.Combine(ResolveProjectRoot(), subdirectory);
         }
-        public string ResolveYoloScriptPath()
+        public override string ResolveYoloScriptPath()
         {
             return Path.Combine(ResolveProjectRoot(), "main.py");
         }
