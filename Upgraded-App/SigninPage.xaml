@@ -5,26 +5,35 @@
         Width="1000" Height="700"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
-        Background="LightSlateGray">
+        Background="#0D3640">
 
     <Grid>
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="15">
+        <!--Sign in block Begins-->
+        <Border Width="300" Padding="30" Background="#E8F4F8" CornerRadius="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <StackPanel>
 
             <TextBlock Text="Sign in"
-                       FontSize="20"
-                       FontWeight="Bold"
-                       Foreground="White"
+                       FontSize="26"
+                       FontWeight="SemiBold"
+                       Foreground="Black"
                        HorizontalAlignment="Center"/>
+            <TextBlock Text="Username" FontSize="12" Foreground="Gray"></TextBlock>
+                <TextBox x:Name="UserName" Height="38" Padding="10" FontSize="14" BorderBrush="Black" BorderThickness="1"></TextBox>
 
-            <Button Content="Sign In"
+                <TextBlock Text="Password" FontSize="12" Foreground="Gray"></TextBlock>
+                <PasswordBox x:Name="PassWord" Height="38" Padding="10" FontSize="14" BorderBrush="Black" BorderThickness="1"></PasswordBox>
+
+                <Button Content="Sign In"
                     Width="120"
                     Padding="8"
                     Background="#2D7A8F"
                     Foreground="White"
-                
-                    BorderThickness="5"
+                    Margin="10"
+                    BorderThickness="2"
                     BorderBrush="Black"
                     Cursor="Hand"/>
         </StackPanel>
+        </Border>
+        <!--Sign in block Ends-->
     </Grid>
 </Window>
