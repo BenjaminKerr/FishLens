@@ -58,20 +58,20 @@ namespace FishLens_App
             }
         }
 
-        private async void signinbutton(object sender, RoutedEventArgs e)
-        {
-            var result = await Signin();
-            if(result != null) {
-                MessageBox.Show("Sign in successful!");
-                MainWindow main = new MainWindow(app, result);
-                main.Show();
-                this.Close();
+        //private async void signinbutton(object sender, RoutedEventArgs e)
+        //{
+        //    var result = await Signin();
+        //    if(result != null) {
+        //        MessageBox.Show("Sign in successful!");
+        //        MainWindow main = new MainWindow(app, result);
+        //        main.Show();
+        //        this.Close();
 
-            }
-            else
-                MessageBox.Show("Sign in unsuccesful, retry");
+        //    }
+        //    else
+        //        MessageBox.Show("Sign in unsuccesful, retry");
 
-        }
+        //}
     
     }
 }

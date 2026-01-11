@@ -17,7 +17,6 @@
                        HorizontalAlignment="Center"/>
 
             <Button Content="Sign In"
-                    Click="signinbutton"
                     Width="120"
                     Padding="8"
                     Background="#2D7A8F"
