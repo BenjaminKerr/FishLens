@@ -41,7 +41,7 @@ namespace FishLens_App
     {
         // This is the confidence threshold that determines if a button is red or not.
         // TO-DO: Make this editable in a settings page.
-        public double threshold = 0.7;
+        public double confidenceThreshold = 0.7;
         public MainWindow()
         {
             InitializeComponent();
@@ -52,18 +52,11 @@ namespace FishLens_App
         {
             ProcessStartInfo start = new ProcessStartInfo();
 
-            // Get script directory
-            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;               //FishLens/FrontEnd/FishLens-App/bin/Debug
-            var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
-            string scriptDirectory = System.IO.Path.Combine(projectRoot, "main.py");       //FishLens/main.py
-
+            string yoloScriptDirectory = get_yolo_script_directory();
 
             start.FileName = "python";
-            //start.FileName = System.IO.Path.Combine(projectRoot, "Python", "python.exe");
-
-
-            string sampleDataPath = System.IO.Path.Combine(projectRoot, "sample_data");   //FishLens/sample_data
-            start.Arguments = $"\"{scriptDirectory}\" \"{sampleDataPath}\""; //argv[1] = sample_data
+            string sampleDataPath = System.IO.Path.Combine(get_project_root(), "sample_data");   //FishLens/sample_data
+            start.Arguments = $"\"{yoloScriptDirectory}\" \"{sampleDataPath}\""; //argv[1] = sample_data
             start.RedirectStandardOutput = true; //Comment out to supress Python output
             start.RedirectStandardError = true; //Comment out to supress Python errors
 
@@ -82,88 +75,28 @@ namespace FishLens_App
             {
                 MessageBox.Show(ex.Message, "Could not process videos.", MessageBoxButton.OK);
             }
-
-
         }
 
-        // ************* Gets a video's data in a Video object *************
-        private Video get_data(string videoFileName)
+        private string get_yolo_script_directory()
         {
-            Video vid = new Video();
-            // Get the path to yolo_output.csv
-            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;               //FishLens/FrontEnd/FishLens-App/bin/Debug
             var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
-            string csvPath = System.IO.Path.Combine(projectRoot, "fish_summary.csv");
-
-            // Check if the CSV file exists
-            if (!File.Exists(csvPath))
-            {
-                MessageBox.Show("Analysis data file not found.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return vid;
-            }
-
-            try
-            {
-                // Read all lines from the CSV
-                string[] lines = File.ReadAllLines(csvPath);
-
-                // Skip header and find the matching video
-                for (int i = 1; i < lines.Length; i++)
-                {
-                    string[] columns = lines[i].Split(',');
-
-                    // Check if this row matches the video we're looking for
-                    if (columns[0].Trim() == videoFileName)
-                    {
-                        // Parse the data
-                        vid.video = columns[0].Trim();
-                        vid.trackId = columns[1].Trim();
-                        vid.likelyClass = columns[2].Trim();
-                        vid.confidence = columns[3].Trim();
-                        vid.startTime = columns[4].Trim();
-                        vid.endTime = columns[5].Trim();
-                        vid.avgConfidence = double.Parse(columns[6].Trim());
-                        vid.direction = columns[7].Trim();
-
-                        return vid;
-                    }
-                }
-
-                // If we get here, the video wasn't found in the CSV
-                vid.video = videoFileName;
-                vid.trackId = "-1";
-                vid.likelyClass = "N/A";
-                vid.confidence = "00.00%";
-                vid.startTime = "00.00";
-                vid.endTime = "00.00";
-                vid.avgConfidence = 00.00;
-                vid.direction = "Unknown";
-                return vid;
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error reading analysis data: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-
-            return vid;
+            string scriptDirectory = System.IO.Path.Combine(projectRoot, "main.py");       //FishLens/main.py
+            return scriptDirectory;
         }
 
-        // ************* Puts Data into Analysis Bar *************
-        private void enter_data(string videoFileName)
+        private string get_project_root()
         {
-            Video vid = get_data(videoFileName);
-
-            // Update the UI elements
-            videoName.Text = vid.video;
-            videoDateTime.Text = $"Duration: {vid.startTime}s - {vid.endTime}s";
-            fishPresentStatus.Text = vid.likelyClass == "fish" ? "Present" : "Not Present";
-            fishPresentConfidence.Text = vid.avgConfidence.ToString();
-            travelDirection.Text = char.ToUpper(vid.direction[0]) + vid.direction.Substring(1); // Capitalize first letter
+            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;               //FishLens/FrontEnd/FishLens-App/bin/Debug
+            var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
+            return projectRoot;
         }
+        // ******************************************************************
 
-        // ************* Open Folder Click Function *************
+
+        // ************* Open Folder and Put Data Into Database *************
         //  Saves videos uploaded by the user.
-        private void openFolder_Click(object sender, RoutedEventArgs e)
+        private void open_folder_click(object sender, RoutedEventArgs e)
         {
             // User opens a folder full of videos
             OpenFolderDialog openFolderDialog = new OpenFolderDialog();
@@ -174,60 +107,13 @@ namespace FishLens_App
                 sourceFolderPath = openFolderDialog.FolderName;
             }
 
-            // Save
-
             // Determine Save Directory
-            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;               //FishLens/FrontEnd/FishLens-App/bin/Debug
-            var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.FullName; //
+            var projectRoot = get_project_root();
             string saveDirectory = System.IO.Path.Combine(projectRoot, "SavedVids");    //FishLens/SavedVids
 
-            // If directory has been deleted, create it.
-            if (!Directory.Exists(saveDirectory))
-            {
-                try
-                {
-                    System.IO.Directory.CreateDirectory(saveDirectory);
-                }
-                catch (System.UnauthorizedAccessException)
-                {
-                    MessageBox.Show(
-                    "Cannot create the 'SavedVids' folder due to permission restrictions. Run the application as Administrator, or choose a different save path.",
-                    "Permission Denied",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(
-                    $"Fatal Error: Could not create analysis directory. Details: {ex.Message}",
-                    "Directory Creation Failed",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-            }
-
-            DirectoryInfo dirInfo = new DirectoryInfo(sourceFolderPath);
-            FileInfo[] info = dirInfo.GetFiles("*");
-            foreach (FileInfo file in info)
-            {
-                string fileName = System.IO.Path.GetFileName(file.FullName);
-                string destinationPath = System.IO.Path.Combine(saveDirectory, fileName);
-
-                try
-                {
-                    System.IO.File.Copy(file.FullName, destinationPath, true);
-                }
-                catch (IOException ex)
-                {
-                    MessageBox.Show($"Error Saving File: {ex.Message}", "Save Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-                catch (SecurityException)
-                {
-                    MessageBox.Show("Insufficient permissions to copy the file.", "Permission Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-            }
-
-            // Run YOLO on the video folder
+            make_directory_if_not_exists(saveDirectory);
+            display_data_in_ui(saveDirectory);
+            enter_data_in_file(sourceFolderPath, saveDirectory);
             run_yolo();
 
             // Get each saved video's name and create a list to sort by confidence
@@ -253,7 +139,7 @@ namespace FishLens_App
             // Now create buttons in sorted order
             foreach (var (vid, data) in videoDataList)
             {
-                if (data.avgConfidence < threshold)
+                if (data.avgConfidence < confidenceThreshold)
                 {
                     Button button = new Button()
                     {
@@ -265,7 +151,7 @@ namespace FishLens_App
                         Tag = vid.FullName
                     };
 
-                    button.Click += Button_Click;
+                    button.Click += video_button_click;
                     videoList.Children.Add(button);
                 }
                 else
@@ -280,7 +166,7 @@ namespace FishLens_App
                         Tag = vid.FullName
                     };
 
-                    button.Click += Button_Click;
+                    button.Click += video_button_click;
                     videoList.Children.Add(button);
                 }
             }
@@ -290,22 +176,128 @@ namespace FishLens_App
         }
 
 
-        // ************* Display Video Button *************
-        // Displays the video associated with a button on the sidebar.
-        private void Button_Click(object sender, RoutedEventArgs e)
+        private Video get_data(string videoFileName)
         {
-            Button clickedButton = (Button)sender;
-            string videoPath = clickedButton.Tag.ToString();
-            videoPlayer.Source = new Uri(videoPath);
-            videoPlayer.Play();
+            Video vid = new Video();
 
-            string videoFileName = System.IO.Path.GetFileName(videoPath);
-            enter_data(videoFileName);
+            var projectRoot = get_project_root();
+            string csvPath = System.IO.Path.Combine(projectRoot, "fish_summary.csv");
+
+            // Check if the CSV file exists
+            if (!File.Exists(csvPath))
+            {
+                MessageBox.Show("Analysis data file not found.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return vid;
+            }
+
+            try
+            {
+                vid = get_video_file_values(vid, csvPath, videoFileName);
+                return vid;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error reading analysis data: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            return vid;
+        }
+        private Video get_video_file_values(Video vid, string csvPath, string videoFileName)
+        {
+            // Read all lines from the CSV
+            string[] lines = File.ReadAllLines(csvPath);
+
+            // Skip header and find the matching video
+            for (int i = 1; i < lines.Length; i++)
+            {
+                string[] columns = lines[i].Split(',');
+
+                // Check if this row matches the video we're looking for
+                if (columns[0].Trim() == videoFileName)
+                {
+                    // Parse the data
+                    vid.video = columns[0].Trim();
+                    vid.trackId = columns[1].Trim();
+                    vid.likelyClass = columns[2].Trim();
+                    vid.confidence = columns[3].Trim();
+                    vid.startTime = columns[4].Trim();
+                    vid.endTime = columns[5].Trim();
+                    vid.avgConfidence = double.Parse(columns[6].Trim());
+                    vid.direction = columns[7].Trim();
+
+                    return vid;
+                }
+            }
+
+            // If we get here, the video wasn't found in the CSV
+            vid.video = videoFileName;
+            vid.trackId = "-1";
+            vid.likelyClass = "N/A";
+            vid.confidence = "00.00%";
+            vid.startTime = "00.00";
+            vid.endTime = "00.00";
+            vid.avgConfidence = 00.00;
+            vid.direction = "Unknown";
+            return vid;
         }
 
-        // ************* Data Export Button *************
-        // Saves the csv file as an excel sheet 
-        private void exportData_Click(object sender, RoutedEventArgs e)
+        private void make_directory_if_not_exists(string directory)
+        {
+            // If directory has been deleted, create it.
+            if (!Directory.Exists(directory))
+            {
+                try
+                {
+                    System.IO.Directory.CreateDirectory(directory);
+                }
+                catch (System.UnauthorizedAccessException)
+                {
+                    MessageBox.Show(
+                    "Cannot create the 'SavedVids' folder due to permission restrictions. Run the application as Administrator, or choose a different save path.",
+                    "Permission Denied",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(
+                    $"Fatal Error: Could not create analysis directory. Details: {ex.Message}",
+                    "Directory Creation Failed",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+            }
+        }
+
+        private void enter_data_in_file(string inputFolder, string outputDirectory)
+        {
+            DirectoryInfo dirInfo = new DirectoryInfo(inputFolder);
+            FileInfo[] info = dirInfo.GetFiles("*");
+            foreach (FileInfo file in info)
+            {
+                string fileName = System.IO.Path.GetFileName(file.FullName);
+                string destinationPath = System.IO.Path.Combine(outputDirectory, fileName);
+
+                try
+                {
+                    System.IO.File.Copy(file.FullName, destinationPath, true);
+                }
+                catch (IOException ex)
+                {
+                    MessageBox.Show($"Error Saving File: {ex.Message}", "Save Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                catch (SecurityException)
+                {
+                    MessageBox.Show("Insufficient permissions to copy the file.", "Permission Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+        // ******************************************************************
+
+
+
+        
+        // ************* Save and Export Data *******************************
+        private void export_data_click(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -382,9 +374,35 @@ namespace FishLens_App
             }
         }
 
-        private void SaveButton_Click(object sender, RoutedEventArgs e)
+        private void save_button_click(object sender, RoutedEventArgs e)
         {
 
         }
+        // **********************************************************************
+
+
+        // ********************* Display Data to User ***************************
+        private void video_button_click(object sender, RoutedEventArgs e)
+        {
+            Button clickedButton = (Button)sender;
+            string videoPath = clickedButton.Tag.ToString();
+            videoPlayer.Source = new Uri(videoPath);
+            videoPlayer.Play();
+
+            string videoFileName = System.IO.Path.GetFileName(videoPath);
+            get_data(videoFileName);
+        }
+        private void display_data_in_ui(string videoFileName)
+        {
+            Video vid = get_data(videoFileName);
+
+            // Update the UI elements
+            videoName.Text = vid.video;
+            videoDateTime.Text = $"Duration: {vid.startTime}s - {vid.endTime}s";
+            fishPresentStatus.Text = vid.likelyClass == "fish" ? "Present" : "Not Present";
+            fishPresentConfidence.Text = vid.avgConfidence.ToString();
+            travelDirection.Text = char.ToUpper(vid.direction[0]) + vid.direction.Substring(1); // Capitalize first letter
+        }
+        // **********************************************************************
     }
 }
