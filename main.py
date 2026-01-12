@@ -106,9 +106,9 @@ def run_video_tracker(video_path):
             # Average confidence determined by freqneuency of most common object.
             confidence = [d[4] for d in detections if d[5] == most_common_id]
             if len(confidence) > 0:
-                avg_confidence = (sum(confidence) / len(confidence)) * 100
+                avg_confidence_YL = (sum(confidence) / len(confidence)) * 100
             else:
-                avg_confidence = 0.0
+                avg_confidence_YL = 0.0
 
         # Begin DeepSort tracking
 
@@ -143,17 +143,17 @@ def run_video_tracker(video_path):
 
             det_hist = tracker.detection_history.get(tid, [])
             confs = [d["confidence"] for d in det_hist if d["confidence"] is not None]
-            avg_conf = sum(confs) / len(confs) if confs else 0.0
+            avg_conf_DS = sum(confs) / len(confs) if confs else 0.0
 
             # Export track data from both analysis programs
             finished_tracks.append({
                 "video_file": filename,
                 "track_id": tid,
                 "likely_class": most_common_class,
-                "confidence": f"{avg_confidence:.2f}%",
+                "confidence": f"{avg_confidence_YL:.2f}%",
                 "start_time_sec": track_data["start_frame"] / video_fps,
                 "end_time_sec": frame_index / video_fps,
-                "avg_confidence": avg_conf,
+                "avg_confidence": f"{avg_conf_DS:.2f}%",
                 "direction": tracker.previous_directions.get(tid, "unknown")
             })
 
@@ -167,15 +167,15 @@ def run_video_tracker(video_path):
             continue
             
         confidences = [c for c in track_data["confidences"] if c is not None]
-        avg_conf = sum(confidences)/len(confidences) if confidences else 0.0
+        avg_conf_DS = sum(confidences)/len(confidences) if confidences else 0.0
         finished_tracks.append({
             "video_file": filename, 
             "track_id": tid,
             "likely_class": most_common_class,
-            "confidence": f"{avg_confidence:.2f}%",
+            "confidence": f"{avg_confidence_YL:.2f}%",
             "start_time_sec": track_data["start_frame"] / video_fps,
             "end_time_sec": frame_index / video_fps,
-            "avg_confidence": avg_conf,
+            "avg_confidence": f"{avg_conf_DS:.2f}%",
             "direction": track_data["directions"][-1] if track_data["directions"] else "unknown"
         })
 
