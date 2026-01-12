@@ -1,4 +1,11 @@
-﻿using DocumentFormat.OpenXml.Drawing.Charts;
+﻿// ***************************************************************************************************************************
+// File: SigninPage.xaml.cs
+// Description: This is the C# code for our signin page which handles the logic of logging in and unsuccesful logins
+// Notes: Currently the login functionality is temporary, it does not actually check login information only whether or not it 
+// contains text.
+// ***************************************************************************************************************************
+
+using DocumentFormat.OpenXml.Drawing.Charts;
 using Microsoft.Identity.Client;
 using System;
 using System.Collections.Generic;
@@ -17,10 +24,6 @@ using System.Windows.Shapes;
 
 namespace FishLens_App
 {
-
-    /// <summary>
-    /// Interaction logic for SigninPage.xaml
-    /// </summary>
     public partial class SigninPage : Window
     {
     
