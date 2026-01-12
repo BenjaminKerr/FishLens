@@ -4,6 +4,7 @@
 # Notes: N/A
 # ****************************************************************
 
+from fileinput import filename
 import os
 import csv
 import sys
@@ -22,7 +23,10 @@ os.makedirs("no_fish", exist_ok=True)
 OUTPUT_CSV = "fish_summary.csv"
 FPS_DEFAULT = 30 
 
-# Process all videos and export CSV with collected data
+# ****************************************************************
+# Function: main
+# Description: Process all videos and export data as a CSV.
+# Notes: N/A
 def main():
 
     # Process all videos in folder
@@ -44,7 +48,11 @@ def main():
 
     print(f"Exported {len(all_tracks)} tracked fish to {OUTPUT_CSV}")
 
-# Run YOLO and DeepSort on a single video file
+# ****************************************************************
+# Function: run_video_tracker
+# Description: Process a single video through both YOLO and DeepSort,
+# return tracked fish data.
+# Notes: N/A
 def run_video_tracker(video_path):
 
     import cv2
@@ -132,52 +140,19 @@ def run_video_tracker(video_path):
             active_tracks[track_id]["directions"].append(obj["direction"])
 
         # Finalize disappeared tracks - only export if track lasted long enough
-        disappeared_ids = set(active_tracks.keys()) - current_track_ids
+        disappeared_ids = set(active_tracks.keys()) - current_track_ids 
         for tid in disappeared_ids:
             track_data = active_tracks.pop(tid)
-            
-            # Only export if track lasted at least 0.5 seconds (helps filter noise)
-            duration_sec = (frame_index - track_data["start_frame"]) / video_fps
-            if duration_sec < 1.0:
-                continue
-
-            det_hist = tracker.detection_history.get(tid, [])
-            confs = [d["confidence"] for d in det_hist if d["confidence"] is not None]
-            avg_conf_DS = sum(confs) / len(confs) if confs else 0.0
-
-            # Export track data from both analysis programs
-            finished_tracks.append({
-                "video_file": filename,
-                "track_id": tid,
-                "likely_class": most_common_class,
-                "confidence": f"{avg_confidence_YL:.2f}%",
-                "start_time_sec": track_data["start_frame"] / video_fps,
-                "end_time_sec": frame_index / video_fps,
-                "avg_confidence": f"{avg_conf_DS:.2f}%",
-                "direction": tracker.previous_directions.get(tid, "unknown")
-            })
-
+            track_dict = finalize_track(tid, track_data, frame_index, video_fps, most_common_class, avg_confidence_YL)
+            if track_dict:
+                finished_tracks.append(track_dict)
         frame_index += 1
 
     # Finalize remaining active tracks
     for tid, track_data in active_tracks.items():
-        # Only export if track lasted more than one second
-        duration_sec = (frame_index - track_data["start_frame"]) / video_fps
-        if duration_sec < 1.0:
-            continue
-            
-        confidences = [c for c in track_data["confidences"] if c is not None]
-        avg_conf_DS = sum(confidences)/len(confidences) if confidences else 0.0
-        finished_tracks.append({
-            "video_file": filename, 
-            "track_id": tid,
-            "likely_class": most_common_class,
-            "confidence": f"{avg_confidence_YL:.2f}%",
-            "start_time_sec": track_data["start_frame"] / video_fps,
-            "end_time_sec": frame_index / video_fps,
-            "avg_confidence": f"{avg_conf_DS:.2f}%",
-            "direction": track_data["directions"][-1] if track_data["directions"] else "unknown"
-        })
+        track_dict = finalize_track(tid, track_data, frame_index, video_fps, most_common_class, avg_confidence_YL)
+        if track_dict:
+            finished_tracks.append(track_dict)
 
     cap.release()
 
@@ -189,5 +164,25 @@ def run_video_tracker(video_path):
         return []
 
     return finished_tracks
+
+# ****************************************************************
+# Function: finalize_track
+# Description: Helper function for finalizing track data.
+# Notes: N/A
+def finalize_track(track_id, track_data, frame_index, video_fps, most_common_class, avg_confidence_YL):
+    duration_sec = (frame_index - track_data["start_frame"]) / video_fps
+    if duration_sec < 1.0:
+        return None
+    confidences = [c for c in track_data["confidences"] if c is not None]
+    avg_conf_DS = sum(confidences) / len(confidences) if confidences else 0.0
+    return {
+        "track_id": track_id,
+        "likely_class": most_common_class,
+        "confidence": f"{avg_confidence_YL:.2f}%",
+        "avg_confidence": f"{avg_conf_DS:.2f}%",
+        "start_time_sec": track_data["start_frame"] / video_fps,
+        "end_time_sec": frame_index / video_fps,
+        "direction": track_data["directions"][-1] if track_data["directions"] else "unknown"
+    }
 
 main()
