@@ -1,4 +1,10 @@
-﻿<Window x:Class="FishLens_App.SigninPage"
+﻿<!-- ***************************************************************************************************************************
+// File: SigninPage.xaml
+// Description: This is the xaml code for our signin page which contains the design of the page.
+// Notes: Currently the login functionality is temporary, it does not actually check login information only whether or not it 
+// contains text.
+// ***************************************************************************************************************************-->
+    <Window x:Class="FishLens_App.SigninPage"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Sign in"

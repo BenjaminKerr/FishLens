@@ -1,16 +1,19 @@
-﻿using System;
+﻿// ***************************************************************************************************************************
+// File: Role.cs
+// Description: This is the class for roles such as Admin or User, this will allow Admins permissions like specific settings
+// or history pages that not all users need.
+// Notes: Currently it is not set up to have an impact on our code
+// ***************************************************************************************************************************
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-// Created by: Kaharra Wilcoxon
-// Created on: 1/11/2025
-// Class Description:
-// Role is the class of all roles like Admin or User for our Users to allow Admin access to their Employees and other settings/history that not all users/employees need access to
-
 namespace FishLens_App
 {
+   
     public enum Permission
     {
         Settings,
