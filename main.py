@@ -6,6 +6,7 @@
 
 import os
 import csv
+import sys
 from ultralytics import YOLO
 from tracking.deepsort_tracker import DeepSortTracker
 from collections import Counter
@@ -13,13 +14,9 @@ from collections import Counter
 # Create and initialize video folder
 model = YOLO("yolov8n.pt")
 project_root = os.path.dirname(os.path.abspath(__file__))
-VIDEO_FOLDER = os.path.join(project_root, "sample_data")
+VIDEO_FOLDER = sys.argv[1] if len(sys.argv) > 1 else os.path.join(project_root, "sample_data")
 os.makedirs(VIDEO_FOLDER, exist_ok=True)
 os.makedirs("no_fish", exist_ok=True)
-if len(os.sys.argv) > 1:
-    VIDEO_FOLDER = os.sys.argv[1]
-else:
-    VIDEO_FOLDER = os.path.join(project_root, "sample_data")
 
 # Output CSV filename and fallback FPS
 OUTPUT_CSV = "fish_summary.csv"
