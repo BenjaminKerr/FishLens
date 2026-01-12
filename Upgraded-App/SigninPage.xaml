@@ -5,9 +5,26 @@
         Width="1000" Height="700"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
+        WindowState="Maximized"
         Background="#0D3640">
 
     <Grid>
+        <!--Start of Title header-->
+            <Border Width="1000" Padding="30" Background="#E8F4F8" CornerRadius="12" HorizontalAlignment="Center" VerticalAlignment="Top">
+            <StackPanel>
+
+            <TextBlock Name="Title" 
+             FontSize="56" 
+             FontFamily="Georgia" 
+             FontWeight="Bold"
+             Foreground="#0D3640" HorizontalAlignment="Center">
+      FishLens
+            </TextBlock>
+        </StackPanel>
+
+        </Border>
+        <!--End of Title header-->
+
         <!--Sign in block Begins-->
         <Border Width="300" Padding="30" Background="#E8F4F8" CornerRadius="12" HorizontalAlignment="Center" VerticalAlignment="Center">
             <StackPanel>
@@ -26,6 +43,7 @@
                 <Button Content="Sign In"
                     Width="120"
                     Padding="8"
+                    Click="SigninButtonClick"
                     Background="#2D7A8F"
                     Foreground="White"
                     Margin="10"

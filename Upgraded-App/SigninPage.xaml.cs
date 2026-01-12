@@ -31,11 +31,11 @@ namespace FishLens_App
 
         public bool Signin(string username, string password)
         {
-            bool SigninSuccessful = false;
+            bool SigninSuccessful = true;
           //Temp logic below until create database for logins
-            if (username == null || password == null)
+            if (username.Length== 0 || password.Length == 0)
             {
-                SigninSuccessful = true;
+                SigninSuccessful = false;
             }
 
             return SigninSuccessful;
@@ -47,8 +47,18 @@ namespace FishLens_App
 
             String username = UserName.Text;
             
-            String password = PassWord.ToString();
+            String password = PassWord.Password;
             Status = Signin(username, password);
+            if (Status == true)
+            {
+                MainWindow main = new MainWindow();
+                main.Show();
+                this.Close();
+            }
+            else
+            {
+                MessageBox.Show("Sign in unsuccessful, retry *For testing purposes just fill out both text boxes with anything");
+            }
         }
     
     }
