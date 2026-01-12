@@ -15,6 +15,7 @@ model = YOLO("yolov8n.pt")
 project_root = os.path.dirname(os.path.abspath(__file__))
 VIDEO_FOLDER = os.path.join(project_root, "sample_data")
 os.makedirs(VIDEO_FOLDER, exist_ok=True)
+os.makedirs("no_fish", exist_ok=True)
 if len(os.sys.argv) > 1:
     VIDEO_FOLDER = os.sys.argv[1]
 else:
@@ -24,10 +25,10 @@ else:
 OUTPUT_CSV = "fish_summary.csv"
 FPS_DEFAULT = 30 
 
+# Process all videos and export CSV with collected data
 def main():
-    
+
     # Process all videos in folder
-    os.makedirs("no_fish", exist_ok=True)
     all_tracks = []
     for filename in os.listdir(VIDEO_FOLDER):
         video_path = os.path.join(VIDEO_FOLDER, filename)
@@ -46,9 +47,17 @@ def main():
 
     print(f"Exported {len(all_tracks)} tracked fish to {OUTPUT_CSV}")
 
-
+# Run YOLO and DeepSort on a single video file
 def run_video_tracker(video_path):
+
     import cv2
+
+    frame_index = 0
+    active_tracks = {}
+    finished_tracks = []
+    found_fish = False
+    filename = os.path.basename(video_path)
+
     # create a fresh tracker for each video to avoid ID/history leakage
     tracker = DeepSortTracker()
     cap = cv2.VideoCapture(video_path)
@@ -57,21 +66,17 @@ def run_video_tracker(video_path):
         return []
 
     video_fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
-    frame_index = 0
-    active_tracks = {}
-    finished_tracks = []
-    found_fish = False
-    filename = os.path.basename(video_path)
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
 
-        # YOLO detection
+        # Begin YOLO detection
         results = model.predict(source=frame, verbose=False, stream=False, save=False)
         detections = []
 
+        # Begin YOLO analysis
         if results:
             r = results[0]
             for box in r.boxes:
@@ -82,7 +87,8 @@ def run_video_tracker(video_path):
                 cls_id = int(cls_arr[0]) if cls_arr.size > 0 and cls_arr[0] is not None else -1
                 if (x2 - x1)*(y2 - y1) < 100:
                     continue
-                # mark if YOLO detected a bird in any frame of this video
+
+                # Mark if YOLO detected a bird (fish) in any frame of this video
                 try:
                     cls_name = model.names[cls_id].lower()
                 except Exception:
@@ -91,25 +97,25 @@ def run_video_tracker(video_path):
                     found_fish = True
                 detections.append([x1, y1, x2, y2, conf, cls_id])
             
+        # Begin YOLO extrapolation for video-level stats
         if detections:
-            # Frames with detections are analyzed to determine what 
-            # object the video most likely contains.
-            # Note: This assumes the video contains only one type of object.
+
+            # Most common detected class determined by-frame
             ids = [d[5] for d in detections]
             id_counter = Counter(ids)
             most_common_id = id_counter.most_common(1)[0][0]
             most_common_class = model.names[most_common_id]
 
-            # Average confidence is determined based on how often the most
-            # common object is detected.
+            # Average confidence determined by freqneuency of most common object.
             confidence = [d[4] for d in detections if d[5] == most_common_id]
-
             if len(confidence) > 0:
                 avg_confidence = (sum(confidence) / len(confidence)) * 100
             else:
                 avg_confidence = 0.0
 
-        # use the tracker's default iou threshold (tuned in the tracker)
+        # Begin DeepSort tracking
+
+        # Use the tracker's default iou threshold (tuned in the tracker)
         detections = tracker.filter_overlaps(detections)
         tracked_objects = tracker.update(detections, frame)
         current_track_ids = set()
@@ -128,7 +134,7 @@ def run_video_tracker(video_path):
             active_tracks[track_id]["confidences"].append(obj["confidence"])
             active_tracks[track_id]["directions"].append(obj["direction"])
 
-        # finalize disappeared tracks - only export if track lasted long enough
+        # Finalize disappeared tracks - only export if track lasted long enough
         disappeared_ids = set(active_tracks.keys()) - current_track_ids
         for tid in disappeared_ids:
             track_data = active_tracks.pop(tid)
@@ -142,6 +148,7 @@ def run_video_tracker(video_path):
             confs = [d["confidence"] for d in det_hist if d["confidence"] is not None]
             avg_conf = sum(confs) / len(confs) if confs else 0.0
 
+            # Export track data from both analysis programs
             finished_tracks.append({
                 "video_file": filename,
                 "track_id": tid,
@@ -155,9 +162,9 @@ def run_video_tracker(video_path):
 
         frame_index += 1
 
-    # finalize remaining active tracks
+    # Finalize remaining active tracks
     for tid, track_data in active_tracks.items():
-        # Only export if track lasted long enough
+        # Only export if track lasted more than one second
         duration_sec = (frame_index - track_data["start_frame"]) / video_fps
         if duration_sec < 1.0:
             continue
@@ -176,9 +183,12 @@ def run_video_tracker(video_path):
         })
 
     cap.release()
-    # If YOLO never detected a bird in this video, don't export any tracks
+
+    # Skip export if fish was not detected in video
     if not found_fish:
-        print(f"No fish detected in {video_path} — skipping export.")
+        print("***************************************************************")
+        print(f"No fish detected in {filename}. Skipping export.")
+        print("***************************************************************")
         return []
 
     return finished_tracks
