@@ -1,27 +1,51 @@
+# ****************************************************************
+# File: main.py
+# Description: Main video processing script for YOLO and DeepSort.
+# Notes: N/A
+# ****************************************************************
+
 import os
 import csv
 from ultralytics import YOLO
 from tracking.deepsort_tracker import DeepSortTracker
 from collections import Counter
-import os
 
+# Create and initialize video folder
+model = YOLO("yolov8n.pt")
 project_root = os.path.dirname(os.path.abspath(__file__))
 VIDEO_FOLDER = os.path.join(project_root, "sample_data")
 os.makedirs(VIDEO_FOLDER, exist_ok=True)
-
 if len(os.sys.argv) > 1:
     VIDEO_FOLDER = os.sys.argv[1]
 else:
     VIDEO_FOLDER = os.path.join(project_root, "sample_data")
 
+# Output CSV filename and fallback FPS
 OUTPUT_CSV = "fish_summary.csv"
-FPS_DEFAULT = 30  # fallback if video FPS cannot be read
+FPS_DEFAULT = 30 
 
-# YOLO model
-model = YOLO("yolov8n.pt")
+def main():
+    
+    # Process all videos in folder
+    os.makedirs("no_fish", exist_ok=True)
+    all_tracks = []
+    for filename in os.listdir(VIDEO_FOLDER):
+        video_path = os.path.join(VIDEO_FOLDER, filename)
+        video_tracks = run_video_tracker(video_path)
+        for t in video_tracks:
+            t["video_file"] = filename
+        all_tracks.extend(video_tracks)
 
-# NOTE: create a tracker per-video inside run_video_tracker to avoid
-# carrying tracker state (track IDs, histories) across multiple files.
+    # Export CSV
+    if all_tracks:
+        keys = ["video_file", "track_id", "likely_class", "confidence", "start_time_sec", "end_time_sec", "avg_confidence", "direction"]
+        with open(OUTPUT_CSV, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=keys)
+            writer.writeheader()
+            writer.writerows(all_tracks)
+
+    print(f"Exported {len(all_tracks)} tracked fish to {OUTPUT_CSV}")
+
 
 def run_video_tracker(video_path):
     import cv2
@@ -37,6 +61,7 @@ def run_video_tracker(video_path):
     active_tracks = {}
     finished_tracks = []
     found_fish = False
+    filename = os.path.basename(video_path)
 
     while True:
         ret, frame = cap.read()
@@ -140,7 +165,7 @@ def run_video_tracker(video_path):
         confidences = [c for c in track_data["confidences"] if c is not None]
         avg_conf = sum(confidences)/len(confidences) if confidences else 0.0
         finished_tracks.append({
-            "video_file": filename,
+            "video_file": filename, 
             "track_id": tid,
             "likely_class": most_common_class,
             "confidence": f"{avg_confidence:.2f}%",
@@ -158,23 +183,4 @@ def run_video_tracker(video_path):
 
     return finished_tracks
 
-
-# Process all videos
-os.makedirs("no_fish", exist_ok=True)
-all_tracks = []
-for filename in os.listdir(VIDEO_FOLDER):
-    video_path = os.path.join(VIDEO_FOLDER, filename)
-    video_tracks = run_video_tracker(video_path)
-    for t in video_tracks:
-        t["video_file"] = filename
-    all_tracks.extend(video_tracks)
-
-# Export CSV
-if all_tracks:
-    keys = ["video_file", "track_id", "likely_class", "confidence", "start_time_sec", "end_time_sec", "avg_confidence", "direction"]
-    with open(OUTPUT_CSV, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=keys)
-        writer.writeheader()
-        writer.writerows(all_tracks)
-
-print(f"Exported {len(all_tracks)} tracked fish to {OUTPUT_CSV}")
+main()
