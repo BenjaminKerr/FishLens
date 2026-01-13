@@ -221,3 +221,9 @@ SavedVids/
 Upgraded-App/bin/
 Upgraded-App/obj/
 Upgraded-App/.vs/
+
+# Added for Fish Classifier code
+*.whl
+dist/
+build/
+fish_classifier_model.h5
