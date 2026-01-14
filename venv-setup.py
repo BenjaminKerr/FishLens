@@ -3,7 +3,18 @@
 # Description: Setup script for virtual environment.
 # Notes: This file will eventually be automated via a batch file
 # or something, but for now it's manual. This file MUST BE RAN
-# before testing any frontend-adjacent code. 
+# before testing any other code.
+# 
+# #########################
+# INSTALLATION INSTRUCTIONS
+# #########################
+# 1. Ensure Python 3.12 is installed.
+# 2. Select Python 3.12 as the active interpreter in your IDE.
+# 3. Run this script to create a virtual environment and install dependencies.
+# 4. After script finishes, run the following command in VS Code Terminal:
+# Python\venv\Scripts\activate
+# 5. In the Active Interpreter selection, navigate to the venv Python executable:
+#    Python\venv\Scripts\python.exe
 # ****************************************************************
 
 import sys
