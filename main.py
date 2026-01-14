@@ -1,30 +1,80 @@
+# ****************************************************************
+# File: main.py
+# Description: Main video processing script for YOLO and DeepSort.
+# Notes: N/A
+# ****************************************************************
+
+from fileinput import filename
 import os
 import csv
+import sys
 from ultralytics import YOLO
 from tracking.deepsort_tracker import DeepSortTracker
 from collections import Counter
-import os
+from pathlib import Path
+import numpy as np
+from keras.models import load_model
+from keras.preprocessing.image import load_img, img_to_array
 
-project_root = os.path.dirname(os.path.abspath(__file__))
-VIDEO_FOLDER = os.path.join(project_root, "sample_data")
-os.makedirs(VIDEO_FOLDER, exist_ok=True)
-
-if len(os.sys.argv) > 1:
-    VIDEO_FOLDER = os.sys.argv[1]
-else:
-    VIDEO_FOLDER = os.path.join(project_root, "sample_data")
-
-OUTPUT_CSV = "fish_summary.csv"
-FPS_DEFAULT = 30  # fallback if video FPS cannot be read
-
-# YOLO model
+# Create and initialize video folder
 model = YOLO("yolov8n.pt")
+project_root = os.path.dirname(os.path.abspath(__file__))
+VIDEO_FOLDER = sys.argv[1] if len(sys.argv) > 1 else os.path.join(project_root, "sample_data")
+os.makedirs(VIDEO_FOLDER, exist_ok=True)
+os.makedirs("no_fish", exist_ok=True)
 
-# NOTE: create a tracker per-video inside run_video_tracker to avoid
-# carrying tracker state (track IDs, histories) across multiple files.
+# Classifier and DeepSORT target folder
+# Also Classifier defaults
+CLASSIFIER_TARGET_FOLDER = "images"
+IMAGE_SIZE = (150, 150)
+MODEL_PATH = os.path.join(project_root, "fish_classifier_model.h5")
+CLASS_NAMES = ["Salmon", "Trout"] 
+IMAGE_EXTS = {'.jpg', '.jpeg', '.png'}
 
+# Output CSV filename and fallback FPS
+OUTPUT_CSV = "fish_summary.csv"
+FPS_DEFAULT = 30 
+
+# ****************************************************************
+# Function: main
+# Description: Process all videos and export data as a CSV.
+# Notes: N/A
+def main():
+
+    # Process all videos in folder
+    all_tracks = []
+    for filename in os.listdir(VIDEO_FOLDER):
+        video_path = os.path.join(VIDEO_FOLDER, filename)
+        video_tracks = run_video_tracker(video_path)
+        for t in video_tracks:
+            t["video_file"] = filename
+        all_tracks.extend(video_tracks)
+
+    # Export CSV
+    if all_tracks:
+        keys = ["video_file", "track_id", "likely_class", "confidence", "start_time_sec", "end_time_sec", "avg_confidence", "direction", "species", "species_confidence", "species", "species_confidence"]
+        with open(OUTPUT_CSV, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=keys)
+            writer.writeheader()
+            writer.writerows(all_tracks)
+
+    print(f"Exported {len(all_tracks)} tracked fish to {OUTPUT_CSV}")
+
+# ****************************************************************
+# Function: run_video_tracker
+# Description: Process a single video through both YOLO and DeepSort,
+#     return tracked fish data.
+# Notes: N/A
 def run_video_tracker(video_path):
+
     import cv2
+
+    frame_index = 0
+    active_tracks = {}
+    finished_tracks = []
+    found_fish = False
+    filename = os.path.basename(video_path)
+
     # create a fresh tracker for each video to avoid ID/history leakage
     tracker = DeepSortTracker()
     cap = cv2.VideoCapture(video_path)
@@ -33,20 +83,17 @@ def run_video_tracker(video_path):
         return []
 
     video_fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
-    frame_index = 0
-    active_tracks = {}
-    finished_tracks = []
-    found_fish = False
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
 
-        # YOLO detection
+        # Begin YOLO detection
         results = model.predict(source=frame, verbose=False, stream=False, save=False)
         detections = []
 
+        # Begin YOLO analysis
         if results:
             r = results[0]
             for box in r.boxes:
@@ -57,7 +104,8 @@ def run_video_tracker(video_path):
                 cls_id = int(cls_arr[0]) if cls_arr.size > 0 and cls_arr[0] is not None else -1
                 if (x2 - x1)*(y2 - y1) < 100:
                     continue
-                # mark if YOLO detected a bird in any frame of this video
+
+                # Mark if YOLO detected a bird (fish) in any frame of this video
                 try:
                     cls_name = model.names[cls_id].lower()
                 except Exception:
@@ -66,25 +114,25 @@ def run_video_tracker(video_path):
                     found_fish = True
                 detections.append([x1, y1, x2, y2, conf, cls_id])
             
+        # Begin YOLO extrapolation for video-level stats
         if detections:
-            # Frames with detections are analyzed to determine what 
-            # object the video most likely contains.
-            # Note: This assumes the video contains only one type of object.
+
+            # Most common detected class determined by-frame
             ids = [d[5] for d in detections]
             id_counter = Counter(ids)
             most_common_id = id_counter.most_common(1)[0][0]
             most_common_class = model.names[most_common_id]
 
-            # Average confidence is determined based on how often the most
-            # common object is detected.
+            # Average confidence determined by freqneuency of most common object.
             confidence = [d[4] for d in detections if d[5] == most_common_id]
-
             if len(confidence) > 0:
-                avg_confidence = (sum(confidence) / len(confidence)) * 100
+                avg_confidence_YL = (sum(confidence) / len(confidence)) * 100
             else:
-                avg_confidence = 0.0
+                avg_confidence_YL = 0.0
 
-        # use the tracker's default iou threshold (tuned in the tracker)
+        # Begin DeepSort tracking
+
+        # Use the tracker's default iou threshold (tuned in the tracker)
         detections = tracker.filter_overlaps(detections)
         tracked_objects = tracker.update(detections, frame)
         current_track_ids = set()
@@ -103,78 +151,115 @@ def run_video_tracker(video_path):
             active_tracks[track_id]["confidences"].append(obj["confidence"])
             active_tracks[track_id]["directions"].append(obj["direction"])
 
-        # finalize disappeared tracks - only export if track lasted long enough
-        disappeared_ids = set(active_tracks.keys()) - current_track_ids
+        # Finalize disappeared tracks - only export if track lasted long enough
+        disappeared_ids = set(active_tracks.keys()) - current_track_ids 
         for tid in disappeared_ids:
             track_data = active_tracks.pop(tid)
-            
-            # Only export if track lasted at least 0.5 seconds (helps filter noise)
-            duration_sec = (frame_index - track_data["start_frame"]) / video_fps
-            if duration_sec < 1.0:
-                continue
-
-            det_hist = tracker.detection_history.get(tid, [])
-            confs = [d["confidence"] for d in det_hist if d["confidence"] is not None]
-            avg_conf = sum(confs) / len(confs) if confs else 0.0
-
-            finished_tracks.append({
-                "video_file": filename,
-                "track_id": tid,
-                "likely_class": most_common_class,
-                "confidence": f"{avg_confidence:.2f}%",
-                "start_time_sec": track_data["start_frame"] / video_fps,
-                "end_time_sec": frame_index / video_fps,
-                "avg_confidence": avg_conf,
-                "direction": tracker.previous_directions.get(tid, "unknown")
-            })
-
+            track_dict = finalize_track(tid, track_data, frame_index, video_fps, most_common_class, avg_confidence_YL)
+            if track_dict:
+                finished_tracks.append(track_dict)
         frame_index += 1
 
-    # finalize remaining active tracks
+    # Finalize remaining active tracks
     for tid, track_data in active_tracks.items():
-        # Only export if track lasted long enough
-        duration_sec = (frame_index - track_data["start_frame"]) / video_fps
-        if duration_sec < 1.0:
-            continue
-            
-        confidences = [c for c in track_data["confidences"] if c is not None]
-        avg_conf = sum(confidences)/len(confidences) if confidences else 0.0
-        finished_tracks.append({
-            "video_file": filename,
-            "track_id": tid,
-            "likely_class": most_common_class,
-            "confidence": f"{avg_confidence:.2f}%",
-            "start_time_sec": track_data["start_frame"] / video_fps,
-            "end_time_sec": frame_index / video_fps,
-            "avg_confidence": avg_conf,
-            "direction": track_data["directions"][-1] if track_data["directions"] else "unknown"
-        })
+        track_dict = finalize_track(tid, track_data, frame_index, video_fps, most_common_class, avg_confidence_YL)
+        if track_dict:
+            finished_tracks.append(track_dict)
 
     cap.release()
-    # If YOLO never detected a bird in this video, don't export any tracks
+
+    # Skip export if fish was not detected in video
     if not found_fish:
-        print(f"No fish detected in {video_path} — skipping export.")
+        print("***************************************************************")
+        print(f"No fish detected in {filename}. Skipping export.")
+        print("***************************************************************")
         return []
 
     return finished_tracks
 
+# ****************************************************************
+# Function: finalize_track
+# Description: Helper function for finalizing track data.
+# Notes: N/A
+def finalize_track(track_id, track_data, frame_index, video_fps, most_common_class, avg_confidence_YL):
+    duration_sec = (frame_index - track_data["start_frame"]) / video_fps
+    if duration_sec < 1.0:
+        return None
+    confidences = [c for c in track_data["confidences"] if c is not None]
+    avg_conf_DS = sum(confidences) / len(confidences) if confidences else 0.0
+    species_data = classify_image()
+    return {
+        "track_id": track_id,
+        "likely_class": most_common_class,
+        "confidence": f"{avg_confidence_YL:.2f}%",
+        "avg_confidence": f"{avg_conf_DS:.2f}%",
+        "start_time_sec": track_data["start_frame"] / video_fps,
+        "end_time_sec": frame_index / video_fps,
+        "direction": track_data["directions"][-1] if track_data["directions"] else "unknown",
+        "species": species_data[0] if species_data else "No data",
+        "species_confidence": f"{species_data[1]:.2f}%" if species_data else "No data"
+    }
 
-# Process all videos
-os.makedirs("no_fish", exist_ok=True)
-all_tracks = []
-for filename in os.listdir(VIDEO_FOLDER):
-    video_path = os.path.join(VIDEO_FOLDER, filename)
-    video_tracks = run_video_tracker(video_path)
-    for t in video_tracks:
-        t["video_file"] = filename
-    all_tracks.extend(video_tracks)
+# ****************************************************************
+# Function: classify_image
+# Description: Loads, preprocesses, and classifies a single image file.
+# Notes: Lots of comments after the return that could be uncommented
+#   and moved up to delete the image after classification. Currently is
+#   commented to keep the test image for use.
+def classify_image():
+    # --- MODEL LOADING ---
+    try:
+        print(f"Loading model from: {MODEL_PATH}")
+        model = load_model(MODEL_PATH)
+        print("Model loaded successfully.")
+    except Exception as e:
+        print(f"FATAL ERROR: Could not load the model file '{MODEL_PATH}'.")
+        print(f"Details: {e}")
 
-# Export CSV
-if all_tracks:
-    keys = ["video_file", "track_id", "likely_class", "confidence", "start_time_sec", "end_time_sec", "avg_confidence", "direction"]
-    with open(OUTPUT_CSV, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=keys)
-        writer.writeheader()
-        writer.writerows(all_tracks)
+    if model:
+        try:
+            # 1. Load the image and resize it
+            img = load_img(CLASSIFIER_TARGET_FOLDER, target_size=IMAGE_SIZE)
+            
+            # 2. Convert to NumPy array and rescale
+            img_array = img_to_array(img)
+            img_array = img_array / 255.0 
+            img_array = np.expand_dims(img_array, axis=0) # Add batch dimension
 
-print(f"Exported {len(all_tracks)} tracked fish to {OUTPUT_CSV}")
+            # 3. Predict
+            predictions = model.predict(img_array, verbose=0)
+            
+            # Get the highest prediction score and index
+            pred_index = np.argmax(predictions)
+            pred_label = CLASS_NAMES[pred_index]
+            confidence = predictions[0][pred_index] * 100
+            
+            # 4. Return Results
+            return pred_label, confidence
+            
+            # NOTE: We probably want to uncomment this but I haven't yet because then it would remove the good looking test image
+            # 5. Clean up the file (Optional: uncomment if you want the file deleted after reading)
+            # os.remove(CLASSIFIER_TARGET_FOLDER)
+            # print(f"   -> File '{CROPPED_IMAGE_FILENAME}' deleted.")
+            
+        except FileNotFoundError:
+            # This can happen if YOLO deletes the file just as the classifier tries to read it
+            print(f"File not found at {CLASSIFIER_TARGET_FOLDER}. Skipping.")
+        except Exception as e:
+            print(f"ERROR during classification of {CLASSIFIER_TARGET_FOLDER}: {e}")
+    else:
+        print("Model was not found. Skipping classification.")
+
+# ****************************************************************
+# Function: get_image_name
+# Description: Helper function for getting the image that deepsort
+#   saved for the classifier.
+# Notes: N/A
+def get_image_name() -> str:
+    p = Path(CLASSIFIER_TARGET_FOLDER)
+    images = [f for f in p.iterdir() if f.is_file() and f.suffix.lower() in IMAGE_EXTS]
+    if not images:
+        raise FileNotFoundError(f'No image found in {CLASSIFIER_TARGET_FOLDER}')
+    return images[0].name
+
+main()

@@ -17,6 +17,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using ClosedXML.Excel;
+using Microsoft.Identity.Client;
 
 namespace FishLens_App
 {
@@ -44,9 +45,12 @@ namespace FishLens_App
         public double threshold = 0.7;
         public MainWindow()
         {
+           
             this.WindowState = WindowState.Maximized;
             this.WindowStyle = WindowStyle.SingleBorderWindow;
             this.ResizeMode = ResizeMode.CanResize;
+            InitializeComponent();
+
         }
 
         // ************* Runs Yolo and Collects Data *************
@@ -59,10 +63,21 @@ namespace FishLens_App
             var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
             string scriptDirectory = System.IO.Path.Combine(projectRoot, "main.py");       //FishLens/main.py
 
+            string pythonExe = System.IO.Path.Combine(
+                projectRoot,
+                "Python",
+                "venv",
+                "Scripts",
+                "python.exe"
+            );
 
+<<<<<<< HEAD
             //start.FileName = "python";
             start.FileName = System.IO.Path.Combine(projectRoot, "Python", "python.exe");
 
+=======
+            start.FileName = pythonExe;
+>>>>>>> fbbaac006d1964cd401d2363c40f0317f4569b1f
 
             string sampleDataPath = System.IO.Path.Combine(projectRoot, "sample_data");   //FishLens/sample_data
             start.Arguments = $"\"{scriptDirectory}\" \"{sampleDataPath}\""; //argv[1] = sample_data

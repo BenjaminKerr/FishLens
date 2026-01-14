@@ -1,7 +1,0 @@
-opencv-python
-torch
-numpy
-scipy
-filterpy
-lap
-deep-sort-realtime
