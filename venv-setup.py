@@ -8,8 +8,8 @@
 # #########################
 # INSTALLATION INSTRUCTIONS
 # #########################
-# 1. Ensure Python 3.12 is installed.
-# 2. Select Python 3.12 as the active interpreter in your IDE.
+# 1. In the Active Interpreter selection in VS Code, navigate to the dedicated Python interpreter:
+#    Python\python.exe
 # 3. Run this script to create a virtual environment and install dependencies.
 # 4. After script finishes, run the following command in VS Code Terminal:
 # Python\venv\Scripts\activate
