@@ -1,7 +1,7 @@
-video_file,track_id,likely_class,confidence,start_time_sec,end_time_sec,avg_confidence,direction
-BirdTest.mp4,1,bird,33.32%,0.3,4.833333333333333,0.6165464143542683,downstream
-SAMPLE_FISH_VIDEO.mp4,1,bird,73.72%,0.37537499999999996,4.879874999999999,0.3967358105712467,downstream
-SAMPLE_FISH_VIDEO.mp4,12,bird,31.00%,4.75475,8.008,0.2897010415028303,downstream
-SAMPLE_FISH_VIDEO.mp4,28,bird,32.57%,13.138124999999999,16.391375,0.036851899746136785,upstream
-SAMPLE_FISH_VIDEO.mp4,26,bird,39.24%,10.635625,17.183833333333332,0.26774045008762626,upstream
-SAMPLE_FISH_VIDEO.mp4,45,bird,85.60%,18.852166666666665,20.186833333333333,0.8188879415392876,downstream
+video_file,track_id,likely_class,confidence,start_time_sec,end_time_sec,avg_confidence,direction,species,species_confidence
+BirdTest.mp4,1,bird,33.32%,0.3,4.833333333333333,0.62%,downstream,No data,No data
+SAMPLE_FISH_VIDEO.mp4,1,bird,73.72%,0.37537499999999996,4.879874999999999,0.40%,downstream,No data,No data
+SAMPLE_FISH_VIDEO.mp4,12,bird,31.00%,4.75475,8.008,0.29%,downstream,No data,No data
+SAMPLE_FISH_VIDEO.mp4,28,bird,32.57%,13.138124999999999,16.391375,0.04%,upstream,No data,No data
+SAMPLE_FISH_VIDEO.mp4,26,bird,39.24%,10.635625,17.183833333333332,0.27%,upstream,No data,No data
+SAMPLE_FISH_VIDEO.mp4,45,bird,85.60%,18.852166666666665,20.186833333333333,0.82%,downstream,No data,No data

@@ -63,10 +63,15 @@ namespace FishLens_App
             var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
             string scriptDirectory = System.IO.Path.Combine(projectRoot, "main.py");       //FishLens/main.py
 
+            string pythonExe = System.IO.Path.Combine(
+                projectRoot,
+                "Python",
+                "venv",
+                "Scripts",
+                "python.exe"
+            );
 
-            start.FileName = "python";
-            //start.FileName = System.IO.Path.Combine(projectRoot, "Python", "python.exe");
-
+            start.FileName = pythonExe;
 
             string sampleDataPath = System.IO.Path.Combine(projectRoot, "sample_data");   //FishLens/sample_data
             start.Arguments = $"\"{scriptDirectory}\" \"{sampleDataPath}\""; //argv[1] = sample_data
