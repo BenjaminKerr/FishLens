@@ -20,6 +20,7 @@ requirements_path = os.path.join(project_root, 'requirements.txt')
 if not os.path.exists(venv_path):
     print(f"Creating venv folder...")
     subprocess.run([os.path.join(python_path, "python.exe"), "-m", "venv", venv_path], check=True)
+    print(f"venv folder created.")
 else:
     print(f"Virtual environment folder already exists--skipping creation.")
 
