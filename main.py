@@ -52,7 +52,7 @@ def main():
 
     # Export CSV
     if all_tracks:
-        keys = ["video_file", "track_id", "likely_class", "confidence", "start_time_sec", "end_time_sec", "avg_confidence", "direction", "species", "species_confidence"]
+        keys = ["video_file", "track_id", "likely_class", "confidence", "start_time_sec", "end_time_sec", "avg_confidence", "direction", "species", "species_confidence", "species", "species_confidence"]
         with open(OUTPUT_CSV, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=keys)
             writer.writeheader()
@@ -63,7 +63,7 @@ def main():
 # ****************************************************************
 # Function: run_video_tracker
 # Description: Process a single video through both YOLO and DeepSort,
-#   return tracked fish data.
+#     return tracked fish data.
 # Notes: N/A
 def run_video_tracker(video_path):
 
