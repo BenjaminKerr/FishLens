@@ -3,7 +3,12 @@
 # Description: Main video processing script for YOLO and DeepSort.
 # Notes: N/A
 # ****************************************************************
-
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message="pkg_resources is deprecated"
+)# Suppress specific warnings from pkg_resources
 from fileinput import filename
 import os
 import csv
