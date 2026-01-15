@@ -12,6 +12,7 @@ warnings.filterwarnings(
 from fileinput import filename
 import os
 import csv
+import cv2
 import sys
 from ultralytics import YOLO
 from tracking.deepsort_tracker import DeepSortTracker
@@ -38,7 +39,11 @@ IMAGE_EXTS = {'.jpg', '.jpeg', '.png'}
 
 # Output CSV filename and fallback FPS
 OUTPUT_CSV = "fish_summary.csv"
+FISH_IMAGE_DIR = "fish_images"
 FPS_DEFAULT = 30 
+MAX_EXPORT_PER_VIDEO = 1  # only export top fish per video
+
+os.makedirs(FISH_IMAGE_DIR, exist_ok=True)
 
 # ****************************************************************
 # Function: main
@@ -57,13 +62,53 @@ def main():
 
     # Export CSV
     if all_tracks:
-        keys = ["video_file", "track_id", "likely_class", "confidence", "start_time_sec", "end_time_sec", "avg_confidence", "direction", "species", "species_confidence", "species", "species_confidence"]
+        keys = [
+    "video_file",
+    "track_id",
+    "image_path",
+    "likely_class",
+    "confidence",
+    "start_time_sec",
+    "end_time_sec",
+    "avg_confidence",
+    "direction",
+    "species",
+    "species_confidence"
+]
+
         with open(OUTPUT_CSV, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=keys)
             writer.writeheader()
             writer.writerows(all_tracks)
 
     print(f"Exported {len(all_tracks)} tracked fish to {OUTPUT_CSV}")
+
+# ****************************************************************
+# Function: enhance_image
+# Description: Enhance image quality through upscaling and sharpening.
+# Notes: N/A
+def enhance_image(crop):
+    """Enhance image quality through upscaling and sharpening."""
+    if crop is None or crop.size == 0:
+        return None
+    
+    h, w = crop.shape[:2]
+    
+    # Upscale if crop is small
+    if w < 200 or h < 200:
+        scale = max(200 / w, 200 / h)
+        new_w = int(w * scale)
+        new_h = int(h * scale)
+        crop = cv2.resize(crop, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
+    
+    # Unsharp mask for clarity
+    gaussian = cv2.GaussianBlur(crop, (0, 0), 1.5)
+    crop = cv2.addWeighted(crop, 1.8, gaussian, -0.8, 0)
+    
+    # Clip values to valid range
+    crop = np.clip(crop, 0, 255).astype(np.uint8)
+    
+    return crop
 
 # ****************************************************************
 # Function: run_video_tracker
@@ -150,11 +195,26 @@ def run_video_tracker(video_path):
                 active_tracks[track_id] = {
                     "start_frame": frame_index,
                     "confidences": [],
-                    "directions": []
+                    "directions": [],
+                    "best_conf": -1.0,
+                    "best_crop": None
                 }
 
             active_tracks[track_id]["confidences"].append(obj["confidence"])
             active_tracks[track_id]["directions"].append(obj["direction"])
+
+            # ---------------------------
+            # Capture best image crop
+            # ---------------------------
+
+            x1, y1, x2, y2 = obj["bbox"]
+            crop = frame[y1:y2, x1:x2]
+            conf = obj["confidence"]
+
+            if crop is not None and crop.size > 0:
+                if conf > active_tracks[track_id]["best_conf"]:
+                    active_tracks[track_id]["best_conf"] = conf
+                    active_tracks[track_id]["best_crop"] = crop.copy()
 
         # Finalize disappeared tracks - only export if track lasted long enough
         disappeared_ids = set(active_tracks.keys()) - current_track_ids 
@@ -179,6 +239,32 @@ def run_video_tracker(video_path):
         print(f"No fish detected in {filename}. Skipping export.")
         print("***************************************************************")
         return []
+    
+        # ------------------------------------------------------
+    # Select top tracks and export best image
+    # ------------------------------------------------------
+
+    if MAX_EXPORT_PER_VIDEO and len(finished_tracks) > MAX_EXPORT_PER_VIDEO:
+        finished_tracks.sort(
+            key=lambda x: float(x["avg_confidence"].replace("%", "")),
+            reverse=True
+        )
+        finished_tracks = finished_tracks[:MAX_EXPORT_PER_VIDEO]
+
+    for track in finished_tracks:
+        best_crop = next(
+            (t["best_crop"] for t in active_tracks.values() if t.get("best_crop") is not None),
+            None
+        )
+
+        if best_crop is not None:
+            enhanced_crop = enhance_image(best_crop)
+            image_name = f"{os.path.splitext(filename)[0]}_track_{track['track_id']}.jpg"
+            image_path = os.path.join(FISH_IMAGE_DIR, image_name)
+            cv2.imwrite(image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            track["image_path"] = image_path
+        else:
+            track["image_path"] = None
 
     return finished_tracks
 
