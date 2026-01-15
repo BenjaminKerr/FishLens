@@ -1,8 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿// **************************************************
+// ***********************************
+// File: IProjectPathResolver.cs
+// Description: Interface for Path Resolvers
+// Author: Benjamin Kerr
+// 2025 - 2026
+// ***********************************
+// **************************************************
 
 namespace FishLens_App.Interfaces
 {

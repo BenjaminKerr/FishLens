@@ -1,14 +1,19 @@
-﻿using System;
+﻿// **************************************************
+// ***********************************
+// File: IFileSystemManager.cs
+// Description: Interface for System Management
+// Author: Benjamin Kerr
+// 2025 - 2026
+// ***********************************
+// **************************************************
+
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace FishLens_App.Interfaces
 {
     public abstract class IFileSystemManager
     {
-        public abstract bool EnsureDirectoryExists(string path);
+        public abstract bool CreateDirectoryIfNotExists(string path);
         public abstract bool CopyFile(string sourcePath, string destinationPath);
         public abstract IEnumerable<string> ListFiles(string directoryPath);
     }

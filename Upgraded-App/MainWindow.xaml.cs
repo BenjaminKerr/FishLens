@@ -1,27 +1,25 @@
-﻿using Microsoft.Win32;
+﻿// **************************************************
+// ***********************************
+// File: MainWindow.xaml.cs
+// Description: Handles the analysis page's functionality
+// Author: Benjamin Kerr
+// 2025 - 2026
+// ***********************************
+// **************************************************
+
+using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
-using ClosedXML.Excel;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.DependencyInjection;
 using FishLens_App.Interfaces;
 using FishLens_App.Services;
-
 
 namespace FishLens_App
 {
@@ -32,6 +30,9 @@ namespace FishLens_App
         private readonly ILogger<MainWindow> _logger;
         AppConfiguration config = new AppConfiguration();
 
+        //**************************************************
+        // Function: Constructor
+        // Description: Parameterized
         public MainWindow(IProjectPathResolver pathresolver, IFileSystemManager fileSystemManager, ILogger<MainWindow> logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -40,6 +41,9 @@ namespace FishLens_App
             InitializeComponent();
         }
 
+        // **************************************************
+        // Function: Constructor
+        // Description: Unparameterized
         public MainWindow() : this(
             GetDefaultProjectPathResolver(),
             GetDefaultFileSystemManager(),
@@ -48,14 +52,28 @@ namespace FishLens_App
         }
 
         // ************* Helper Functions ************************************************************************************************
+        // **************************************************
+        // Function: Gets the default project path
+        // Description: Creates an IProjectPathResolver
+        // Notes: Used in the constructor
         private static IProjectPathResolver GetDefaultProjectPathResolver()
         {
             return new DefaultProjectPathResolver();
         }
+
+        // **************************************************
+        // Function: Gets the default file system manager
+        // Description: Creates an IFileSystemManager
+        // Notes: Used in the constructor
         private static IFileSystemManager GetDefaultFileSystemManager()
         {
             return new StandardFileSystemManager();
         }
+
+        // **************************************************
+        // Function: Gets the default logger
+        // Description: Creates an ILogger<MainWindow>
+        // Notes: Used in the constructor
         private static ILogger<MainWindow> GetDefaultLogger()
         {
             using var loggerFactory = LoggerFactory.Create(builder =>
@@ -64,32 +82,101 @@ namespace FishLens_App
             });
             return loggerFactory.CreateLogger<MainWindow>();
         }
+
+        // **************************************************
+        // Function: Gets the project root
+        // Description: Returns the root's file path as a string
+        // Notes: Implemented in DefaultProjectPathResolver.cs
         private string GetProjectRoot()
         {
             return _pathResolver.ResolveProjectRoot();
         }
 
+        // **************************************************
+        // Function: Gets the yolo script
+        // Description: Returns the yolo script's file path as a string
+        // Notes:
+        //      -Implemented in DefaultProjectPathResolver.cs
+        //      -Made this its own function because it's more important
+        //       than other 'get file path' functions. For others, you
+        //       can use GetPath(string subdirectory)
         private string GetYoloScriptDirectory()
         {
             return _pathResolver.ResolveYoloScriptPath();
         }
 
+        // **************************************************
+        // Function: Gets the csv script
+        // Description: Returns the csv script's file path as a string
+        // Notes:
+        //      -Implemented in DefaultProjectPathResolver.cs
+        //      -Made this its own function because it's more important
+        //       than other 'get file path' functions. For others, you
+        //       can use GetPath(string subdirectory)
         private string GetCsvScriptDirectory()
         {
             return _pathResolver.ResolveCsvScriptDirectory();
         }
 
+        // **************************************************
+        // Function: Gets the source folder path
+        //           (Used in OpenFolderClick(object sender, RoutedEventArgs e))
+        // Description: Returns the user-selected file path as a string
+        // Notes: Implemented in DefaultProjectPathResolver.cs
         private string GetSourceFolderPath()
         {
             return _pathResolver.ResolveSourceFolder();
         }
+
+        // **************************************************
+        // Function: Gets a path
+        // Description: Gets the folder path root/subdirectory and returns it as a string
+        // Notes: Implemented in DefaultProjectPathResolver.cs
+        private string GetPath(string subdirectory)
+        {
+            return _pathResolver.ResolvePath(subdirectory);
+        }
+
+        // **************************************************
+        // Function: Makes a Directory if it Doesn't Already Exist
+        private void MakeDirectoryIfNotExists(string directory)
+        {
+            if (!Directory.Exists(directory))
+            {
+                try
+                {
+                    System.IO.Directory.CreateDirectory(directory);
+                }
+                catch (System.UnauthorizedAccessException ex)
+                {
+                    _logger.LogError("Permission denied creating directory", ex);
+                    HandleDirectoryCreationError("InsufficientPermissions");
+
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError("Failed to create directory", ex);
+                    HandleDirectoryCreationError(ex.Message);
+                }
+            }
+        }
+
+        private void HandleDirectoryCreationError(string errorMessage)
+        {
+            MessageBox.Show(
+                $"Cannot create directory: {errorMessage}",
+                "Directory Creation Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error
+            );
+        }
         // *******************************************************************************************************************************
 
-
-
-
-
-        // ************* Run Yolo and Collects Data *************************************************************************************
+        // ************* Run Yolo and Collects Data **************************************************************************************
+        // **************************************************
+        // Function: Runs YOLO
+        // Description: Runs the python script stored in the yolo script directory
+        // Notes: Writing credit to Aden Ratliff
         private void RunYolo()
         {
             ProcessStartInfo start = new ProcessStartInfo();
@@ -120,12 +207,10 @@ namespace FishLens_App
         }
         // ******************************************************************************************************************************************
 
-
-
-
-
         // ************* Open Folder and Put Data Into Database *************************************************************************************
-        //  Saves videos uploaded by the user.
+        // **************************************************
+        // Function: Opens Folder on Click
+        // Description: An OpenFolderDialog appears when the 'Open Folder' button is clicked
         private void OpenFolderClick(object sender, RoutedEventArgs e)
         {
             string sourceFolderPath = GetSourceFolderPath();
@@ -141,6 +226,10 @@ namespace FishLens_App
             exportData.Visibility = Visibility.Visible;
         }
 
+        // **************************************************
+        // Function: Processes Videos
+        // Description: Calls a series of functions to process the videos held in the directory
+        //              opened by OpenFolderClick(object sender, RoutedEventArgs e)
         private void ProcessVideos(string inputFolder, string outputDirectory)
         {
             MakeDirectoryIfNotExists(outputDirectory);
@@ -151,6 +240,10 @@ namespace FishLens_App
             CreateVideoButtonsList(videoDataList);
         }
 
+        // **************************************************
+        // Function: Creates a Sorted List of Videos
+        // Description: Gets the confidence rating of each video and list of all videos
+        //              sorted from lowest to highest confidence
         private List<(FileInfo vid, Video data)> CreateSortedListOfVideos(string directory)
         {
             // Get each saved video's name and create a list to sort by confidence
@@ -175,6 +268,10 @@ namespace FishLens_App
             return videoDataList;
         }
 
+        // **************************************************
+        // Function: Gets the Video Data
+        // Description: Looks in the CSV file for the row associated with the video's title,
+        //              and creates and returns a Video object with that row's data
         private Video GetData(string videoFileName)
         {
             Video vid = new Video();
@@ -200,6 +297,10 @@ namespace FishLens_App
             return vid;
         }
 
+        // **************************************************
+        // Function: Gets a Video File's Values
+        // Description: Parses a CSV row to put data into a Video object
+        // Notes: This is a helper function for GetData(string videoFileName)
         private Video GetVideoFileValues(Video vid, string csvPath, string videoFileName)
         {
             string[] lines = File.ReadAllLines(csvPath);
@@ -212,7 +313,7 @@ namespace FishLens_App
                 // Check if this row matches the video we're looking for
                 if (columns[0].Trim() == videoFileName)
                 {
-                    vid.video = columns[0].Trim();
+                    vid.name = columns[0].Trim();
                     vid.trackId = columns[1].Trim();
                     vid.likelyClass = columns[2].Trim();
                     vid.confidence = columns[3].Trim();
@@ -226,7 +327,7 @@ namespace FishLens_App
             }
 
             // If we get here, the video wasn't found in the CSV
-            vid.video = videoFileName;
+            vid.name = videoFileName;
             vid.trackId = "-1";
             vid.likelyClass = "N/A";
             vid.confidence = "00.00%";
@@ -237,37 +338,9 @@ namespace FishLens_App
             return vid;
         }
 
-        private void MakeDirectoryIfNotExists(string directory)
-        {
-            if (!Directory.Exists(directory))
-            {
-                try
-                {
-                    System.IO.Directory.CreateDirectory(directory);
-                }
-                catch (System.UnauthorizedAccessException ex)
-                {
-                    _logger.LogError("Permission denied creating directory", ex);
-                    HandleDirectoryCreationError("InsufficientPermissions");
-
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError("Failed to create directory", ex);
-                    HandleDirectoryCreationError(ex.Message);
-                }
-            }
-        }
-        private void HandleDirectoryCreationError(string errorMessage)
-        {
-            MessageBox.Show(
-                $"Cannot create directory: {errorMessage}",
-                "Directory Creation Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error
-            );
-        }
-
+        // **************************************************
+        // Function: Enters Data into a File
+        // Description: Copies data from an input folder to an output directory
         private void EnterDataInFile(string inputFolder, string outputDirectory)
         {
             DirectoryInfo dirInfo = new DirectoryInfo(inputFolder);
@@ -293,11 +366,10 @@ namespace FishLens_App
         }
         // ******************************************************************************************************************************************
 
-
-
-
-
         // ************* Save and Export Data *******************************************************************************************************
+        // **************************************************
+        // Function: Exports Data on Click
+        // Description: Exports data to an Excel sheet when the 'Export Data' button is clicked
         private void ExportDataClick(object sender, RoutedEventArgs e)
         {
             try
@@ -331,6 +403,9 @@ namespace FishLens_App
             }
         }
 
+        // **************************************************
+        // Function: Makes an Excel Sheet and Inserts Data
+        // Notes: This is a helper function to ExportDataClick(object sender, RoutedEventArgs e)
         private void MakeExcelSheetAndInsertData(SaveFileDialog saveFileDialog, string csvPath)
         {
             string excelPath = saveFileDialog.FileName;
@@ -378,19 +453,20 @@ namespace FishLens_App
             }
         }
 
+        // **************************************************
+        // Function: Save Button
+        // Desctiption: Saves any changes that the user makes to the data generated by the AI models
         // TODO: Implement Save Button
-        // This button saves any changes that the user makes to the data generated by the AI models.
         private void SaveButtonClick(object sender, RoutedEventArgs e)
         {
 
         }
         // ******************************************************************************************************************************************
 
-
-
-
-
         // ********************* Display Data to User ***********************************************************************************************
+        // **************************************************
+        // Function: Video Buttons Functionality
+        // Description: Displays a video when its associated button is clicked
         private void VideoButtonClick(object sender, RoutedEventArgs e)
         {
             Button clickedButton = (Button)sender;
@@ -401,18 +477,40 @@ namespace FishLens_App
             string videoFileName = System.IO.Path.GetFileName(videoPath);
             GetData(videoFileName);
         }
+
+        // **************************************************
+        // Function: Displays Data to User
+        // Description: Displays the data associated with a video after its button has been clicked
         private void DisplayDataInUi(string videoFileName)
         {
             Video vid = GetData(videoFileName);
 
             // Update the UI elements
-            videoName.Text = vid.video;
+            videoName.Text = vid.name;
             videoDateTime.Text = $"Duration: {vid.startTime}s - {vid.endTime}s";
             fishPresentStatus.Text = vid.likelyClass == "fish" ? "Present" : "Not Present";
             fishPresentConfidence.Text = vid.avgConfidence.ToString();
             travelDirection.Text = char.ToUpper(vid.direction[0]) + vid.direction.Substring(1); // Capitalize first letter
         }
 
+        // **************************************************
+        // Function: Creates a List of Video Buttons
+        // Description: Creates a list of videos and associated data, and adds a button for each and adds it to the sidebar
+        private void CreateVideoButtonsList(List<(FileInfo videoFile, Video videoData)> videoDataList)
+        {
+            // Now create buttons in sorted order
+            foreach (var (videoFile, videoData) in videoDataList)
+            {
+                Button button = CreateSingleVideoButton(videoFile, videoData);
+                button.Click += VideoButtonClick;
+                videoList.Children.Add(button);
+            }
+        }
+
+        // **************************************************
+        // Function: Creates a Single Video Button
+        // Description: Creates and returns a single button associated with a video file and its associated data
+        // Notes: This is a helper function for CreateVideoButtonsList(List<(FileInfo videoFile, Video videoData)> videoDataList)
         private Button CreateSingleVideoButton(FileInfo videoFile, Video videoData)
         {
             bool isLowConfidence = videoData.avgConfidence < config.ConfidenceThreshold;
@@ -427,17 +525,6 @@ namespace FishLens_App
                 Height = 40,
                 Tag = videoFile.FullName,
             };
-        }
-
-        private void CreateVideoButtonsList(List<(FileInfo videoFile, Video videoData)> videoDataList)
-        {
-            // Now create buttons in sorted order
-            foreach (var (videoFile, videoData) in videoDataList)
-            {
-                Button button = CreateSingleVideoButton(videoFile, videoData);
-                button.Click += VideoButtonClick;
-                videoList.Children.Add(button);
-            }
         }
         // ******************************************************************************************************************************************
     }

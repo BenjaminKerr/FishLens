@@ -1,14 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿// **************************************************
+// ***********************************
+// File: Video.cs
+// Description: Video Class
+// Author: Benjamin Kerr
+// 2025 - 2026
+// ***********************************
+// **************************************************
 
 namespace FishLens_App
 {
     public class Video
     {
-        public string video { get; set; } // This is the name of the video
+        public string name { get; set; } 
         public string trackId { get; set; }
         public string likelyClass { get; set; }
         public string confidence { get; set; }
