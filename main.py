@@ -208,7 +208,17 @@ def run_video_tracker(video_path):
             # ---------------------------
 
             x1, y1, x2, y2 = obj["bbox"]
-            crop = frame[y1:y2, x1:x2]
+            # Add 30% margin around the bounding box for zoomed-out view
+            h, w = frame.shape[:2]
+            margin_x = int((x2 - x1) * 0.3)
+            margin_y = int((y2 - y1) * 0.3)
+            
+            x1_zoom = max(0, x1 - margin_x)
+            y1_zoom = max(0, y1 - margin_y)
+            x2_zoom = min(w, x2 + margin_x)
+            y2_zoom = min(h, y2 + margin_y)
+            
+            crop = frame[y1_zoom:y2_zoom, x1_zoom:x2_zoom]
             conf = obj["confidence"]
 
             if crop is not None and crop.size > 0:
