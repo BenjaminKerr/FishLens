@@ -172,6 +172,32 @@ namespace FishLens_App
         }
         // *******************************************************************************************************************************
 
+        // ************* Page Navigation *************************************************************************************************
+        // **************************************************
+        // Function: Home Page Button Click
+        // Description: Navigates to the home page
+        private void HomeButtonClick(object sender, RoutedEventArgs e)
+        {
+        }
+
+        // **************************************************
+        // Function: History Page Button Click
+        // Description: Navigates to the history page
+        private void HistoryButtonClick(object sender, RoutedEventArgs e)
+        {
+            MainFrame.Navigate(new History());
+        }
+
+        // **************************************************
+        // Function: Settings Page Button Click
+        // Description: Navigates to the settings page
+        private void SettingsButtonClick(object sender, RoutedEventArgs e)
+        {
+
+            MainFrame.Navigate(new Settings());
+        }
+        // *******************************************************************************************************************************
+
         // ************* Run Yolo and Collects Data **************************************************************************************
         // **************************************************
         // Function: Runs YOLO
