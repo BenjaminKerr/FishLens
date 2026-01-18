@@ -8,7 +8,7 @@
 # #########################
 # INSTALLATION INSTRUCTIONS
 # #########################
-# 1. Ensure you have Python 3.12.10 installed at FishLens/Python.
+# 1. Ensure you have Python 3.12.10 installed and selected (run python --version to check).
 # 2. In the Active Interpreter selection in VS Code, navigate to the dedicated Python executable:
 #    Python\python.exe
 # 3. Run this script to create a virtual environment and install dependencies.
@@ -25,21 +25,20 @@ import os
 
 # Initialize paths
 project_root = os.path.dirname(os.path.abspath(__file__))
-python_path = os.path.join(project_root, 'Python')
-venv_path = os.path.join(python_path, 'venv')
+venv_path = os.path.join(project_root, 'venv')
 requirements_path = os.path.join(project_root, 'requirements.txt')
+venv_python = os.path.join(venv_path, 'Scripts', 'python.exe')
 
 # Create venv path if it doesn't exist
 if not os.path.exists(venv_path):
     print(f"Creating venv folder...")
-    subprocess.run([os.path.join(python_path, "python.exe"), "-m", "venv", venv_path], check=True)
+    subprocess.run([sys.executable, "-m", "venv", venv_path], check=True)
     print(f"venv folder created.")
 else:
     print(f"Virtual environment folder already exists--skipping creation.")
 
 # Install all dependencies from requirements.txt
-pip_exe = os.path.join(venv_path, 'Scripts', 'pip.exe')
 print(f"Installing dependencies from requirements.txt...")
-subprocess.run([pip_exe, "install", "--upgrade", "-r", requirements_path], check=True)
+subprocess.run([venv_python, "-m", "pip", "install", "--upgrade", "-r", requirements_path], check=True)
 print("All dependencies installed.")
 print("Setup complete.")
