@@ -17,7 +17,7 @@ import numpy as np
 from keras.models import load_model
 from keras.preprocessing.image import load_img, img_to_array
 
-# Suppress specific warnings from pkg_resources
+# Suppress specific warning from pkg_resources
 warnings.filterwarnings(
     "ignore",
     category=UserWarning,
