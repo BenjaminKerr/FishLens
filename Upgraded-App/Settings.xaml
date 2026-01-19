@@ -89,7 +89,27 @@
 
                     </StackPanel>
                 </Border>
+                <!-- Script Output Settings -->
+                <TextBlock Text="Output" 
+                           FontSize="20" 
+                           FontWeight="SemiBold"
+                           Foreground="#0D3640"
+                           Margin="0,0,0,15"/>
+                <StackPanel>
+                    <!-- Hide Errors -->
+                    <CheckBox x:Name="hideErrors"
+                                  Content="Hide Error Messages"
+                                  FontSize="14"
+                                  Foreground="#0D3640"
+                                  Margin="0,0,0,15"/>
 
+                    <!-- Hide Output -->
+                    <CheckBox x:Name="hideOutput"
+                                  Content="Hide Output Messages"
+                                  FontSize="14"
+                                  Foreground="#0D3640"
+                                  Margin="0,0,0,15"/>
+                </StackPanel>
                 <!-- Video Settings -->
                 <TextBlock Text="Video" 
                            FontSize="20" 
@@ -163,7 +183,6 @@
 
                     </StackPanel>
                 </Border>
-
             </StackPanel>
         </ScrollViewer>
 
