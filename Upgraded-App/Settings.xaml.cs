@@ -1,4 +1,6 @@
-﻿using System;
+﻿using FishLens_App.Interfaces;
+using Microsoft.Extensions.Logging;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -17,10 +19,19 @@ namespace FishLens_App
     /// <summary>
     /// Interaction logic for Settings.xaml
     /// </summary>
-    public partial class Settings : Window
+    public partial class Settings : Page
     {
-        public Settings()
+        private readonly IProjectPathResolver _pathResolver;
+        private readonly IFileSystemManager _fileSystemManager;
+        private readonly ILogger<MainWindow> _logger;
+        AppConfiguration config = new AppConfiguration();
+
+        public Settings(IProjectPathResolver pathresolver, IFileSystemManager fileSystemManager, ILogger<MainWindow> logger)
         {
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _pathResolver = pathresolver ?? throw new ArgumentNullException(nameof(pathresolver));
+            _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
+            InitializeComponent();
         }
 
         private void ConfidenceThreshold_ValueChanged(object sender, RoutedEventArgs e)

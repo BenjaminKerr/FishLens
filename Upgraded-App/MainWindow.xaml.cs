@@ -20,6 +20,7 @@ using System.Windows.Media;
 using Microsoft.Extensions.Logging;
 using FishLens_App.Interfaces;
 using FishLens_App.Services;
+using System.Threading.Tasks;
 
 namespace FishLens_App
 {
@@ -178,6 +179,7 @@ namespace FishLens_App
         // Description: Navigates to the home page
         private void HomeButtonClick(object sender, RoutedEventArgs e)
         {
+            MainFrame.Visibility = Visibility.Collapsed;
         }
 
         // **************************************************
@@ -185,7 +187,16 @@ namespace FishLens_App
         // Description: Navigates to the history page
         private void HistoryButtonClick(object sender, RoutedEventArgs e)
         {
-            MainFrame.Navigate(new History());
+            MainFrame.Visibility = Visibility.Visible;
+            _logger.LogInformation("History button clicked.");
+            try
+            {
+                MainFrame.Navigate(new History(_pathResolver, _fileSystemManager, _logger));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Navigation Error {ex.Message}");
+            }
         }
 
         // **************************************************
@@ -193,17 +204,26 @@ namespace FishLens_App
         // Description: Navigates to the settings page
         private void SettingsButtonClick(object sender, RoutedEventArgs e)
         {
-
-            MainFrame.Navigate(new Settings());
+            MainFrame.Visibility = Visibility.Visible;
+            _logger.LogInformation("Settings button clicked.");
+            try
+            {
+                MainFrame.Navigate(new Settings(_pathResolver, _fileSystemManager, _logger));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Navigation Error {ex.Message}");
+            }
         }
+
         // *******************************************************************************************************************************
 
         // ************* Run Yolo and Collects Data **************************************************************************************
         // **************************************************
         // Function: Runs YOLO
         // Description: Runs the python script stored in the yolo script directory
-        // Notes: Writing credit to Aden Ratliff
-        private void RunYolo()
+        // Notes: Original writing credit to Aden Ratliff, async update by Benjamin Kerr
+        private async Task RunYolo()
         {
             ProcessStartInfo start = new ProcessStartInfo();
 
@@ -217,17 +237,33 @@ namespace FishLens_App
 
             // Run Script
             start.UseShellExecute = false;
+
+            ProgressDialog progressDialog = new ProgressDialog();
+            progressDialog.Show();
+            await Task.Delay(100);
             try
             {
-                Process process = Process.Start(start);
-                string output = process.StandardOutput.ReadToEnd(); //Error handling
-                string error = process.StandardError.ReadToEnd();   //Error handling
-                process.WaitForExit();
-                MessageBox.Show($"Output:\n{output}\n\nErrors:\n{error}");
+                await Task.Run(() =>
+                {
+                    using (Process process = Process.Start(start))
+                    {
+                        string output = process.StandardOutput.ReadToEnd(); //Error handling
+                        string error = process.StandardError.ReadToEnd();   //Error handling
+                        process.WaitForExit();
+
+                        Dispatcher.Invoke(() => progressDialog.Close());
+
+                        if (!string.IsNullOrEmpty(error) || !string.IsNullOrEmpty(output))
+                        {
+                            Dispatcher.Invoke(() => MessageBox.Show($"Output:\n{output}\n\nErrors:\n{error}"));
+                        }
+                    }
+                });
             }
 
             catch (Exception ex)
             {
+                progressDialog.Close();
                 MessageBox.Show(ex.Message, "Could not process videos.", MessageBoxButton.OK);
             }
         }
@@ -437,7 +473,7 @@ namespace FishLens_App
             string excelPath = saveFileDialog.FileName;
 
             // Read the CSV file
-            string[] lines = File.ReadAllLines(csvPath);
+            string[] allLines = File.ReadAllLines(csvPath);
 
             // Create a new Excel workbook
             using (var workbook = new ClosedXML.Excel.XLWorkbook())
@@ -445,17 +481,17 @@ namespace FishLens_App
                 var worksheet = workbook.Worksheets.Add("Analysis Data");
 
                 // Write the data
-                for (int i = 0; i < lines.Length; i++)
+                for (int line = 0; line < allLines.Length; line++)
                 {
-                    string[] columns = lines[i].Split(',');
-                    for (int j = 0; j < columns.Length; j++)
+                    string[] allColumns = allLines[line].Split(',');
+                    for (int column = 0; column < allColumns.Length; column++)
                     {
-                        worksheet.Cell(i + 1, j + 1).Value = columns[j].Trim();
+                        worksheet.Cell(line + 1, column + 1).Value = allColumns[column].Trim();
                     }
                 }
 
                 // Format header row
-                if (lines.Length > 0)
+                if (allLines.Length > 0)
                 {
                     var headerRow = worksheet.Row(1);
                     headerRow.Style.Font.Bold = true;
