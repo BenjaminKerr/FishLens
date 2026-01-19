@@ -9,14 +9,12 @@
 # INSTALLATION INSTRUCTIONS
 # #########################
 # 1. Ensure you have Python 3.12.10 installed and selected (run python --version to check).
-# 2. In the Active Interpreter selection in VS Code, navigate to the dedicated Python executable:
-#    Python\python.exe
-# 3. Run this script to create a virtual environment and install dependencies.
-# 4. After script finishes, run the following command in VS Code Terminal:
-# Python\venv\Scripts\activate
-# 5. In the Active Interpreter selection, navigate to the venv Python executable:
-#    Python\venv\Scripts\python.exe
-# 6. Run trainer.py as well to create the FSI model.
+# 2. Run this script to create a virtual environment and install dependencies.
+# 3. After script finishes, run the following command in VS Code Terminal:
+#    venv\Scripts\activate
+# 4. In the Active Interpreter selection, navigate to the venv Python executable:
+#    venv\Scripts\python.exe
+# 5. Run trainer.py as well to create the FSI model before running the full program.
 # ****************************************************************
 
 import sys
