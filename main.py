@@ -230,14 +230,14 @@ def run_video_tracker(video_path):
         disappeared_ids = set(active_tracks.keys()) - current_track_ids 
         for tid in disappeared_ids:
             track_data = active_tracks.pop(tid)
-            track_dict = finalize_track(tid, track_data, frame_index, video_fps, most_common_class, avg_confidence_YL)
+            track_dict = finalize_track(tid, track_data, frame_index, video_fps, most_common_class, avg_confidence_YL, None)
             if track_dict:
                 finished_tracks.append(track_dict)
         frame_index += 1
 
     # Finalize remaining active tracks
     for tid, track_data in active_tracks.items():
-        track_dict = finalize_track(tid, track_data, frame_index, video_fps, most_common_class, avg_confidence_YL)
+        track_dict = finalize_track(tid, track_data, frame_index, video_fps, most_common_class, avg_confidence_YL, None)
         if track_dict:
             finished_tracks.append(track_dict)
 
@@ -250,7 +250,7 @@ def run_video_tracker(video_path):
         print("***************************************************************")
         return []
     
-        # ------------------------------------------------------
+    # ------------------------------------------------------
     # Select top tracks and export best image
     # ------------------------------------------------------
 
@@ -261,11 +261,9 @@ def run_video_tracker(video_path):
         )
         finished_tracks = finished_tracks[:MAX_EXPORT_PER_VIDEO]
 
+    # Save images and classify them
     for track in finished_tracks:
-        best_crop = next(
-            (t["best_crop"] for t in active_tracks.values() if t.get("best_crop") is not None),
-            None
-        )
+        best_crop = track.get("best_crop")
 
         if best_crop is not None:
             enhanced_crop = enhance_image(best_crop)
@@ -273,8 +271,16 @@ def run_video_tracker(video_path):
             image_path = os.path.join(FISH_IMAGE_DIR, image_name)
             cv2.imwrite(image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
             track["image_path"] = image_path
+            
+            # Classify the saved image
+            species_data = classify_image(image_path)
+            track["species"] = species_data[0] if species_data else "No data"
+            track["species_confidence"] = f"{species_data[1]:.2f}%" if species_data and len(species_data) > 1 else "No data"
         else:
             track["image_path"] = None
+        
+        # Remove best_crop from track dict (no need to export it)
+        track.pop("best_crop", None)
 
     return finished_tracks
 
@@ -282,13 +288,13 @@ def run_video_tracker(video_path):
 # Function: finalize_track
 # Description: Helper function for finalizing track data.
 # Notes: N/A
-def finalize_track(track_id, track_data, frame_index, video_fps, most_common_class, avg_confidence_YL):
+def finalize_track(track_id, track_data, frame_index, video_fps, most_common_class, avg_confidence_YL, image_path=None):
     duration_sec = (frame_index - track_data["start_frame"]) / video_fps
     if duration_sec < 1.0:
         return None
     confidences = [c for c in track_data["confidences"] if c is not None]
     avg_conf_DS = sum(confidences) / len(confidences) if confidences else 0.0
-    species_data = classify_image()
+    species_data = classify_image(image_path) if image_path else ("No image", 0.0)
     return {
         "track_id": track_id,
         "likely_class": most_common_class,
@@ -297,6 +303,7 @@ def finalize_track(track_id, track_data, frame_index, video_fps, most_common_cla
         "start_time_sec": track_data["start_frame"] / video_fps,
         "end_time_sec": frame_index / video_fps,
         "direction": track_data["directions"][-1] if track_data["directions"] else "unknown",
+        "best_crop": track_data.get("best_crop"),
         "species": species_data[0] if species_data else "No data",
         "species_confidence": f"{species_data[1]:.2f}%" if species_data else "No data"
     }
@@ -304,10 +311,8 @@ def finalize_track(track_id, track_data, frame_index, video_fps, most_common_cla
 # ****************************************************************
 # Function: classify_image
 # Description: Loads, preprocesses, and classifies a single image file.
-# Notes: Lots of comments after the return that could be uncommented
-#   and moved up to delete the image after classification. Currently is
-#   commented to keep the test image for use.
-def classify_image():
+# Notes: Accepts image_path parameter for the image to classify.
+def classify_image(image_path):
     # --- MODEL LOADING ---
     try:
         print(f"Loading model from: {MODEL_PATH}")
@@ -320,7 +325,7 @@ def classify_image():
     if model:
         try:
             # 1. Load the image and resize it
-            img = load_img(CLASSIFIER_TARGET_FOLDER, target_size=IMAGE_SIZE)
+            img = load_img(image_path, target_size=IMAGE_SIZE)
             
             # 2. Convert to NumPy array and rescale
             img_array = img_to_array(img)
@@ -345,9 +350,9 @@ def classify_image():
             
         except FileNotFoundError:
             # This can happen if YOLO deletes the file just as the classifier tries to read it
-            print(f"File not found at {CLASSIFIER_TARGET_FOLDER}. Skipping.")
+            print(f"File not found at {image_path}. Skipping.")
         except Exception as e:
-            print(f"ERROR during classification of {CLASSIFIER_TARGET_FOLDER}: {e}")
+            print(f"ERROR during classification of {image_path}: {e}")
     else:
         print("Model was not found. Skipping classification.")
 
