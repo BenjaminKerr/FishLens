@@ -9,6 +9,9 @@ __pycache__/
 # Distribution / packaging
 .Python
 Python/
+venv/
+*.pyc
+__pycache__/
 build/
 develop-eggs/
 dist/

@@ -4,11 +4,6 @@
 # Notes: N/A
 # ****************************************************************
 import warnings
-warnings.filterwarnings(
-    "ignore",
-    category=UserWarning,
-    message="pkg_resources is deprecated"
-)# Suppress specific warnings from pkg_resources
 from fileinput import filename
 import os
 import csv
@@ -21,6 +16,13 @@ from pathlib import Path
 import numpy as np
 from keras.models import load_model
 from keras.preprocessing.image import load_img, img_to_array
+
+# Suppress specific warning from pkg_resources
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message="pkg_resources is deprecated"
+)
 
 # Create and initialize video folder
 model = YOLO("yolov8n.pt")

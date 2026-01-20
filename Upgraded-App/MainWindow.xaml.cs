@@ -71,13 +71,7 @@ namespace FishLens_App
                 "python.exe"
             );
 
-<<<<<<< HEAD
-            //start.FileName = "python";
-            start.FileName = System.IO.Path.Combine(projectRoot, "Python", "python.exe");
-
-=======
-            start.FileName = pythonExe;
->>>>>>> fbbaac006d1964cd401d2363c40f0317f4569b1f
+            start.FileName = System.IO.Path.Combine(projectRoot, "venv", "scripts", "python.exe");
 
             string sampleDataPath = System.IO.Path.Combine(projectRoot, "sample_data");   //FishLens/sample_data
             start.Arguments = $"\"{scriptDirectory}\" \"{sampleDataPath}\""; //argv[1] = sample_data
