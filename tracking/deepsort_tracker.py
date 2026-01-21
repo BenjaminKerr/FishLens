@@ -4,6 +4,11 @@ import torch
 from torchvision.ops import nms
 
 class DeepSortTracker:
+    # ****************************************************************
+    # Function: __init__
+    # Description: Initialize the DeepSort tracker with configuration parameters
+    #     and tracking state containers.
+    # Notes: N/A
     def __init__(self):
         self.tracker = DeepSort(
             max_age=50,          # tracks persist 50 frames after last detection before dying
@@ -19,6 +24,11 @@ class DeepSortTracker:
         # track_id → list of detection dictionaries
         self.detection_history = {}
 
+    # ****************************************************************
+    # Function: filter_overlaps
+    # Description: Remove overlapping boxes using NMS, keeping the highest
+    #     confidence detection for each region.
+    # Notes: N/A
     def filter_overlaps(self, detections, iou_thresh=0.7):
         """
     Remove overlapping boxes, keeping the highest confidence.
@@ -39,6 +49,11 @@ class DeepSortTracker:
         keep_idxs = nms(boxes, scores, iou_thresh)
         return [detections[i] for i in keep_idxs]
 
+    # ****************************************************************
+    # Function: _get_direction
+    # Description: Compute horizontal movement direction of a tracked object
+    #     by comparing first and last known positions.
+    # Notes: N/A
     def _get_direction(self, track_id, centroid):
         """
         Compute horizontal direction using first and last position
@@ -59,6 +74,11 @@ class DeepSortTracker:
         self.previous_directions[track_id] = direction
         return direction
 
+    # ****************************************************************
+    # Function: update
+    # Description: Update DeepSort tracker with new detections from a frame
+    #     and return confirmed tracked objects with metadata.
+    # Notes: N/A
     def update(self, detections, frame):
         """
         Update DeepSort with new detections.
@@ -109,6 +129,11 @@ class DeepSortTracker:
 
         return results
 
+    # ****************************************************************
+    # Function: get_track_summaries
+    # Description: Generate summaries of confirmed tracks that meet minimum
+    #     frame duration threshold for export.
+    # Notes: N/A
     def get_track_summaries(self, min_frames=3):
         """
         Summarize confirmed tracks with minimal frames.
