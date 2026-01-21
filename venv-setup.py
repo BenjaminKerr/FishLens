@@ -11,7 +11,8 @@
 # 1. Ensure you have Python 3.12.10 installed and selected (run python --version to check).
 # 2. Run this script to create a virtual environment and install dependencies.
 # 3. After script finishes, run the following command in VS Code Terminal:
-#    venv\Scripts\activate
+#    venv\Scripts\activate 
+#    - May have to run "Set-ExecutionPolicy -ExecutionPolicy -Scope Process -ExecutionPolicy Bypass" in PowerShell first.
 # 4. In the Active Interpreter selection, navigate to the venv Python executable:
 #    venv\Scripts\python.exe
 # 5. Run trainer.py as well to create the FSI model before running the full program.
