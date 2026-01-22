@@ -4,6 +4,10 @@ import torch
 from torchvision.ops import nms
 
 class DeepSortTracker:
+    MIN_BOX_AREA = 100
+    MIN_CONFIDENCE = 0.5
+    MIN_MOVE_THRESHOLD = 5
+    MAX_TRACK_HISTORY = 50
     # ****************************************************************
     # Function: __init__
     # Description: Initialize the DeepSort tracker with configuration parameters
@@ -85,7 +89,7 @@ class DeepSortTracker:
         detections = [x1, y1, x2, y2, conf, cls]
         """
         # Filter tiny boxes and low-confidence detections
-        detections = [d for d in detections if (d[2]-d[0])*(d[3]-d[1]) > 100 and d[4] > 0.5]
+        detections = [d for d in detections if (d[2]-d[0])*(d[3]-d[1]) > self.MIN_BOX_AREA and d[4] > self.MIN_CONFIDENCE]
 
         formatted = [
             ([x1, y1, x2, y2], conf, cls)
@@ -134,29 +138,27 @@ class DeepSortTracker:
     # Description: Generate summaries of confirmed tracks that meet minimum
     #     frame duration threshold for export.
     # Notes: N/A
-    def get_track_summaries(self, min_frames=3):
+    def get_track_summaries(self, min_frames=10):
         """
         Summarize confirmed tracks with minimal frames.
         Only tracks lasting >= min_frames will be exported.
         """
         summaries = []
-        min_frames = 10
+
         for track_id, centroids in self.track_positions.items():
-            if len(centroids) < min_frames:
-                continue  # ignore short tracks
+            # skip short tracks without continue
+            if len(centroids) >= min_frames:
+                detection_list = self.detection_history.get(track_id, [])
+                confidences = [d["confidence"] for d in detection_list if d["confidence"] is not None]
+                avg_conf = float(np.mean(confidences)) if confidences else 0.0
+                class_id = detection_list[0]["class_id"] if detection_list else None
+                direction = self.previous_directions.get(track_id, "unknown")
 
-            detection_list = self.detection_history.get(track_id, [])
-            confidences = [d["confidence"] for d in detection_list if d["confidence"] is not None]
-            avg_conf = float(np.mean(confidences)) if confidences else 0.0
-            class_id = detection_list[0]["class_id"] if detection_list else None
-            direction = self.previous_directions.get(track_id, "unknown")
-
-            summaries.append({
-                "track_id": track_id,
-                "direction": direction,
-                "avg_confidence": avg_conf,
-                "detections_count": len(detection_list),
-                "class_id": class_id
-            })
-
+                summaries.append({
+                    "track_id": track_id,
+                    "direction": direction,
+                    "avg_confidence": avg_conf,
+                    "detections_count": len(detection_list),
+                    "class_id": class_id
+                })
         return summaries
