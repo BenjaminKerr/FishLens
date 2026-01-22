@@ -48,5 +48,16 @@ namespace FishLens_App
         {
 
         }
+
+        private void ToggleErrorMessages(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private void ToggleOutputMessages(object sender, RoutedEventArgs e)
+        {
+
+        }
+
     }
 }

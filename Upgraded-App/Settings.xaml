@@ -101,14 +101,20 @@
                                   Content="Hide Error Messages"
                                   FontSize="14"
                                   Foreground="#0D3640"
-                                  Margin="0,0,0,15"/>
+                                  Margin="0,0,0,15"
+                                  IsChecked="False"
+                                  Click="ToggleErrorMessages"/>
 
                     <!-- Hide Output -->
                     <CheckBox x:Name="hideOutput"
                                   Content="Hide Output Messages"
                                   FontSize="14"
                                   Foreground="#0D3640"
-                                  Margin="0,0,0,15"/>
+                                  Margin="0,0,0,15"
+                                  IsChecked="False"
+                                  Click="ToggleOutputMessages"/>
+                                  
+                    
                 </StackPanel>
                 <!-- Video Settings -->
                 <TextBlock Text="Video" 
