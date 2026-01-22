@@ -9,6 +9,7 @@ import os
 import csv
 import cv2
 import sys
+import shutil
 from ultralytics import YOLO
 from tracking.deepsort_tracker import DeepSortTracker
 from collections import Counter
@@ -250,6 +251,12 @@ def run_video_tracker(video_path):
         print("***************************************************************")
         print(f"No fish detected in {filename}. Skipping export.")
         print("***************************************************************")
+        # Copy video to no_fish folder
+        no_fish_path = os.path.join("no_fish", filename)
+        try:
+            shutil.copy2(video_path, no_fish_path)
+        except Exception as e:
+            print(f"Error copying video to no_fish folder: {e}")
         return []
     
     # ------------------------------------------------------
@@ -269,15 +276,31 @@ def run_video_tracker(video_path):
 
         if best_crop is not None:
             enhanced_crop = enhance_image(best_crop)
-            image_name = f"{os.path.splitext(filename)[0]}_track_{track['track_id']}.jpg"
-            image_path = os.path.join(FISH_IMAGE_DIR, image_name)
-            cv2.imwrite(image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
-            track["image_path"] = image_path
+            
+            # Classify the image first to determine species folder
+            temp_image_name = f"{os.path.splitext(filename)[0]}_track_{track['track_id']}.jpg"
+            temp_image_path = os.path.join(FISH_IMAGE_DIR, temp_image_name)
+            cv2.imwrite(temp_image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
             
             # Classify the saved image
-            species_data = classify_image(image_path)
-            track["species"] = species_data[0] if species_data else "No data"
+            species_data = classify_image(temp_image_path)
+            species = species_data[0] if species_data else "No data"
+            track["species"] = species
             track["species_confidence"] = f"{species_data[1]:.2f}%" if species_data and len(species_data) > 1 else "No data"
+            
+            # Create species subfolder and move image
+            if species != "No data":
+                species_folder = os.path.join(FISH_IMAGE_DIR, species)
+                os.makedirs(species_folder, exist_ok=True)
+                final_image_path = os.path.join(species_folder, temp_image_name)
+                try:
+                    shutil.move(temp_image_path, final_image_path)
+                    track["image_path"] = final_image_path
+                except Exception as e:
+                    print(f"Error moving image to species folder: {e}")
+                    track["image_path"] = temp_image_path
+            else:
+                track["image_path"] = temp_image_path
         else:
             track["image_path"] = None
         
