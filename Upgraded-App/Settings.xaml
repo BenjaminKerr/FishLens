@@ -97,22 +97,28 @@
                            Margin="0,0,0,15"/>
                 <StackPanel>
                     <!-- Hide Errors -->
-                    <CheckBox x:Name="hideErrors"
-                                  Content="Redirect Error Messages"
-                                  FontSize="14"
-                                  Foreground="#0D3640"
-                                  Margin="0,0,0,15"
-                                  IsChecked="False"
-                                  Click="ToggleErrorMessages"/>
-
-                    <!-- Hide Output -->
                     <CheckBox x:Name="hideOutput"
                                   Content="Redirect Output Messages"
                                   FontSize="14"
                                   Foreground="#0D3640"
-                                  Margin="0,0,0,15"
+                                  Margin="0,0,0,0"
                                   IsChecked="False"
                                   Click="ToggleOutputMessages"/>
+                    <TextBlock Text="Show output messages as a pop-up window at the end of the program instead of in the terminal."
+                           FontSize="12"
+                               Margin="0,0,0,15"/>
+
+                    <!-- Hide Output -->
+                    <CheckBox x:Name="hideErrors"
+                                  Content="Redirect Error Messages"
+                                  FontSize="14"
+                                  Foreground="#0D3640"
+                                  Margin="0,0,0,0"
+                                  IsChecked="False"
+                                  Click="ToggleErrorMessages"/>
+                    <TextBlock Text="Show error messages as a pop-up window at the end of the program instead of in the terminal."
+                        FontSize="12"
+                        Margin="0,0,0,15"/>
                                   
                     
                 </StackPanel>
