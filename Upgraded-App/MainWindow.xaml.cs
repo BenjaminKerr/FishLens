@@ -43,6 +43,11 @@ namespace FishLens_App
         // This is the confidence threshold that determines if a button is red or not.
         // TO-DO: Make this editable in a settings page.
         public double threshold = 0.7;
+        // ****************************************************************
+        // Function: MainWindow
+        // Description: Initialize the main window with maximized state and
+        //     default styling.
+        // Notes: N/A
         public MainWindow()
         {
            
@@ -53,7 +58,11 @@ namespace FishLens_App
 
         }
 
-        // ************* Runs Yolo and Collects Data *************
+        // ****************************************************************
+        // Function: run_yolo
+        // Description: Execute YOLO detection script on sample data folder
+        //     and collect analysis results.
+        // Notes: N/A
         private void run_yolo()
         {
             ProcessStartInfo start = new ProcessStartInfo();
@@ -97,7 +106,11 @@ namespace FishLens_App
 
         }
 
-        // ************* Gets a video's data in a Video object *************
+        // ****************************************************************
+        // Function: get_data
+        // Description: Retrieve video analysis data from CSV file and populate
+        //     Video object with extracted information.
+        // Notes: N/A
         private Video get_data(string videoFileName)
         {
             Video vid = new Video();
@@ -159,7 +172,11 @@ namespace FishLens_App
             return vid;
         }
 
-        // ************* Puts Data into Analysis Bar *************
+        // ****************************************************************
+        // Function: enter_data
+        // Description: Display video analysis data in the UI analysis bar
+        //     for the selected video.
+        // Notes: N/A
         private void enter_data(string videoFileName)
         {
             Video vid = get_data(videoFileName);
@@ -172,8 +189,12 @@ namespace FishLens_App
             travelDirection.Text = char.ToUpper(vid.direction[0]) + vid.direction.Substring(1); // Capitalize first letter
         }
 
-        // ************* Open Folder Click Function *************
-        //  Saves videos uploaded by the user.
+        // ****************************************************************
+        // Function: openFolder_Click
+        // Description: Handle folder selection, copy videos to SavedVids,
+        //     run YOLO analysis, and populate video list buttons sorted by
+        //     confidence.
+        // Notes: N/A
         private void openFolder_Click(object sender, RoutedEventArgs e)
         {
             // User opens a folder full of videos
@@ -301,8 +322,11 @@ namespace FishLens_App
         }
 
 
-        // ************* Display Video Button *************
-        // Displays the video associated with a button on the sidebar.
+        // ****************************************************************
+        // Function: Button_Click
+        // Description: Play selected video and display its analysis data
+        //     in the UI panel.
+        // Notes: N/A
         private void Button_Click(object sender, RoutedEventArgs e)
         {
             Button clickedButton = (Button)sender;
@@ -314,8 +338,11 @@ namespace FishLens_App
             enter_data(videoFileName);
         }
 
-        // ************* Data Export Button *************
-        // Saves the csv file as an excel sheet 
+        // ****************************************************************
+        // Function: exportData_Click
+        // Description: Convert fish_summary.csv data to Excel file and
+        //     allow user to save and open the formatted report.
+        // Notes: N/A
         private void exportData_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -393,6 +420,10 @@ namespace FishLens_App
             }
         }
 
+        // ****************************************************************
+        // Function: SaveButton_Click
+        // Description: Handle save button click event.
+        // Notes: N/A
         private void SaveButton_Click(object sender, RoutedEventArgs e)
         {
 
