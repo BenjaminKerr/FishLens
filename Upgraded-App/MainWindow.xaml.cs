@@ -21,6 +21,7 @@ using Microsoft.Extensions.Logging;
 using FishLens_App.Interfaces;
 using FishLens_App.Services;
 using System.Threading.Tasks;
+using DocumentFormat.OpenXml.Bibliography;
 
 namespace FishLens_App
 {
@@ -30,6 +31,7 @@ namespace FishLens_App
         private readonly IFileSystemManager _fileSystemManager;
         private readonly ILogger<MainWindow> _logger;
         AppConfiguration config = new AppConfiguration();
+        private CheckBoxToggle _checkBoxes;
 
         //**************************************************
         // Function: Constructor
@@ -39,7 +41,11 @@ namespace FishLens_App
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _pathResolver = pathresolver ?? throw new ArgumentNullException(nameof(pathresolver));
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
+            
             InitializeComponent();
+
+            _checkBoxes = (Application.Current as App).CheckBoxes;
+
         }
 
         // **************************************************
@@ -232,9 +238,9 @@ namespace FishLens_App
             start.FileName = "python";
             string sampleDataPath = System.IO.Path.Combine(GetProjectRoot(), "sample_data");   //FishLens/sample_data
             start.Arguments = $"\"{yoloScriptDirectory}\" \"{sampleDataPath}\""; //argv[1] = sample_data
-            start.RedirectStandardOutput = true; //Comment out to supress Python output
-            start.RedirectStandardError = true; //Comment out to supress Python errors
-
+            start.RedirectStandardError = _checkBoxes.ErrorBox;
+            start.RedirectStandardOutput = _checkBoxes.OutputBox;
+           
             // Run Script
             start.UseShellExecute = false;
 
@@ -247,8 +253,8 @@ namespace FishLens_App
                 {
                     using (Process process = Process.Start(start))
                     {
-                        string output = process.StandardOutput.ReadToEnd(); //Error handling
-                        string error = process.StandardError.ReadToEnd();   //Error handling
+                        string output = _checkBoxes.OutputBox ? process.StandardOutput.ReadToEnd() : "";
+                        string error = _checkBoxes.ErrorBox ? process.StandardError.ReadToEnd() : "";
                         process.WaitForExit();
 
                         Dispatcher.Invoke(() => progressDialog.Close());

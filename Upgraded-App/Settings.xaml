@@ -98,7 +98,7 @@
                 <StackPanel>
                     <!-- Hide Errors -->
                     <CheckBox x:Name="hideErrors"
-                                  Content="Hide Error Messages"
+                                  Content="Redirect Error Messages"
                                   FontSize="14"
                                   Foreground="#0D3640"
                                   Margin="0,0,0,15"
@@ -107,7 +107,7 @@
 
                     <!-- Hide Output -->
                     <CheckBox x:Name="hideOutput"
-                                  Content="Hide Output Messages"
+                                  Content="Redirect Output Messages"
                                   FontSize="14"
                                   Foreground="#0D3640"
                                   Margin="0,0,0,15"

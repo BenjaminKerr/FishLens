@@ -24,6 +24,7 @@ namespace FishLens_App
         private readonly IProjectPathResolver _pathResolver;
         private readonly IFileSystemManager _fileSystemManager;
         private readonly ILogger<MainWindow> _logger;
+        private CheckBoxToggle _checkBoxes;
         AppConfiguration config = new AppConfiguration();
 
         public Settings(IProjectPathResolver pathresolver, IFileSystemManager fileSystemManager, ILogger<MainWindow> logger)
@@ -32,6 +33,7 @@ namespace FishLens_App
             _pathResolver = pathresolver ?? throw new ArgumentNullException(nameof(pathresolver));
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
             InitializeComponent();
+            _checkBoxes = (Application.Current as App).CheckBoxes;
         }
 
         private void ConfidenceThreshold_ValueChanged(object sender, RoutedEventArgs e)
@@ -51,12 +53,12 @@ namespace FishLens_App
 
         private void ToggleErrorMessages(object sender, RoutedEventArgs e)
         {
-
+            _checkBoxes.ErrorBox = hideErrors.IsChecked ?? false;
         }
 
         private void ToggleOutputMessages(object sender, RoutedEventArgs e)
         {
-
+            _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
         }
 
     }
