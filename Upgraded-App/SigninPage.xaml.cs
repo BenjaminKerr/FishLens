@@ -27,11 +27,21 @@ namespace FishLens_App
     public partial class SigninPage : Window
     {
     
+        // ****************************************************************
+        // Function: SigninPage
+        // Description: Initialize the signin page window.
+        // Notes: N/A
         public SigninPage()
         {
             InitializeComponent();
         }
 
+        // ****************************************************************
+        // Function: Signin
+        // Description: Validate username and password credentials for signin
+        //     authorization.
+        // Notes: Currently uses temporary logic that only checks if fields
+        //     contain text, not actual database validation.
         public bool Signin(string username, string password)
         {
             bool SigninSuccessful = true;
@@ -44,6 +54,11 @@ namespace FishLens_App
             return SigninSuccessful;
         }
 
+        // ****************************************************************
+        // Function: SigninButtonClick
+        // Description: Handle signin button click, validate credentials, and
+        //     navigate to main window on success or display error message.
+        // Notes: N/A
         public void SigninButtonClick(object sender, RoutedEventArgs e)
         {
             bool Status;
