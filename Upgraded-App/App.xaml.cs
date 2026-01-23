@@ -13,5 +13,11 @@ namespace FishLens_App
     /// </summary>
     public partial class App : Application
     {
+        public CheckBoxToggle CheckBoxes { get; private set; }
+        protected override void OnStartup(StartupEventArgs e)
+        {
+            base.OnStartup(e);
+            CheckBoxes = new CheckBoxToggle();
+        }
     }
 }
