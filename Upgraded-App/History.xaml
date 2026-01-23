@@ -15,12 +15,12 @@
                 Background="#0D3640" 
                 Padding="30,25">
             <StackPanel>
-                <TextBlock Text="Analysis History" 
+                <TextBlock Text="Reports &amp; Analytics" 
                            FontSize="32" 
                            FontWeight="SemiBold"
                            Foreground="White"
                            Margin="0,0,0,5"/>
-                <TextBlock Text="Review and edit your fish detection records" 
+                <TextBlock Text="Filter, analyze, and export your detection data" 
                            FontSize="14" 
                            Foreground="#B0C4CB"
                            FontWeight="Normal"/>
@@ -29,29 +29,236 @@
 
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="380"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <!-- History Content -->
-            <ScrollViewer Grid.Column="0" 
-                          VerticalScrollBarVisibility="Auto"
-                          Padding="30,20,30,30">
-                <StackPanel x:Name="historyList" 
-                            MaxWidth="900" 
-                            HorizontalAlignment="Stretch">
-                    <!-- History items will be added programmatically -->
-                </StackPanel>
-            </ScrollViewer>
+            <!-- Filters & Controls Panel -->
+            <Border Grid.Column="0"
+                    Background="White"
+                    BorderBrush="#E1E8ED"
+                    BorderThickness="0,0,1,0"
+                    Padding="30,20">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <!-- Filters Section -->
+                        <TextBlock Text="🔍 Filters" 
+                                   FontSize="18" 
+                                   FontWeight="SemiBold"
+                                   Foreground="#0D3640"
+                                   Margin="0,0,0,15"/>
 
-            <!-- Video Player / Report Section -->
+                        <!-- Date Range Filter with Button -->
+                        <Grid Margin="0,0,0,8">
+                            <TextBlock Text="Date Range" 
+                                       FontSize="13" 
+                                       FontWeight="SemiBold"
+                                       Foreground="#14171A"
+                                       HorizontalAlignment="Left"
+                                       VerticalAlignment="Center"/>
+
+                            <Button Content="Select Entire Date Range" 
+                                    Click="AllDatesClick"
+                                    Background="White"
+                                    Foreground="#0D3640"
+                                    BorderBrush="#C7D8DD"
+                                    FontSize="13"
+                                    FontWeight="SemiBold"
+                                    Padding="10,6"
+                                    BorderThickness="1"
+                                    Cursor="Hand"
+                                    HorizontalAlignment="Right">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            CornerRadius="6"
+                                                            Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="Center"
+                                                                          VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#F5F8FA"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,15">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <DatePicker x:Name="startDatePicker"
+                                        Grid.Column="0"
+                                        Background="#F5F8FA"
+                                        BorderBrush="#C7D8DD"
+                                        Padding="10,8"
+                                        FontSize="12"/>
+
+                            <TextBlock Grid.Column="1" 
+                                       Text="—" 
+                                       VerticalAlignment="Center" 
+                                       HorizontalAlignment="Center"
+                                       Foreground="#8BA5AE"/>
+
+                            <DatePicker x:Name="endDatePicker"
+                                        Grid.Column="2"
+                                        Background="#F5F8FA"
+                                        BorderBrush="#C7D8DD"
+                                        Padding="10,8"
+                                        FontSize="12"/>
+                        </Grid>
+
+                        <!-- Species Filter -->
+                        <TextBlock Text="Species" 
+                                   FontSize="13" 
+                                   FontWeight="SemiBold"
+                                   Foreground="#14171A"
+                                   Margin="0,0,0,8"/>
+
+                        <ComboBox x:Name="speciesFilter"
+                                  Background="#F5F8FA"
+                                  BorderBrush="#C7D8DD"
+                                  Padding="12,8"
+                                  FontSize="13"
+                                  Margin="0,0,0,15"
+                                  SelectedIndex="0">
+                            <ComboBoxItem Content="All Species"/>
+                            <ComboBoxItem Content="Trout"/>
+                            <ComboBoxItem Content="Salmon"/>
+                            <ComboBoxItem Content="Other"/>
+                        </ComboBox>
+
+                        <!-- Direction Filter -->
+                        <TextBlock Text="Direction" 
+                                   FontSize="13" 
+                                   FontWeight="SemiBold"
+                                   Foreground="#14171A"
+                                   Margin="0,0,0,8"/>
+
+                        <ComboBox x:Name="directionFilter"
+                                  Background="#F5F8FA"
+                                  BorderBrush="#C7D8DD"
+                                  Padding="12,8"
+                                  FontSize="13"
+                                  Margin="0,0,0,15"
+                                  SelectedIndex="0">
+                            <ComboBoxItem Content="All Directions"/>
+                            <ComboBoxItem Content="Upstream"/>
+                            <ComboBoxItem Content="Downstream"/>
+                        </ComboBox>
+
+                        <!-- Camera/Video Filter -->
+                        <TextBlock Text="Location" 
+                                   FontSize="13" 
+                                   FontWeight="SemiBold"
+                                   Foreground="#14171A"
+                                   Margin="0,0,0,8"/>
+
+                        <ComboBox x:Name="cameraFilter"
+                                  Background="#F5F8FA"
+                                  BorderBrush="#C7D8DD"
+                                  Padding="12,8"
+                                  FontSize="13"
+                                  Margin="0,0,0,20"
+                                  SelectedIndex="0">
+                            <ComboBoxItem Content="All Locations"/>
+                            <ComboBoxItem Content="Keno Dam"/>
+                            <ComboBoxItem Content="Link River Dam"/>
+                            <ComboBoxItem Content="Spencer Creek"/>
+                        </ComboBox>
+
+                        <!-- Filter Action Buttons -->
+                        <Button Content="Apply Filters" 
+                                Click="ApplyFiltersClick"
+                                Background="#0D3640"
+                                Foreground="White"
+                                FontSize="13"
+                                FontWeight="SemiBold"
+                                Padding="0,10"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                Margin="0,0,0,10">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}"
+                                                        CornerRadius="6"
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="#165666"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+
+                        <Button Content="Clear Filters" 
+                                Click="ClearFiltersClick"
+                                Background="White"
+                                Foreground="#0D3640"
+                                BorderBrush="#C7D8DD"
+                                BorderThickness="1"
+                                FontSize="13"
+                                FontWeight="SemiBold"
+                                Padding="0,10"
+                                Cursor="Hand"
+                                Margin="0,0,0,25">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}"
+                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                        CornerRadius="6"
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="#F5F8FA"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Report Display Panel -->
             <Border Grid.Column="1" 
-                    Margin="0,20,30,30" 
+                    Margin="30,20,30,30" 
                     Background="White" 
                     CornerRadius="12"
                     BorderThickness="1"
                     BorderBrush="#C7D8DD"
-                    Width="450"
                     VerticalAlignment="Stretch">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.15"/>
@@ -64,40 +271,59 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Header -->
+                    <!-- Report Header -->
                     <Border Grid.Row="0" 
                             Background="#F5F8FA" 
                             Padding="20,15"
                             CornerRadius="12,12,0,0">
-                        <TextBlock x:Name="viewTitle"
-                                   Text="Video Preview" 
-                                   FontSize="16" 
-                                   FontWeight="SemiBold"
-                                   Foreground="#0D3640"/>
+                        <Grid>
+                            <TextBlock x:Name="viewTitle"
+                                       Text="Analysis Report" 
+                                       FontSize="16" 
+                                       FontWeight="SemiBold"
+                                       Foreground="#0D3640"
+                                       VerticalAlignment="Center"/>
+
+                            <StackPanel Orientation="Horizontal" 
+                                        HorizontalAlignment="Right">
+                                <ComboBox x:Name="reportTypeCombo"
+                                          FontSize="12"
+                                          Padding="10,5"
+                                          Background="White"
+                                          BorderBrush="#C7D8DD"
+                                          SelectedIndex="0"
+                                          SelectionChanged="ReportType_SelectionChanged">
+                                    <ComboBoxItem Content="Standard Report"/>
+                                    <ComboBoxItem Content="Detailed Analysis"/>
+                                    <ComboBoxItem Content="Summary Only"/>
+                                    <ComboBoxItem Content="Data Table View"/>
+                                </ComboBox>
+                            </StackPanel>
+                        </Grid>
                     </Border>
 
-                    <!-- Placeholder when no video/report selected -->
+                    <!-- Placeholder when no report generated -->
                     <StackPanel x:Name="placeholderPanel"
                                 Grid.Row="1"
                                 HorizontalAlignment="Center" 
                                 VerticalAlignment="Center">
-                        <TextBlock Text="🎬" 
+                        <TextBlock Text="📊" 
                                    FontSize="80" 
                                    HorizontalAlignment="Center"
                                    Opacity="0.3"/>
-                        <TextBlock Text="Select a video to play" 
+                        <TextBlock Text="Generate a report" 
                                    FontSize="16" 
                                    Foreground="#8BA5AE"
                                    HorizontalAlignment="Center"
                                    Margin="0,20,0,0"/>
-                        <TextBlock Text="or generate a report" 
+                        <TextBlock Text="Configure your filters and click the button below" 
                                    FontSize="14" 
                                    Foreground="#8BA5AE"
                                    HorizontalAlignment="Center"
                                    Margin="0,5,0,0"/>
                     </StackPanel>
 
-                    <!-- Video Player -->
+                    <!-- Video Player (kept for compatibility) -->
                     <MediaElement x:Name="videoPlayer"
                                   Grid.Row="1"
                                   LoadedBehavior="Manual"
@@ -110,13 +336,24 @@
                                   Grid.Row="1"
                                   VerticalScrollBarVisibility="Auto"
                                   Visibility="Collapsed"
-                                  Padding="20">
+                                  Padding="30,20">
                         <StackPanel x:Name="reportPanel">
                             <!-- Report content will be added dynamically -->
                         </StackPanel>
                     </ScrollViewer>
 
-                    <!-- Video Controls -->
+                    <!-- History List (for reference) -->
+                    <ScrollViewer x:Name="historyScrollViewer"
+                                  Grid.Row="1"
+                                  VerticalScrollBarVisibility="Auto"
+                                  Visibility="Collapsed"
+                                  Padding="20">
+                        <StackPanel x:Name="historyList">
+                            <!-- History items would go here if needed -->
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- Video Controls (kept for compatibility) -->
                     <Border x:Name="videoControls"
                             Grid.Row="2" 
                             Background="#F5F8FA" 
@@ -125,14 +362,26 @@
                             Visibility="Collapsed">
                         <StackPanel Orientation="Horizontal" 
                                     HorizontalAlignment="Center">
-                            <Button x:Name="playButton"
-                                    Content="▶ Play" 
-                                    Click="PlayButton_Click"
+                            <!-- Video control buttons would go here -->
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Report Controls -->
+                    <Border x:Name="reportControls"
+                            Grid.Row="2" 
+                            Background="#F5F8FA" 
+                            Padding="20,15"
+                            CornerRadius="0,0,12,12"
+                            Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal" 
+                                    HorizontalAlignment="Center">
+                            <Button Content="💾 Export Report" 
+                                    Click="ExportReportClick"
                                     Background="#0D3640"
                                     Foreground="White"
                                     FontSize="13"
                                     FontWeight="SemiBold"
-                                    Padding="15,8"
+                                    Padding="20,10"
                                     BorderThickness="0"
                                     Cursor="Hand"
                                     Margin="0,0,10,0">
@@ -158,52 +407,16 @@
                                     </Style>
                                 </Button.Style>
                             </Button>
-                            <Button x:Name="pauseButton"
-                                    Content="⏸ Pause" 
-                                    Click="PauseButton_Click"
+
+                            <Button Content="🖨️ Print Report" 
+                                    Click="PrintReportClick"
                                     Background="White"
                                     Foreground="#0D3640"
                                     BorderBrush="#C7D8DD"
                                     BorderThickness="1"
                                     FontSize="13"
                                     FontWeight="SemiBold"
-                                    Padding="15,8"
-                                    Cursor="Hand"
-                                    Margin="0,0,10,0">
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border Background="{TemplateBinding Background}"
-                                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="6"
-                                                            Padding="{TemplateBinding Padding}">
-                                                        <ContentPresenter HorizontalAlignment="Center"
-                                                                          VerticalAlignment="Center"/>
-                                                    </Border>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                        <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="#F5F8FA"/>
-                                            </Trigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
-                            <Button x:Name="stopButton"
-                                    Content="⏹ Stop" 
-                                    Click="StopButton_Click"
-                                    Background="White"
-                                    Foreground="#0D3640"
-                                    BorderBrush="#C7D8DD"
-                                    BorderThickness="1"
-                                    FontSize="13"
-                                    FontWeight="SemiBold"
-                                    Padding="15,8"
+                                    Padding="20,10"
                                     Cursor="Hand">
                                 <Button.Style>
                                     <Style TargetType="Button">
@@ -231,47 +444,6 @@
                             </Button>
                         </StackPanel>
                     </Border>
-
-                    <!-- Report Controls -->
-                    <Border x:Name="reportControls"
-                            Grid.Row="2" 
-                            Background="#F5F8FA" 
-                            Padding="20,15"
-                            CornerRadius="0,0,12,12"
-                            Visibility="Collapsed">
-                        <Button Content="💾 Export Report" 
-                                Click="ExportReportClick"
-                                Background="#0D3640"
-                                Foreground="White"
-                                FontSize="13"
-                                FontWeight="SemiBold"
-                                Padding="15,8"
-                                BorderThickness="0"
-                                Cursor="Hand"
-                                HorizontalAlignment="Center">
-                            <Button.Style>
-                                <Style TargetType="Button">
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border Background="{TemplateBinding Background}"
-                                                        CornerRadius="6"
-                                                        Padding="{TemplateBinding Padding}">
-                                                    <ContentPresenter HorizontalAlignment="Center"
-                                                                      VerticalAlignment="Center"/>
-                                                </Border>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                    <Style.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="Background" Value="#165666"/>
-                                        </Trigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                        </Button>
-                    </Border>
                 </Grid>
             </Border>
         </Grid>
@@ -282,75 +454,42 @@
                 BorderBrush="#E1E8ED" 
                 BorderThickness="0,1,0,0"
                 Padding="30,20">
-            <StackPanel Orientation="Horizontal" 
-                        HorizontalAlignment="Right">
-                <Button Content="📊 Generate Report" 
-                        Click="GenerateReportClick"
-                        Background="White"
-                        Foreground="#0D3640"
-                        BorderBrush="#0D3640"
-                        BorderThickness="2"
-                        FontSize="14"
-                        FontWeight="SemiBold"
-                        Padding="20,10"
-                        Cursor="Hand"
-                        Margin="0,0,15,0">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border Background="{TemplateBinding Background}"
-                                                BorderBrush="{TemplateBinding BorderBrush}"
-                                                BorderThickness="{TemplateBinding BorderThickness}"
-                                                CornerRadius="6"
-                                                Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter HorizontalAlignment="Center"
-                                                              VerticalAlignment="Center"/>
-                                        </Border>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="#F5F8FA"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
-                <Button Content="💾 Save Changes" 
-                        Click="SaveButtonClick"
-                        Background="#0D3640"
-                        Foreground="White"
-                        FontSize="14"
-                        FontWeight="SemiBold"
-                        Padding="20,10"
-                        BorderThickness="0"
-                        Cursor="Hand">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border Background="{TemplateBinding Background}"
-                                                CornerRadius="6"
-                                                Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter HorizontalAlignment="Center"
-                                                              VerticalAlignment="Center"/>
-                                        </Border>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="#165666"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
-            </StackPanel>
+            <Grid>
+                <StackPanel Orientation="Horizontal" 
+                            HorizontalAlignment="Right">
+                    <Button Content="📊 Generate Report" 
+                            Click="GenerateReportClick"
+                            Background="#0D3640"
+                            Foreground="White"
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Padding="25,12"
+                            BorderThickness="0"
+                            Cursor="Hand">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="6"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#165666"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
+            </Grid>
         </Border>
     </Grid>
 </Page>

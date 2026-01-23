@@ -7,6 +7,9 @@
 // ***********************************
 // **************************************************
 
+using FishLens_App.Interfaces;
+using FishLens_App.Services;
+using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
@@ -14,13 +17,11 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
-using Microsoft.Extensions.Logging;
-using FishLens_App.Interfaces;
-using FishLens_App.Services;
-using System.Threading.Tasks;
 
 namespace FishLens_App
 {
@@ -576,17 +577,88 @@ namespace FishLens_App
         private Button CreateSingleVideoButton(FileInfo videoFile, Video videoData)
         {
             bool isLowConfidence = videoData.avgConfidence < config.ConfidenceThreshold;
-            return new Button
+
+            var button = new Button
             {
                 Content = videoFile.Name,
-                Background = isLowConfidence
-                    ? new SolidColorBrush(Colors.Red)
-                    : new SolidColorBrush(Colors.WhiteSmoke),
                 Margin = new Thickness(5),
-                Padding = new Thickness(5),
-                Height = 40,
+                Padding = new Thickness(12, 8, 12, 8),
+                Height = 45,
                 Tag = videoFile.FullName,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                FontSize = 13,
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                Style = CreateButtonStyle(isLowConfidence)
             };
+
+            return button;
+        }
+
+        // **************************************************
+        // Function: Creates Button Style
+        // Description: Creates a styled button with hover effects and proper colors
+        private Style CreateButtonStyle(bool isLowConfidence)
+        {
+            var style = new Style(typeof(Button));
+
+            // Default appearance
+            style.Setters.Add(new Setter(Button.BackgroundProperty,
+                isLowConfidence
+                    ? new SolidColorBrush(Color.FromRgb(254, 242, 242))  // Light red background
+                    : new SolidColorBrush(Color.FromRgb(249, 250, 251)))); // Light gray background
+
+            style.Setters.Add(new Setter(Button.ForegroundProperty,
+                isLowConfidence
+                    ? new SolidColorBrush(Color.FromRgb(185, 28, 28))  // Dark red text
+                    : new SolidColorBrush(Color.FromRgb(55, 65, 81))));  // Dark gray text
+
+            style.Setters.Add(new Setter(Button.BorderBrushProperty,
+                new SolidColorBrush(Color.FromRgb(229, 231, 235))));
+
+            // Template for rounded corners and hover effect
+            var template = new ControlTemplate(typeof(Button));
+            var border = new FrameworkElementFactory(typeof(Border));
+            border.Name = "border";
+            border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
+            border.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
+            border.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
+            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(6));
+
+            var contentPresenter = new FrameworkElementFactory(typeof(ContentPresenter));
+            contentPresenter.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Left);
+            contentPresenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+            contentPresenter.SetValue(ContentPresenter.MarginProperty, new Thickness(8, 0, 8, 0));
+
+            border.AppendChild(contentPresenter);
+            template.VisualTree = border;
+
+            // Hover trigger
+            var trigger = new Trigger { Property = Button.IsMouseOverProperty, Value = true };
+            trigger.Setters.Add(new Setter(Button.BackgroundProperty,
+                isLowConfidence
+                    ? new SolidColorBrush(Color.FromRgb(239, 68, 68))  // Bright red on hover
+                    : new SolidColorBrush(Color.FromRgb(243, 244, 246)), "border"));  // Lighter gray on hover
+
+            trigger.Setters.Add(new Setter(Button.ForegroundProperty,
+                isLowConfidence
+                    ? new SolidColorBrush(Colors.White)  // White text on hover for red
+                    : new SolidColorBrush(Color.FromRgb(17, 24, 39))));  // Darker text on hover
+
+            template.Triggers.Add(trigger);
+
+            // Pressed trigger
+            var pressedTrigger = new Trigger { Property = Button.IsPressedProperty, Value = true };
+            pressedTrigger.Setters.Add(new Setter(Button.BackgroundProperty,
+                isLowConfidence
+                    ? new SolidColorBrush(Color.FromRgb(220, 38, 38))  // Darker red when pressed
+                    : new SolidColorBrush(Color.FromRgb(229, 231, 235)), "border"));  // Medium gray when pressed
+
+            template.Triggers.Add(pressedTrigger);
+
+            style.Setters.Add(new Setter(Button.TemplateProperty, template));
+
+            return style;
         }
         // ******************************************************************************************************************************************
     }

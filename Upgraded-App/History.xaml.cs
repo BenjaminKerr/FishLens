@@ -12,15 +12,19 @@ using System.Collections.Generic;
 
 namespace FishLens_App
 {
-    /// <summary>
-    /// Interaction logic for History.xaml
-    /// </summary>
     public partial class History : Page
     {
         private readonly IProjectPathResolver _pathResolver;
         private readonly IFileSystemManager _fileSystemManager;
         private readonly ILogger<MainWindow> _logger;
         private string _currentReportText;
+
+        // Filter state
+        private DateTime? _filterStartDate;
+        private DateTime? _filterEndDate;
+        private string _filterSpecies = "All";
+        private string _filterDirection = "All";
+        private double _filterMinConfidence = 0.0;
 
         public History(IProjectPathResolver pathResolver, IFileSystemManager fileSystemManager, ILogger<MainWindow> logger)
         {
@@ -29,7 +33,6 @@ namespace FishLens_App
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
 
             InitializeComponent();
-            CreateHistoryList();
         }
 
         public void SaveButtonClick(object sender, RoutedEventArgs e)
@@ -41,7 +44,7 @@ namespace FishLens_App
         }
 
         // **************************************************
-        // Function: Generate Report Click Handler
+        // Function: Generate Report Click Handler with Filtering
         public void GenerateReportClick(object sender, RoutedEventArgs e)
         {
             try
@@ -68,8 +71,20 @@ namespace FishLens_App
                     return;
                 }
 
-                // Generate and display report in the preview pane
-                DisplayReport(allLines);
+                // Apply filters
+                var filteredLines = ApplyFilters(allLines);
+
+                if (filteredLines.Length == 0)
+                {
+                    MessageBox.Show("No data matches the current filters.",
+                                    "No Matching Data",
+                                    MessageBoxButton.OK,
+                                    MessageBoxImage.Information);
+                    return;
+                }
+
+                // Generate and display report
+                DisplayReport(filteredLines);
             }
             catch (Exception ex)
             {
@@ -79,6 +94,40 @@ namespace FishLens_App
                                 MessageBoxButton.OK,
                                 MessageBoxImage.Error);
             }
+        }
+
+        // **************************************************
+        // Function: Apply Filters to CSV Data
+        private string[] ApplyFilters(string[] csvLines)
+        {
+            var filtered = new List<string>();
+
+            foreach (string line in csvLines)
+            {
+                string[] columns = line.Split(',');
+                if (columns.Length < 8) continue;
+
+                // Filter by species
+                if (_filterSpecies != "All" && !columns[2].Equals(_filterSpecies, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                // Filter by direction
+                if (_filterDirection != "All" && !columns[7].Contains(_filterDirection, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                // Filter by confidence (assuming column 3 contains confidence)
+                if (columns.Length > 3 && double.TryParse(columns[3], out double confidence))
+                {
+                    if (confidence < _filterMinConfidence)
+                        continue;
+                }
+
+                // Add more date filtering logic here if you have timestamp data
+
+                filtered.Add(line);
+            }
+
+            return filtered.ToArray();
         }
 
         // **************************************************
@@ -130,7 +179,7 @@ namespace FishLens_App
         }
 
         // **************************************************
-        // Function: Display Report with Graphical Elements
+        // Function: Display Enhanced Report with Analytics
         private void DisplayReport(string[] csvLines)
         {
             try
@@ -146,81 +195,31 @@ namespace FishLens_App
                 // Clear previous report
                 reportPanel.Children.Clear();
 
-                // Calculate statistics
-                int totalDetections = csvLines.Length;
-                int fishCount = 0;
-                int birdCount = 0;
-                int upstreamCount = 0;
-                int downstreamCount = 0;
-                Dictionary<string, int> videoDetections = new Dictionary<string, int>();
-
-                foreach (string line in csvLines)
-                {
-                    string[] columns = line.Split(',');
-
-                    if (columns.Length >= 8)
-                    {
-                        // Count by class
-                        if (columns[2].ToLower() == "fish")
-                            fishCount++;
-                        else if (columns[2].ToLower() == "bird")
-                            birdCount++;
-
-                        // Count by direction
-                        if (columns[7].ToLower().Contains("upstream"))
-                            upstreamCount++;
-                        else if (columns[7].ToLower().Contains("downstream"))
-                            downstreamCount++;
-
-                        // Count by video
-                        string videoName = columns[0];
-                        if (videoDetections.ContainsKey(videoName))
-                            videoDetections[videoName]++;
-                        else
-                            videoDetections[videoName] = 1;
-                    }
-                }
+                // Parse and calculate comprehensive statistics
+                var stats = CalculateStatistics(csvLines);
 
                 // Store report text for export
-                StringBuilder reportText = new StringBuilder();
-                reportText.AppendLine("═══════════════════════════════════════════════════════");
-                reportText.AppendLine("              FISHLENS ANALYSIS REPORT");
-                reportText.AppendLine("═══════════════════════════════════════════════════════");
-                reportText.AppendLine($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-                reportText.AppendLine($"Total Detections: {totalDetections}");
-                reportText.AppendLine($"Fish: {fishCount}, Bird: {birdCount}");
-                reportText.AppendLine($"Upstream: {upstreamCount}, Downstream: {downstreamCount}");
-                _currentReportText = reportText.ToString();
+                _currentReportText = GenerateReportText(stats);
 
-                // Header Section
-                AddReportHeader(totalDetections);
-
-                // Summary Statistics Cards
-                AddSummaryCards(totalDetections, fishCount, birdCount, upstreamCount, downstreamCount);
-
-                // Detection by Class Chart
-                AddSectionTitle("Detection by Class");
-                AddBarChart("Fish", fishCount, totalDetections, "#1E88E5");
-                AddBarChart("Bird", birdCount, totalDetections, "#43A047");
-
+                // Build visual report
+                AddReportHeader(stats.TotalDetections);
+                AddDashboardOverview(stats);
                 AddSpacer(20);
-
-                // Movement Direction Chart
-                AddSectionTitle("Movement Direction");
-                AddBarChart("Upstream", upstreamCount, totalDetections, "#0D3640");
-                AddBarChart("Downstream", downstreamCount, totalDetections, "#00ACC1");
-
+                AddSectionTitle("📊 Detection Distribution");
+                AddDetectionCharts(stats);
                 AddSpacer(20);
+                AddSectionTitle("🎯 Movement Patterns");
+                AddMovementCharts(stats);
+                AddSpacer(20);
+                AddSectionTitle("📹 Video Analysis");
+                AddVideoBreakdown(stats);
 
-                // Detections per Video
-                if (videoDetections.Count > 0)
+                // Add time-based analysis if timestamp data available
+                if (stats.DetectionsByHour.Count > 0)
                 {
-                    AddSectionTitle("Detections per Video");
-                    int maxDetections = videoDetections.Values.Max();
-                    foreach (var kvp in videoDetections.OrderByDescending(x => x.Value))
-                    {
-                        AddBarChart(kvp.Key, kvp.Value, maxDetections, "#7E57C2", true);
-                    }
+                    AddSpacer(20);
+                    AddSectionTitle("⏰ Activity by Time of Day");
+                    AddTimeDistribution(stats);
                 }
             }
             catch (Exception ex)
@@ -233,19 +232,118 @@ namespace FishLens_App
             }
         }
 
-        // **************************************************
-        // UI Helper Functions for Report Generation
 
+        // **************************************************
+        // Function: Calculate Comprehensive Statistics
+        private ReportStatistics CalculateStatistics(string[] csvLines)
+        {
+            var stats = new ReportStatistics
+            {
+                VideoDetections = new Dictionary<string, int>(),
+                SpeciesBreakdown = new Dictionary<string, int>(),
+                DetectionsByHour = new Dictionary<int, int>()
+            };
+
+            stats.TotalDetections = csvLines.Length;
+            double totalConfidence = 0;
+
+            foreach (string line in csvLines)
+            {
+                string[] columns = line.Split(',');
+                if (columns.Length < 8) continue;
+
+                // Count by species
+                string species = columns[2];
+                if (species.Equals("fish", StringComparison.OrdinalIgnoreCase))
+                    stats.FishCount++;
+                else if (species.Equals("bird", StringComparison.OrdinalIgnoreCase))
+                    stats.BirdCount++;
+
+                // Species breakdown
+                if (stats.SpeciesBreakdown.ContainsKey(species))
+                    stats.SpeciesBreakdown[species]++;
+                else
+                    stats.SpeciesBreakdown[species] = 1;
+
+                // Count by direction
+                string direction = columns[7];
+                if (direction.Contains("upstream", StringComparison.OrdinalIgnoreCase))
+                    stats.UpstreamCount++;
+                else if (direction.Contains("downstream", StringComparison.OrdinalIgnoreCase))
+                    stats.DownstreamCount++;
+
+                // Count by video
+                string videoName = columns[0];
+                if (stats.VideoDetections.ContainsKey(videoName))
+                    stats.VideoDetections[videoName]++;
+                else
+                    stats.VideoDetections[videoName] = 1;
+
+                // Confidence metrics
+                if (columns.Length > 3 && double.TryParse(columns[3], out double confidence))
+                {
+                    totalConfidence += confidence;
+                    if (confidence >= 0.8)
+                        stats.HighConfidenceCount++;
+                }
+
+                // Time-based analysis (if you have timestamp in column 1 or similar)
+                // This is placeholder - adjust based on your actual data format
+                // if (DateTime.TryParse(columns[1], out DateTime timestamp))
+                // {
+                //     int hour = timestamp.Hour;
+                //     if (stats.DetectionsByHour.ContainsKey(hour))
+                //         stats.DetectionsByHour[hour]++;
+                //     else
+                //         stats.DetectionsByHour[hour] = 1;
+                // }
+            }
+
+            stats.AverageConfidence = stats.TotalDetections > 0 ? totalConfidence / stats.TotalDetections : 0;
+
+            return stats;
+        }
+
+        // **************************************************
+        // Function: Generate Text Report for Export
+        private string GenerateReportText(ReportStatistics stats)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("═══════════════════════════════════════════════════════");
+            sb.AppendLine("              FISHLENS ANALYSIS REPORT");
+            sb.AppendLine("═══════════════════════════════════════════════════════");
+            sb.AppendLine($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            sb.AppendLine();
+            sb.AppendLine("SUMMARY STATISTICS");
+            sb.AppendLine($"Total Detections: {stats.TotalDetections}");
+            sb.AppendLine($"Fish: {stats.FishCount} ({(stats.FishCount * 100.0 / stats.TotalDetections):F1}%)");
+            sb.AppendLine($"Bird: {stats.BirdCount} ({(stats.BirdCount * 100.0 / stats.TotalDetections):F1}%)");
+            sb.AppendLine($"Average Confidence: {stats.AverageConfidence:F2}");
+            sb.AppendLine($"High Confidence (≥80%): {stats.HighConfidenceCount}");
+            sb.AppendLine();
+            sb.AppendLine("MOVEMENT DIRECTION");
+            sb.AppendLine($"Upstream: {stats.UpstreamCount} ({(stats.UpstreamCount * 100.0 / stats.TotalDetections):F1}%)");
+            sb.AppendLine($"Downstream: {stats.DownstreamCount} ({(stats.DownstreamCount * 100.0 / stats.TotalDetections):F1}%)");
+            sb.AppendLine();
+            sb.AppendLine("TOP VIDEOS");
+            foreach (var video in stats.VideoDetections.OrderByDescending(x => x.Value).Take(5))
+            {
+                sb.AppendLine($"  {video.Key}: {video.Value} detections");
+            }
+            sb.AppendLine("═══════════════════════════════════════════════════════");
+
+            return sb.ToString();
+        }
+
+        // **************************************************
+        // UI Component Functions
         private void AddReportHeader(int totalDetections)
         {
-            var headerPanel = new StackPanel
-            {
-                Margin = new Thickness(0, 0, 0, 20)
-            };
+            var headerPanel = new StackPanel { Margin = new Thickness(0, 0, 0, 20) };
 
             var title = new TextBlock
             {
-                Text = "📊 Analysis Summary",
+                Text = "📊 Analysis Dashboard",
                 FontSize = 24,
                 FontWeight = FontWeights.Bold,
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0D3640")),
@@ -264,30 +362,37 @@ namespace FishLens_App
             reportPanel.Children.Add(headerPanel);
         }
 
-        private void AddSummaryCards(int total, int fish, int bird, int upstream, int downstream)
+        private void AddDashboardOverview(ReportStatistics stats)
         {
-            var grid = new Grid
-            {
-                Margin = new Thickness(0, 0, 0, 25)
-            };
-
+            var grid = new Grid { Margin = new Thickness(0, 0, 0, 25) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            // Total Detections Card
-            var totalCard = CreateStatCard("Total Detections", total.ToString(), "#0D3640");
+            // Total Detections
+            var totalCard = CreateStatCard("Total Detections", stats.TotalDetections.ToString(), "#0D3640", "🎯");
             Grid.SetColumn(totalCard, 0);
             Grid.SetRow(totalCard, 0);
             Grid.SetColumnSpan(totalCard, 2);
             grid.Children.Add(totalCard);
 
+            // Average Confidence
+            var confCard = CreateStatCard("Avg Confidence", $"{stats.AverageConfidence:F1}%", "#1E88E5", "⭐");
+            Grid.SetColumn(confCard, 0);
+            Grid.SetRow(confCard, 1);
+            grid.Children.Add(confCard);
+
+            // High Confidence Count
+            var highConfCard = CreateStatCard("High Confidence", stats.HighConfidenceCount.ToString(), "#43A047", "✓");
+            Grid.SetColumn(highConfCard, 1);
+            Grid.SetRow(highConfCard, 1);
+            grid.Children.Add(highConfCard);
+
             reportPanel.Children.Add(grid);
         }
 
-        private Border CreateStatCard(string label, string value, string color)
+        private Border CreateStatCard(string label, string value, string color, string icon = "")
         {
             var card = new Border
             {
@@ -296,15 +401,26 @@ namespace FishLens_App
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(15),
-                Margin = new Thickness(0, 0, 0, 10)
+                Margin = new Thickness(0, 0, 5, 10)
             };
 
             var panel = new StackPanel();
 
+            if (!string.IsNullOrEmpty(icon))
+            {
+                var iconText = new TextBlock
+                {
+                    Text = icon,
+                    FontSize = 20,
+                    Margin = new Thickness(0, 0, 0, 5)
+                };
+                panel.Children.Add(iconText);
+            }
+
             var valueText = new TextBlock
             {
                 Text = value,
-                FontSize = 32,
+                FontSize = 28,
                 FontWeight = FontWeights.Bold,
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color))
             };
@@ -312,7 +428,7 @@ namespace FishLens_App
             var labelText = new TextBlock
             {
                 Text = label,
-                FontSize = 13,
+                FontSize = 12,
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#657786"))
             };
 
@@ -321,6 +437,41 @@ namespace FishLens_App
             card.Child = panel;
 
             return card;
+        }
+
+        private void AddDetectionCharts(ReportStatistics stats)
+        {
+            AddBarChart("Fish", stats.FishCount, stats.TotalDetections, "#1E88E5");
+            AddBarChart("Bird", stats.BirdCount, stats.TotalDetections, "#43A047");
+        }
+
+        private void AddMovementCharts(ReportStatistics stats)
+        {
+            AddBarChart("Upstream", stats.UpstreamCount, stats.TotalDetections, "#0D3640");
+            AddBarChart("Downstream", stats.DownstreamCount, stats.TotalDetections, "#00ACC1");
+        }
+
+        private void AddVideoBreakdown(ReportStatistics stats)
+        {
+            if (stats.VideoDetections.Count == 0) return;
+
+            int maxDetections = stats.VideoDetections.Values.Max();
+            foreach (var kvp in stats.VideoDetections.OrderByDescending(x => x.Value).Take(10))
+            {
+                AddBarChart(kvp.Key, kvp.Value, maxDetections, "#7E57C2", true);
+            }
+        }
+
+        private void AddTimeDistribution(ReportStatistics stats)
+        {
+            // Create a 24-hour activity chart
+            int maxHourly = stats.DetectionsByHour.Values.Max();
+            for (int hour = 0; hour < 24; hour++)
+            {
+                int count = stats.DetectionsByHour.ContainsKey(hour) ? stats.DetectionsByHour[hour] : 0;
+                string timeLabel = $"{hour:D2}:00";
+                AddBarChart(timeLabel, count, maxHourly, "#FF6F00", true);
+            }
         }
 
         private void AddSectionTitle(string title)
@@ -333,23 +484,14 @@ namespace FishLens_App
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#14171A")),
                 Margin = new Thickness(0, 10, 0, 12)
             };
-
             reportPanel.Children.Add(textBlock);
         }
 
         private void AddBarChart(string label, int value, int maxValue, string color, bool isCount = false)
         {
-            var container = new StackPanel
-            {
-                Margin = new Thickness(0, 0, 0, 12)
-            };
+            var container = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
 
-            // Label and value row
-            var labelGrid = new Grid
-            {
-                Margin = new Thickness(0, 0, 0, 6)
-            };
-
+            var labelGrid = new Grid { Margin = new Thickness(0, 0, 0, 6) };
             labelGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             labelGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
@@ -378,7 +520,6 @@ namespace FishLens_App
             labelGrid.Children.Add(labelText);
             labelGrid.Children.Add(valueText);
 
-            // Progress bar
             var barBackground = new Border
             {
                 Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E1E8ED")),
@@ -392,7 +533,7 @@ namespace FishLens_App
                 Height = 24,
                 CornerRadius = new CornerRadius(4),
                 HorizontalAlignment = HorizontalAlignment.Left,
-                Width = Math.Max(1, percentage * 3.8) // Scale to fit container (380px max for 100%)
+                Width = Math.Max(1, percentage * 3.8)
             };
 
             var grid = new Grid();
@@ -401,64 +542,14 @@ namespace FishLens_App
 
             container.Children.Add(labelGrid);
             container.Children.Add(grid);
-
             reportPanel.Children.Add(container);
         }
 
         private void AddSpacer(int height)
         {
-            var spacer = new Border
-            {
-                Height = height
-            };
-            reportPanel.Children.Add(spacer);
+            reportPanel.Children.Add(new Border { Height = height });
         }
 
-        // **************************************************
-        // Function: Creates a List of History Elements
-        private void CreateHistoryList()
-        {
-            try
-            {
-                string csvPath = _pathResolver.ResolveCsvScriptDirectory();
-
-                if (!File.Exists(csvPath))
-                {
-                    ShowEmptyState();
-                    return;
-                }
-
-                string[] allLines = File.ReadAllLines(csvPath);
-
-                if (allLines.Length == 0)
-                {
-                    ShowEmptyState();
-                    return;
-                }
-
-                foreach (string line in allLines)
-                {
-                    string[] columns = line.Split(',');
-
-                    if (columns != null && columns.Length >= 8 && historyList != null)
-                    {
-                        Border element = CreateHistoryElement(columns);
-                        historyList.Children.Add(element);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error creating history list");
-                MessageBox.Show("Unable to load history data. Please check the logs for details.",
-                                "Error Loading History",
-                                MessageBoxButton.OK,
-                                MessageBoxImage.Warning);
-            }
-        }
-
-        // **************************************************
-        // Function: Shows empty state when no data is available
         private void ShowEmptyState()
         {
             var emptyPanel = new StackPanel
@@ -468,15 +559,15 @@ namespace FishLens_App
                 Margin = new Thickness(0, 80, 0, 0)
             };
 
-            var icon = new TextBlock
+            emptyPanel.Children.Add(new TextBlock
             {
                 Text = "📊",
                 FontSize = 64,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 0, 0, 20)
-            };
+            });
 
-            var title = new TextBlock
+            emptyPanel.Children.Add(new TextBlock
             {
                 Text = "No Analysis History",
                 FontSize = 20,
@@ -484,257 +575,52 @@ namespace FishLens_App
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#14171A")),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 0, 0, 10)
-            };
+            });
 
-            var subtitle = new TextBlock
+            emptyPanel.Children.Add(new TextBlock
             {
                 Text = "Run an analysis to see your detection records here",
                 FontSize = 14,
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#657786")),
                 HorizontalAlignment = HorizontalAlignment.Center
-            };
-
-            emptyPanel.Children.Add(icon);
-            emptyPanel.Children.Add(title);
-            emptyPanel.Children.Add(subtitle);
+            });
 
             historyList.Children.Add(emptyPanel);
         }
 
-        // **************************************************
-        // Function: Creates a Single History Element
-        private Border CreateHistoryElement(string[] columns)
+        public void ConfidenceSlider_ValueChanged(object sender, RoutedPropertyChangedEventHandler<double> e)
         {
-            Grid grid = new Grid
-            {
-                Background = new SolidColorBrush(Colors.White),
-                Margin = new Thickness(0, 0, 0, 8)
-            };
 
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.3, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.5, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.8, GridUnitType.Star) });
-
-            Border nameBorder = GetName(columns[0]);
-            Grid.SetColumn(nameBorder, 0);
-            grid.Children.Add(nameBorder);
-
-            ComboBox classBox = GetClass(columns.Length > 2 ? columns[2] : "");
-            Grid.SetColumn(classBox, 1);
-            grid.Children.Add(classBox);
-
-            ComboBox directionBox = GetDirection(columns.Length > 7 ? columns[7] : "");
-            Grid.SetColumn(directionBox, 2);
-            grid.Children.Add(directionBox);
-
-            Button playBtn = GetPlayButton(columns[0]);
-            Grid.SetColumn(playBtn, 3);
-            grid.Children.Add(playBtn);
-
-            Border containerBorder = new Border
-            {
-                Background = new SolidColorBrush(Colors.White),
-                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E1E8ED")),
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(8),
-                Child = grid,
-                Padding = new Thickness(15, 12, 15, 12),
-                Margin = new Thickness(0, 0, 0, 10)
-            };
-
-            containerBorder.MouseEnter += (s, e) =>
-            {
-                containerBorder.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F5F8FA"));
-                containerBorder.BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0D3640"));
-            };
-
-            containerBorder.MouseLeave += (s, e) =>
-            {
-                containerBorder.Background = new SolidColorBrush(Colors.White);
-                containerBorder.BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E1E8ED"));
-            };
-
-            return containerBorder;
         }
 
-        private Border GetName(string name)
+        public void ApplyFiltersClick(object sender, RoutedEventArgs e)
         {
-            TextBlock textBlock = new TextBlock
-            {
-                Text = name,
-                FontWeight = FontWeights.SemiBold,
-                FontSize = 14,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#14171A")),
-                VerticalAlignment = VerticalAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis
-            };
 
-            return new Border
-            {
-                Child = textBlock,
-                Padding = new Thickness(0, 0, 10, 0)
-            };
         }
 
-        private ComboBox GetClass(string className)
+        public void ClearFiltersClick(object sender, RoutedEventArgs e)
         {
-            var comboBox = new ComboBox
-            {
-                SelectedIndex = className.ToLower() == "fish" ? 0 : 1,
-                Margin = new Thickness(5, 0, 5, 0),
-                Padding = new Thickness(12, 8, 12, 8),
-                FontSize = 13,
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F5F8FA")),
-                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#C7D8DD")),
-                BorderThickness = new Thickness(1),
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                MinWidth = 110
-            };
 
-            comboBox.Items.Add(new ComboBoxItem { Content = "Fish", FontSize = 13 });
-            comboBox.Items.Add(new ComboBoxItem { Content = "Bird", FontSize = 13 });
-
-            return comboBox;
         }
 
-        private ComboBox GetDirection(string direction)
+        public void RefreshReportClick(object sender, RoutedEventArgs e)
         {
-            var comboBox = new ComboBox
-            {
-                SelectedIndex = direction.ToLower().Contains("upstream") ? 0 : 1,
-                Margin = new Thickness(5, 0, 5, 0),
-                Padding = new Thickness(12, 8, 12, 8),
-                FontSize = 13,
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F5F8FA")),
-                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#C7D8DD")),
-                BorderThickness = new Thickness(1),
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                MinWidth = 120
-            };
 
-            comboBox.Items.Add(new ComboBoxItem { Content = "Upstream", FontSize = 13 });
-            comboBox.Items.Add(new ComboBoxItem { Content = "Downstream", FontSize = 13 });
-
-            return comboBox;
         }
 
-        private Button GetPlayButton(string videoFileName)
+        public void ReportType_SelectionChanged(object sender, RoutedEventArgs e)
         {
-            var button = new Button
-            {
-                Content = "▶",
-                FontSize = 16,
-                FontWeight = FontWeights.Bold,
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0D3640")),
-                Foreground = new SolidColorBrush(Colors.White),
-                BorderThickness = new Thickness(0),
-                Cursor = System.Windows.Input.Cursors.Hand,
-                Padding = new Thickness(12),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(5, 0, 0, 0),
-                ToolTip = "Play video"
-            };
 
-            string videoPath = _pathResolver.ResolvePath(videoFileName);
-            button.Tag = videoPath;
-
-            button.Click += VideoButtonClick;
-
-            var style = new Style(typeof(Button));
-            var template = new ControlTemplate(typeof(Button));
-
-            var border = new FrameworkElementFactory(typeof(Border));
-            border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
-            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(6));
-            border.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Button.PaddingProperty));
-
-            var content = new FrameworkElementFactory(typeof(ContentPresenter));
-            content.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
-            content.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
-
-            border.AppendChild(content);
-            template.VisualTree = border;
-
-            style.Setters.Add(new Setter(Button.TemplateProperty, template));
-
-            var hoverTrigger = new Trigger { Property = Button.IsMouseOverProperty, Value = true };
-            hoverTrigger.Setters.Add(new Setter(Button.BackgroundProperty,
-                new SolidColorBrush((Color)ColorConverter.ConvertFromString("#165666"))));
-            style.Triggers.Add(hoverTrigger);
-
-            button.Style = style;
-
-            return button;
         }
 
-        // **************************************************
-        // Function: Video Button Click Handler
-        private void VideoButtonClick(object sender, RoutedEventArgs e)
+        public void PrintReportClick(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                Button clickedButton = (Button)sender;
-                string videoPath = clickedButton.Tag.ToString();
 
-                if (!File.Exists(videoPath))
-                {
-                    MessageBox.Show($"Video file not found:\n{videoPath}",
-                                    "File Not Found",
-                                    MessageBoxButton.OK,
-                                    MessageBoxImage.Warning);
-                    return;
-                }
-
-                // Hide report, show video
-                placeholderPanel.Visibility = Visibility.Collapsed;
-                reportScrollViewer.Visibility = Visibility.Collapsed;
-                reportControls.Visibility = Visibility.Collapsed;
-                videoPlayer.Visibility = Visibility.Visible;
-                videoControls.Visibility = Visibility.Visible;
-
-                videoPlayer.Source = new Uri(videoPath);
-                videoPlayer.Play();
-
-                string videoFileName = System.IO.Path.GetFileName(videoPath);
-                viewTitle.Text = videoFileName;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error playing video");
-                MessageBox.Show("Unable to play video. Please check the logs for details.",
-                                "Error Playing Video",
-                                MessageBoxButton.OK,
-                                MessageBoxImage.Error);
-            }
         }
 
-        // **************************************************
-        // Video Control Handlers
-        private void PlayButton_Click(object sender, RoutedEventArgs e)
+        public void AllDatesClick(object sender, RoutedEventArgs e)
         {
-            if (videoPlayer.Source != null)
-            {
-                videoPlayer.Play();
-            }
-        }
 
-        private void PauseButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (videoPlayer.Source != null)
-            {
-                videoPlayer.Pause();
-            }
-        }
-
-        private void StopButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (videoPlayer.Source != null)
-            {
-                videoPlayer.Stop();
-                videoPlayer.Position = TimeSpan.Zero;
-            }
         }
     }
 }
