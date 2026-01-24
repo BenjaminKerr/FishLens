@@ -179,6 +179,63 @@
                             <ComboBoxItem Content="Spencer Creek"/>
                         </ComboBox>
 
+
+                        <!-- Group By Section -->
+                        <TextBlock Text="Group By" 
+           FontSize="13" 
+           FontWeight="SemiBold"
+           Foreground="#14171A"
+           Margin="0,0,0,8"/>
+
+                        <ComboBox x:Name="groupByCombo"
+          Background="#F5F8FA"
+          BorderBrush="#C7D8DD"
+          Padding="12,8"
+          FontSize="13"
+          Margin="0,0,0,20"
+          SelectedIndex="0"
+          SelectionChanged="GroupBy_SelectionChanged">
+                            <ComboBoxItem Content="🔤 Species"/>
+                            <ComboBoxItem Content="📅 Date &amp; Time"/>
+                            <ComboBoxItem Content="📍 Location"/>
+                        </ComboBox>
+
+                        <!-- Confidence Threshold Filter -->
+                        <TextBlock Text="Minimum Confidence" 
+           FontSize="13" 
+           FontWeight="SemiBold"
+           Foreground="#14171A"
+           Margin="0,0,0,8"/>
+
+                        <Grid Margin="0,0,0,5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Slider x:Name="confidenceSlider"
+            Grid.Column="0"
+            Minimum="0"
+            Maximum="100"
+            Value="0"
+            TickFrequency="10"
+            IsSnapToTickEnabled="True"/>
+
+                            <TextBlock x:Name="confidenceValueText"
+               Grid.Column="1"
+               Text="0%"
+               FontSize="13"
+               FontWeight="SemiBold"
+               Foreground="#0D3640"
+               Margin="10,0,0,0"
+               VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <TextBlock Text="Filter detections below this confidence level" 
+           FontSize="11" 
+           Foreground="#8BA5AE"
+           Margin="0,0,0,20"/>
+
                         <!-- Filter Action Buttons -->
                         <Button Content="Apply Filters" 
                                 Click="ApplyFiltersClick"

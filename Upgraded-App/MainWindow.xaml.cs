@@ -22,40 +22,58 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using Microsoft.Extensions.Logging;
-using FishLens_App.Interfaces;
-using FishLens_App.Services;
-using System.Threading.Tasks;
-using DocumentFormat.OpenXml.Bibliography;
 
 namespace FishLens_App
 {
     public partial class MainWindow : Window
     {
+        #region Constants
+
+        private const double DEFAULT_CONFIDENCE_THRESHOLD = 0.7;
+        private const int BUTTON_HEIGHT = 45;
+        private const int BUTTON_FONT_SIZE = 13;
+        private const int BUTTON_MARGIN = 5;
+        private const int BUTTON_PADDING_HORIZONTAL = 12;
+        private const int BUTTON_PADDING_VERTICAL = 8;
+        private const int BUTTON_CORNER_RADIUS = 6;
+        private const int CONTENT_PRESENTER_MARGIN = 8;
+        private const string SAVED_VIDEOS_FOLDER = "SavedVids";
+        private const string SAMPLE_DATA_FOLDER = "sample_data";
+
+        #endregion
+
+        #region Fields
+
         private readonly IProjectPathResolver _pathResolver;
         private readonly IFileSystemManager _fileSystemManager;
         private readonly ILogger<MainWindow> _logger;
-        AppConfiguration config = new AppConfiguration();
-        private CheckBoxToggle _checkBoxes;
+        private readonly AppConfiguration _config;
+        private readonly CheckBoxToggle _checkBoxes;
 
-        //**************************************************
-        // Function: Constructor
-        // Description: Parameterized
+        #endregion
+
+        #region Constructors
+
+        // **************************************************
+        // Function: Constructor (Parameterized)
+        // Description: Initializes MainWindow with dependency injection
+        // **************************************************
         public MainWindow(IProjectPathResolver pathresolver, IFileSystemManager fileSystemManager, ILogger<MainWindow> logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _pathResolver = pathresolver ?? throw new ArgumentNullException(nameof(pathresolver));
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
-            
+
             InitializeComponent();
 
-            _checkBoxes = (Application.Current as App).CheckBoxes;
-
+            _checkBoxes = GetCheckBoxToggleFromApplication();
+            _config = GetConfigurationFromApplication();
         }
 
         // **************************************************
-        // Function: Constructor
-        // Description: Unparameterized
+        // Function: Constructor (Default)
+        // Description: Initializes MainWindow with default dependencies
+        // **************************************************
         public MainWindow() : this(
             GetDefaultProjectPathResolver(),
             GetDefaultFileSystemManager(),
@@ -63,116 +81,149 @@ namespace FishLens_App
         {
         }
 
-        // ************* Helper Functions ************************************************************************************************
+        #endregion
+
+        #region Dependency Creation Helpers
+
         // **************************************************
-        // Function: Gets the default project path
-        // Description: Creates an IProjectPathResolver
-        // Notes: Used in the constructor
+        // Function: GetDefaultProjectPathResolver
+        // Description: Creates default IProjectPathResolver instance
+        // Notes: Used in parameterless constructor
+        // **************************************************
         private static IProjectPathResolver GetDefaultProjectPathResolver()
         {
             return new DefaultProjectPathResolver();
         }
 
         // **************************************************
-        // Function: Gets the default file system manager
-        // Description: Creates an IFileSystemManager
-        // Notes: Used in the constructor
+        // Function: GetDefaultFileSystemManager
+        // Description: Creates default IFileSystemManager instance
+        // Notes: Used in parameterless constructor
+        // **************************************************
         private static IFileSystemManager GetDefaultFileSystemManager()
         {
             return new StandardFileSystemManager();
         }
 
         // **************************************************
-        // Function: Gets the default logger
-        // Description: Creates an ILogger<MainWindow>
-        // Notes: Used in the constructor
+        // Function: GetDefaultLogger
+        // Description: Creates default ILogger<MainWindow> instance
+        // Notes: Used in parameterless constructor
+        // **************************************************
         private static ILogger<MainWindow> GetDefaultLogger()
         {
             using var loggerFactory = LoggerFactory.Create(builder =>
             {
-                builder.SetMinimumLevel(LogLevel.Information); // 'Information' is the most verbose setting
+                builder.SetMinimumLevel(LogLevel.Information);
             });
             return loggerFactory.CreateLogger<MainWindow>();
         }
 
         // **************************************************
-        // Function: Gets the project root
-        // Description: Returns the root's file path as a string
+        // Function: GetCheckBoxToggleFromApplication
+        // Description: Retrieves CheckBoxToggle instance from application
+        // **************************************************
+        private CheckBoxToggle GetCheckBoxToggleFromApplication()
+        {
+            return (Application.Current as App)?.CheckBoxes;
+        }
+
+        // **************************************************
+        // Function: GetConfigurationFromApplication
+        // Description: Retrieves AppConfiguration instance from application
+        // **************************************************
+        private AppConfiguration GetConfigurationFromApplication()
+        {
+            return (Application.Current as App)?.Configuration;
+        }
+
+        #endregion
+
+        #region Path Resolution
+
+        // **************************************************
+        // Function: GetProjectRoot
+        // Description: Returns the project root directory path
         // Notes: Implemented in DefaultProjectPathResolver.cs
+        // **************************************************
         private string GetProjectRoot()
         {
             return _pathResolver.ResolveProjectRoot();
         }
 
         // **************************************************
-        // Function: Gets the yolo script
-        // Description: Returns the yolo script's file path as a string
-        // Notes:
-        //      -Implemented in DefaultProjectPathResolver.cs
-        //      -Made this its own function because it's more important
-        //       than other 'get file path' functions. For others, you
-        //       can use GetPath(string subdirectory)
+        // Function: GetYoloScriptDirectory
+        // Description: Returns the YOLO script file path
+        // Notes: Implemented in DefaultProjectPathResolver.cs
+        // **************************************************
         private string GetYoloScriptDirectory()
         {
             return _pathResolver.ResolveYoloScriptPath();
         }
 
         // **************************************************
-        // Function: Gets the csv script
-        // Description: Returns the csv script's file path as a string
-        // Notes:
-        //      -Implemented in DefaultProjectPathResolver.cs
-        //      -Made this its own function because it's more important
-        //       than other 'get file path' functions. For others, you
-        //       can use GetPath(string subdirectory)
+        // Function: GetCsvScriptDirectory
+        // Description: Returns the CSV script file path
+        // Notes: Implemented in DefaultProjectPathResolver.cs
+        // **************************************************
         private string GetCsvScriptDirectory()
         {
             return _pathResolver.ResolveCsvScriptDirectory();
         }
 
         // **************************************************
-        // Function: Gets the source folder path
-        //           (Used in OpenFolderClick(object sender, RoutedEventArgs e))
-        // Description: Returns the user-selected file path as a string
+        // Function: GetSourceFolderPath
+        // Description: Returns the user-selected source folder path
         // Notes: Implemented in DefaultProjectPathResolver.cs
+        // **************************************************
         private string GetSourceFolderPath()
         {
             return _pathResolver.ResolveSourceFolder();
         }
 
         // **************************************************
-        // Function: Gets a path
-        // Description: Gets the folder path root/subdirectory and returns it as a string
+        // Function: GetPath
+        // Description: Resolves path for specified subdirectory
         // Notes: Implemented in DefaultProjectPathResolver.cs
+        // **************************************************
         private string GetPath(string subdirectory)
         {
             return _pathResolver.ResolvePath(subdirectory);
         }
 
+        #endregion
+
+        #region Directory Management
+
         // **************************************************
-        // Function: Makes a Directory if it Doesn't Already Exist
+        // Function: MakeDirectoryIfNotExists
+        // Description: Creates directory if it doesn't already exist
+        // **************************************************
         private void MakeDirectoryIfNotExists(string directory)
         {
-            if (!Directory.Exists(directory))
-            {
-                try
-                {
-                    System.IO.Directory.CreateDirectory(directory);
-                }
-                catch (System.UnauthorizedAccessException ex)
-                {
-                    _logger.LogError("Permission denied creating directory", ex);
-                    HandleDirectoryCreationError("InsufficientPermissions");
+            if (Directory.Exists(directory))
+                return;
 
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError("Failed to create directory", ex);
-                    HandleDirectoryCreationError(ex.Message);
-                }
+            try
+            {
+                Directory.CreateDirectory(directory);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogError(ex, "Permission denied creating directory");
+                HandleDirectoryCreationError("Insufficient Permissions");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create directory");
+                HandleDirectoryCreationError(ex.Message);
             }
         }
 
+        // **************************************************
+        // Function: HandleDirectoryCreationError
+        // Description: Displays error message for directory creation failures
+        // **************************************************
         private void HandleDirectoryCreationError(string errorMessage)
         {
             MessageBox.Show(
@@ -182,288 +233,380 @@ namespace FishLens_App
                 MessageBoxImage.Error
             );
         }
-        // *******************************************************************************************************************************
 
-        // ************* Page Navigation *************************************************************************************************
+        #endregion
+
+        #region Page Navigation
+
         // **************************************************
-        // Function: Home Page Button Click
+        // Function: HomeButtonClick
         // Description: Navigates to the home page
+        // **************************************************
         private void HomeButtonClick(object sender, RoutedEventArgs e)
         {
             MainFrame.Visibility = Visibility.Collapsed;
         }
 
         // **************************************************
-        // Function: History Page Button Click
+        // Function: HistoryButtonClick
         // Description: Navigates to the history page
+        // **************************************************
         private void HistoryButtonClick(object sender, RoutedEventArgs e)
         {
             MainFrame.Visibility = Visibility.Visible;
             _logger.LogInformation("History button clicked.");
+
             try
             {
                 MainFrame.Navigate(new History(_pathResolver, _fileSystemManager, _logger));
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Navigation Error {ex.Message}");
+                MessageBox.Show($"Navigation Error: {ex.Message}");
             }
         }
 
         // **************************************************
-        // Function: Settings Page Button Click
+        // Function: SettingsButtonClick
         // Description: Navigates to the settings page
+        // **************************************************
         private void SettingsButtonClick(object sender, RoutedEventArgs e)
         {
             MainFrame.Visibility = Visibility.Visible;
             _logger.LogInformation("Settings button clicked.");
+
             try
             {
                 MainFrame.Navigate(new Settings(_pathResolver, _fileSystemManager, _logger));
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Navigation Error {ex.Message}");
+                MessageBox.Show($"Navigation Error: {ex.Message}");
             }
         }
 
-        // *******************************************************************************************************************************
+        #endregion
 
-        // ************* Run Yolo and Collects Data **************************************************************************************
+        #region YOLO Processing
+
         // **************************************************
-        // Function: Runs YOLO
-        // Description: Runs the python script stored in the yolo script directory
+        // Function: RunYolo
+        // Description: Executes Python YOLO script for video analysis
         // Notes: Original writing credit to Aden Ratliff, async update by Benjamin Kerr
+        // **************************************************
         private async Task RunYolo()
         {
-            ProcessStartInfo start = new ProcessStartInfo();
-
-            string yoloScriptDirectory = GetYoloScriptDirectory();
-
-            start.FileName = "python";
-            string sampleDataPath = System.IO.Path.Combine(GetProjectRoot(), "sample_data");   //FishLens/sample_data
-            start.Arguments = $"\"{yoloScriptDirectory}\" \"{sampleDataPath}\""; //argv[1] = sample_data
-            start.RedirectStandardError = _checkBoxes.ErrorBox;
-            start.RedirectStandardOutput = _checkBoxes.OutputBox;
-           
-            // Run Script
-            start.UseShellExecute = false;
+            ProcessStartInfo processInfo = CreateYoloProcessStartInfo();
 
             ProgressDialog progressDialog = new ProgressDialog();
             progressDialog.Show();
             await Task.Delay(100);
+
             try
             {
-                await Task.Run(() =>
-                {
-                    using (Process process = Process.Start(start))
-                    {
-                        string output = _checkBoxes.OutputBox ? process.StandardOutput.ReadToEnd() : "";
-                        string error = _checkBoxes.ErrorBox ? process.StandardError.ReadToEnd() : "";
-                        process.WaitForExit();
-
-                        Dispatcher.Invoke(() => progressDialog.Close());
-
-                        if (!string.IsNullOrEmpty(error) || !string.IsNullOrEmpty(output))
-                        {
-                            Dispatcher.Invoke(() => MessageBox.Show($"Output:\n{output}\n\nErrors:\n{error}"));
-                        }
-                    }
-                });
+                await ExecuteYoloProcess(processInfo, progressDialog);
             }
-
             catch (Exception ex)
             {
                 progressDialog.Close();
                 MessageBox.Show(ex.Message, "Could not process videos.", MessageBoxButton.OK);
             }
         }
-        // ******************************************************************************************************************************************
 
-        // ************* Open Folder and Put Data Into Database *************************************************************************************
         // **************************************************
-        // Function: Opens Folder on Click
-        // Description: An OpenFolderDialog appears when the 'Open Folder' button is clicked
+        // Function: CreateYoloProcessStartInfo
+        // Description: Configures process start information for YOLO script execution
+        // **************************************************
+        private ProcessStartInfo CreateYoloProcessStartInfo()
+        {
+            string yoloScriptDirectory = GetYoloScriptDirectory();
+            string sampleDataPath = Path.Combine(GetProjectRoot(), SAMPLE_DATA_FOLDER);
+
+            return new ProcessStartInfo
+            {
+                FileName = "python",
+                Arguments = $"\"{yoloScriptDirectory}\" \"{sampleDataPath}\"",
+                RedirectStandardError = _checkBoxes.ErrorBox,
+                RedirectStandardOutput = _checkBoxes.OutputBox,
+                UseShellExecute = false
+            };
+        }
+
+        // **************************************************
+        // Function: ExecuteYoloProcess
+        // Description: Runs YOLO process and handles output
+        // **************************************************
+        private async Task ExecuteYoloProcess(ProcessStartInfo processInfo, ProgressDialog progressDialog)
+        {
+            await Task.Run(() =>
+            {
+                using (Process process = Process.Start(processInfo))
+                {
+                    string output = ReadProcessOutput(process);
+                    string error = ReadProcessError(process);
+
+                    process.WaitForExit();
+
+                    Dispatcher.Invoke(() => progressDialog.Close());
+
+                    DisplayProcessOutputIfNeeded(output, error);
+                }
+            });
+        }
+
+        // **************************************************
+        // Function: ReadProcessOutput
+        // Description: Reads standard output from process if enabled
+        // **************************************************
+        private string ReadProcessOutput(Process process)
+        {
+            return _checkBoxes.OutputBox ? process.StandardOutput.ReadToEnd() : string.Empty;
+        }
+
+        // **************************************************
+        // Function: ReadProcessError
+        // Description: Reads standard error from process if enabled
+        // **************************************************
+        private string ReadProcessError(Process process)
+        {
+            return _checkBoxes.ErrorBox ? process.StandardError.ReadToEnd() : string.Empty;
+        }
+
+        // **************************************************
+        // Function: DisplayProcessOutputIfNeeded
+        // Description: Shows process output/errors if present
+        // **************************************************
+        private void DisplayProcessOutputIfNeeded(string output, string error)
+        {
+            if (!string.IsNullOrEmpty(error) || !string.IsNullOrEmpty(output))
+            {
+                Dispatcher.Invoke(() =>
+                    MessageBox.Show($"Output:\n{output}\n\nErrors:\n{error}")
+                );
+            }
+        }
+
+        #endregion
+
+        #region Video Processing
+
+        // **************************************************
+        // Function: OpenFolderClick
+        // Description: Opens folder dialog and initiates video processing
+        // **************************************************
         private void OpenFolderClick(object sender, RoutedEventArgs e)
         {
             string sourceFolderPath = GetSourceFolderPath();
-            if (string.IsNullOrEmpty(sourceFolderPath)) return;
+            if (string.IsNullOrEmpty(sourceFolderPath))
+                return;
 
-            // Determine Save Directory
-            var projectRoot = GetProjectRoot();
-            string saveDirectory = System.IO.Path.Combine(projectRoot, "SavedVids");    //FishLens/SavedVids
-
+            string saveDirectory = Path.Combine(GetProjectRoot(), SAVED_VIDEOS_FOLDER);
             ProcessVideos(sourceFolderPath, saveDirectory);
 
-            // Make the export button visible
             exportData.Visibility = Visibility.Visible;
         }
 
         // **************************************************
-        // Function: Processes Videos
-        // Description: Calls a series of functions to process the videos held in the directory
-        //              opened by OpenFolderClick(object sender, RoutedEventArgs e)
+        // Function: ProcessVideos
+        // Description: Orchestrates complete video processing workflow
+        // **************************************************
         private void ProcessVideos(string inputFolder, string outputDirectory)
         {
             MakeDirectoryIfNotExists(outputDirectory);
             DisplayDataInUi(outputDirectory);
             EnterDataInFile(inputFolder, outputDirectory);
             RunYolo();
+
             List<(FileInfo vid, Video data)> videoDataList = CreateSortedListOfVideos(outputDirectory);
             CreateVideoButtonsList(videoDataList);
         }
 
         // **************************************************
-        // Function: Creates a Sorted List of Videos
-        // Description: Gets the confidence rating of each video and list of all videos
-        //              sorted from lowest to highest confidence
+        // Function: EnterDataInFile
+        // Description: Copies video files from input folder to output directory
+        // **************************************************
+        private void EnterDataInFile(string inputFolder, string outputDirectory)
+        {
+            DirectoryInfo dirInfo = new DirectoryInfo(inputFolder);
+            FileInfo[] files = dirInfo.GetFiles("*");
+
+            foreach (FileInfo file in files)
+            {
+                CopyFileToDestination(file, outputDirectory);
+            }
+        }
+
+        // **************************************************
+        // Function: CopyFileToDestination
+        // Description: Copies single file to destination with error handling
+        // **************************************************
+        private void CopyFileToDestination(FileInfo file, string outputDirectory)
+        {
+            string fileName = Path.GetFileName(file.FullName);
+            string destinationPath = Path.Combine(outputDirectory, fileName);
+
+            try
+            {
+                File.Copy(file.FullName, destinationPath, overwrite: true);
+            }
+            catch (IOException ex)
+            {
+                MessageBox.Show($"Error Saving File: {ex.Message}", "Save Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            catch (SecurityException)
+            {
+                MessageBox.Show("Insufficient permissions to copy the file.", "Permission Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        #endregion
+
+        #region Video Data Management
+
+        // **************************************************
+        // Function: CreateSortedListOfVideos
+        // Description: Creates list of videos sorted by confidence rating
+        // **************************************************
         private List<(FileInfo vid, Video data)> CreateSortedListOfVideos(string directory)
         {
-            // Get each saved video's name and create a list to sort by confidence
             DirectoryInfo vidsInfo = new DirectoryInfo(directory);
             FileInfo[] fileInfos = vidsInfo.GetFiles("*");
 
-            // Create a list to hold video data with confidence for sorting
             List<(FileInfo vid, Video data)> videoDataList = new List<(FileInfo, Video)>();
 
             foreach (FileInfo vid in fileInfos)
             {
-                // Get only mp4 and asf files
-                string extension = vid.Extension.ToLower();
-                if (extension != ".mp4" && extension != ".asf") continue;
-
-                Video data = GetData(vid.Name);
-                videoDataList.Add((vid, data));
+                if (IsVideoFile(vid))
+                {
+                    Video data = GetData(vid.Name);
+                    videoDataList.Add((vid, data));
+                }
             }
 
-            // Sort by confidence (least to most)
-            videoDataList = videoDataList.OrderBy(x => x.data.avgConfidence).ToList();
-            return videoDataList;
+            return videoDataList.OrderBy(x => x.data.avgConfidence).ToList();
         }
 
         // **************************************************
-        // Function: Gets the Video Data
-        // Description: Looks in the CSV file for the row associated with the video's title,
-        //              and creates and returns a Video object with that row's data
+        // Function: IsVideoFile
+        // Description: Checks if file is a supported video format
+        // **************************************************
+        private bool IsVideoFile(FileInfo file)
+        {
+            string extension = file.Extension.ToLower();
+            return extension == ".mp4" || extension == ".asf";
+        }
+
+        // **************************************************
+        // Function: GetData
+        // Description: Retrieves video analysis data from CSV file
+        // **************************************************
         private Video GetData(string videoFileName)
         {
             Video vid = new Video();
-
             string csvPath = GetCsvScriptDirectory();
 
-            // Check if the CSV file exists
             if (!File.Exists(csvPath))
             {
-                MessageBox.Show("Analysis data file not found.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Analysis data file not found.", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
                 return vid;
             }
 
             try
             {
-                vid = GetVideoFileValues(vid, csvPath, videoFileName);
-                return vid;
+                return GetVideoFileValues(vid, csvPath, videoFileName);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error reading analysis data: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Error reading analysis data: {ex.Message}", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                return vid;
             }
-            return vid;
         }
 
         // **************************************************
-        // Function: Gets a Video File's Values
-        // Description: Parses a CSV row to put data into a Video object
-        // Notes: This is a helper function for GetData(string videoFileName)
+        // Function: GetVideoFileValues
+        // Description: Parses CSV row to populate Video object
+        // Notes: Helper function for GetData
+        // **************************************************
         private Video GetVideoFileValues(Video vid, string csvPath, string videoFileName)
         {
             string[] lines = File.ReadAllLines(csvPath);
 
-            // Skip header and find the matching video
             for (int i = 1; i < lines.Length; i++)
             {
                 string[] columns = lines[i].Split(',');
 
-                // Check if this row matches the video we're looking for
                 if (columns[0].Trim() == videoFileName)
                 {
-                    vid.name = columns[0].Trim();
-                    vid.trackId = columns[1].Trim();
-                    vid.likelyClass = columns[2].Trim();
-                    vid.confidence = columns[3].Trim();
-                    vid.startTime = columns[4].Trim();
-                    vid.endTime = columns[5].Trim();
-                    vid.avgConfidence = double.Parse(columns[6].Trim());
-                    vid.direction = columns[7].Trim();
-
-                    return vid;
+                    return PopulateVideoFromColumns(vid, columns);
                 }
             }
 
-            // If we get here, the video wasn't found in the CSV
-            vid.name = videoFileName;
-            vid.trackId = "-1";
-            vid.likelyClass = "N/A";
-            vid.confidence = "00.00%";
-            vid.startTime = "00.00";
-            vid.endTime = "00.00";
-            vid.avgConfidence = 00.00;
-            vid.direction = "Unknown";
+            return CreateDefaultVideo(videoFileName);
+        }
+
+        // **************************************************
+        // Function: PopulateVideoFromColumns
+        // Description: Populates Video object from CSV columns
+        // **************************************************
+        private Video PopulateVideoFromColumns(Video vid, string[] columns)
+        {
+            vid.name = columns[0].Trim();
+            vid.trackId = columns[1].Trim();
+            vid.likelyClass = columns[2].Trim();
+            vid.confidence = columns[3].Trim();
+            vid.startTime = columns[4].Trim();
+            vid.endTime = columns[5].Trim();
+            vid.avgConfidence = double.Parse(columns[6].Trim());
+            vid.direction = columns[7].Trim();
+
             return vid;
         }
 
         // **************************************************
-        // Function: Enters Data into a File
-        // Description: Copies data from an input folder to an output directory
-        private void EnterDataInFile(string inputFolder, string outputDirectory)
-        {
-            DirectoryInfo dirInfo = new DirectoryInfo(inputFolder);
-            FileInfo[] info = dirInfo.GetFiles("*");
-            foreach (FileInfo file in info)
-            {
-                string fileName = System.IO.Path.GetFileName(file.FullName);
-                string destinationPath = System.IO.Path.Combine(outputDirectory, fileName);
-
-                try
-                {
-                    System.IO.File.Copy(file.FullName, destinationPath, true);
-                }
-                catch (IOException ex)
-                {
-                    MessageBox.Show($"Error Saving File: {ex.Message}", "Save Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-                catch (SecurityException)
-                {
-                    MessageBox.Show("Insufficient permissions to copy the file.", "Permission Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-            }
-        }
-        // ******************************************************************************************************************************************
-
-        // ************* Save and Export Data *******************************************************************************************************
+        // Function: CreateDefaultVideo
+        // Description: Creates Video object with default values when not found in CSV
         // **************************************************
-        // Function: Exports Data on Click
-        // Description: Exports data to an Excel sheet when the 'Export Data' button is clicked
+        private Video CreateDefaultVideo(string videoFileName)
+        {
+            return new Video
+            {
+                name = videoFileName,
+                trackId = "-1",
+                likelyClass = "N/A",
+                confidence = "00.00%",
+                startTime = "00.00",
+                endTime = "00.00",
+                avgConfidence = 0.0,
+                direction = "Unknown"
+            };
+        }
+
+        #endregion
+
+        #region Data Export
+
+        // **************************************************
+        // Function: ExportDataClick
+        // Description: Exports analysis data to Excel file
+        // **************************************************
         private void ExportDataClick(object sender, RoutedEventArgs e)
         {
             try
             {
                 string csvPath = GetCsvScriptDirectory();
 
-
-                // Check if the CSV file exists
                 if (!File.Exists(csvPath))
                 {
-                    MessageBox.Show("No analysis data found to export.", "Export Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MessageBox.Show("No analysis data found to export.", "Export Error",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
-                // Let user choose where to save the Excel file
-                SaveFileDialog saveFileDialog = new SaveFileDialog
-                {
-                    Filter = "Excel Files (*.xlsx)|*.xlsx",
-                    DefaultExt = ".xlsx",
-                    FileName = $"FishLens_Analysis_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"
-                };
+                SaveFileDialog saveFileDialog = CreateExportSaveDialog();
 
                 if (saveFileDialog.ShowDialog() == true)
                 {
@@ -472,54 +615,100 @@ namespace FishLens_App
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error exporting data: {ex.Message}", "Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Error exporting data: {ex.Message}", "Export Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         // **************************************************
-        // Function: Makes an Excel Sheet and Inserts Data
-        // Notes: This is a helper function to ExportDataClick(object sender, RoutedEventArgs e)
+        // Function: CreateExportSaveDialog
+        // Description: Creates configured SaveFileDialog for Excel export
+        // **************************************************
+        private SaveFileDialog CreateExportSaveDialog()
+        {
+            return new SaveFileDialog
+            {
+                Filter = "Excel Files (*.xlsx)|*.xlsx",
+                DefaultExt = ".xlsx",
+                FileName = $"FishLens_Analysis_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"
+            };
+        }
+
+        // **************************************************
+        // Function: MakeExcelSheetAndInsertData
+        // Description: Creates Excel workbook and populates with CSV data
+        // Notes: Helper function for ExportDataClick
+        // **************************************************
         private void MakeExcelSheetAndInsertData(SaveFileDialog saveFileDialog, string csvPath)
         {
             string excelPath = saveFileDialog.FileName;
-
-            // Read the CSV file
             string[] allLines = File.ReadAllLines(csvPath);
 
-            // Create a new Excel workbook
             using (var workbook = new ClosedXML.Excel.XLWorkbook())
             {
                 var worksheet = workbook.Worksheets.Add("Analysis Data");
 
-                // Write the data
-                for (int line = 0; line < allLines.Length; line++)
-                {
-                    string[] allColumns = allLines[line].Split(',');
-                    for (int column = 0; column < allColumns.Length; column++)
-                    {
-                        worksheet.Cell(line + 1, column + 1).Value = allColumns[column].Trim();
-                    }
-                }
+                WriteDataToWorksheet(worksheet, allLines);
+                FormatWorksheet(worksheet, allLines);
 
-                // Format header row
-                if (allLines.Length > 0)
-                {
-                    var headerRow = worksheet.Row(1);
-                    headerRow.Style.Font.Bold = true;
-                    headerRow.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightBlue;
-                }
-
-                // Auto-fit columns
-                worksheet.Columns().AdjustToContents();
-
-                // Save the workbook
                 workbook.SaveAs(excelPath);
             }
 
-            MessageBox.Show($"Data exported successfully to:\n{excelPath}", "Export Successful", MessageBoxButton.OK, MessageBoxImage.Information);
+            ShowExportSuccessMessage(excelPath);
+            PromptToOpenExportedFile(excelPath);
+        }
 
-            // Optionally open the file
-            var result = MessageBox.Show("Would you like to open the exported file?", "Open File", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        // **************************************************
+        // Function: WriteDataToWorksheet
+        // Description: Writes CSV data to Excel worksheet
+        // **************************************************
+        private void WriteDataToWorksheet(ClosedXML.Excel.IXLWorksheet worksheet, string[] allLines)
+        {
+            for (int line = 0; line < allLines.Length; line++)
+            {
+                string[] columns = allLines[line].Split(',');
+                for (int column = 0; column < columns.Length; column++)
+                {
+                    worksheet.Cell(line + 1, column + 1).Value = columns[column].Trim();
+                }
+            }
+        }
+
+        // **************************************************
+        // Function: FormatWorksheet
+        // Description: Applies formatting to Excel worksheet
+        // **************************************************
+        private void FormatWorksheet(ClosedXML.Excel.IXLWorksheet worksheet, string[] allLines)
+        {
+            if (allLines.Length > 0)
+            {
+                var headerRow = worksheet.Row(1);
+                headerRow.Style.Font.Bold = true;
+                headerRow.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightBlue;
+            }
+
+            worksheet.Columns().AdjustToContents();
+        }
+
+        // **************************************************
+        // Function: ShowExportSuccessMessage
+        // Description: Displays success message after export
+        // **************************************************
+        private void ShowExportSuccessMessage(string excelPath)
+        {
+            MessageBox.Show($"Data exported successfully to:\n{excelPath}", "Export Successful",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        // **************************************************
+        // Function: PromptToOpenExportedFile
+        // Description: Asks user if they want to open the exported file
+        // **************************************************
+        private void PromptToOpenExportedFile(string excelPath)
+        {
+            var result = MessageBox.Show("Would you like to open the exported file?", "Open File",
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+
             if (result == MessageBoxResult.Yes)
             {
                 Process.Start(new ProcessStartInfo(excelPath) { UseShellExecute = true });
@@ -527,51 +716,81 @@ namespace FishLens_App
         }
 
         // **************************************************
-        // Function: Save Button
-        // Desctiption: Saves any changes that the user makes to the data generated by the AI models
-        // TODO: Implement Save Button
+        // Function: SaveButtonClick
+        // Description: Saves user modifications to AI-generated data
+        // Notes: TODO - Implementation pending
+        // **************************************************
         private void SaveButtonClick(object sender, RoutedEventArgs e)
         {
-
+            // TODO: Implement save functionality
         }
-        // ******************************************************************************************************************************************
 
-        // ********************* Display Data to User ***********************************************************************************************
+        #endregion
+
+        #region UI Display
+
         // **************************************************
-        // Function: Video Buttons Functionality
-        // Description: Displays a video when its associated button is clicked
+        // Function: VideoButtonClick
+        // Description: Displays selected video and its data
+        // **************************************************
         private void VideoButtonClick(object sender, RoutedEventArgs e)
         {
             Button clickedButton = (Button)sender;
             string videoPath = clickedButton.Tag.ToString();
-            videoPlayer.Source = new Uri(videoPath);
-            videoPlayer.Play();
 
-            string videoFileName = System.IO.Path.GetFileName(videoPath);
+            LoadVideoInPlayer(videoPath);
+
+            string videoFileName = Path.GetFileName(videoPath);
             GetData(videoFileName);
         }
 
         // **************************************************
-        // Function: Displays Data to User
-        // Description: Displays the data associated with a video after its button has been clicked
+        // Function: LoadVideoInPlayer
+        // Description: Loads video into media player with auto-play preference
+        // **************************************************
+        private void LoadVideoInPlayer(string videoPath)
+        {
+            videoPlayer.Source = new Uri(videoPath);
+
+            if (_config?.AutoPlayVideos ?? true)
+            {
+                videoPlayer.Play();
+            }
+        }
+
+        // **************************************************
+        // Function: DisplayDataInUi
+        // Description: Updates UI elements with video analysis data
+        // **************************************************
         private void DisplayDataInUi(string videoFileName)
         {
             Video vid = GetData(videoFileName);
 
-            // Update the UI elements
             videoName.Text = vid.name;
             videoDateTime.Text = $"Duration: {vid.startTime}s - {vid.endTime}s";
             fishPresentStatus.Text = vid.likelyClass == "fish" ? "Present" : "Not Present";
             fishPresentConfidence.Text = vid.avgConfidence.ToString();
-            travelDirection.Text = char.ToUpper(vid.direction[0]) + vid.direction.Substring(1); // Capitalize first letter
+            travelDirection.Text = CapitalizeFirstLetter(vid.direction);
         }
 
         // **************************************************
-        // Function: Creates a List of Video Buttons
-        // Description: Creates a list of videos and associated data, and adds a button for each and adds it to the sidebar
+        // Function: CapitalizeFirstLetter
+        // Description: Capitalizes the first letter of a string
+        // **************************************************
+        private string CapitalizeFirstLetter(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return text;
+
+            return char.ToUpper(text[0]) + text.Substring(1);
+        }
+
+        // **************************************************
+        // Function: CreateVideoButtonsList
+        // Description: Creates and adds buttons for all videos to sidebar
+        // **************************************************
         private void CreateVideoButtonsList(List<(FileInfo videoFile, Video videoData)> videoDataList)
         {
-            // Now create buttons in sorted order
             foreach (var (videoFile, videoData) in videoDataList)
             {
                 Button button = CreateSingleVideoButton(videoFile, videoData);
@@ -581,95 +800,179 @@ namespace FishLens_App
         }
 
         // **************************************************
-        // Function: Creates a Single Video Button
-        // Description: Creates and returns a single button associated with a video file and its associated data
-        // Notes: This is a helper function for CreateVideoButtonsList(List<(FileInfo videoFile, Video videoData)> videoDataList)
+        // Function: CreateSingleVideoButton
+        // Description: Creates styled button for a single video
+        // Notes: Helper function for CreateVideoButtonsList
+        // **************************************************
         private Button CreateSingleVideoButton(FileInfo videoFile, Video videoData)
         {
-            bool isLowConfidence = videoData.avgConfidence < config.ConfidenceThreshold;
+            bool isLowConfidence = IsLowConfidence(videoData.avgConfidence);
 
-            var button = new Button
+            return new Button
             {
                 Content = videoFile.Name,
-                Margin = new Thickness(5),
-                Padding = new Thickness(12, 8, 12, 8),
-                Height = 45,
+                Margin = new Thickness(BUTTON_MARGIN),
+                Padding = new Thickness(BUTTON_PADDING_HORIZONTAL, BUTTON_PADDING_VERTICAL,
+                    BUTTON_PADDING_HORIZONTAL, BUTTON_PADDING_VERTICAL),
+                Height = BUTTON_HEIGHT,
                 Tag = videoFile.FullName,
                 HorizontalContentAlignment = HorizontalAlignment.Left,
-                FontSize = 13,
+                FontSize = BUTTON_FONT_SIZE,
                 BorderThickness = new Thickness(0),
                 Cursor = Cursors.Hand,
                 Style = CreateButtonStyle(isLowConfidence)
             };
-
-            return button;
         }
 
         // **************************************************
-        // Function: Creates Button Style
-        // Description: Creates a styled button with hover effects and proper colors
+        // Function: IsLowConfidence
+        // Description: Determines if confidence value is below threshold
+        // **************************************************
+        private bool IsLowConfidence(double confidence)
+        {
+            return confidence < (_config?.ConfidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD);
+        }
+
+        #endregion
+
+        #region Button Styling
+
+        // **************************************************
+        // Function: CreateButtonStyle
+        // Description: Creates styled button with hover effects and appropriate colors
+        // **************************************************
         private Style CreateButtonStyle(bool isLowConfidence)
         {
             var style = new Style(typeof(Button));
 
-            // Default appearance
+            SetButtonDefaultAppearance(style, isLowConfidence);
+
+            var template = CreateButtonControlTemplate(isLowConfidence);
+            style.Setters.Add(new Setter(Button.TemplateProperty, template));
+
+            return style;
+        }
+
+        // **************************************************
+        // Function: SetButtonDefaultAppearance
+        // Description: Sets default colors and properties for button
+        // **************************************************
+        private void SetButtonDefaultAppearance(Style style, bool isLowConfidence)
+        {
             style.Setters.Add(new Setter(Button.BackgroundProperty,
                 isLowConfidence
-                    ? new SolidColorBrush(Color.FromRgb(254, 242, 242))  // Light red background
-                    : new SolidColorBrush(Color.FromRgb(249, 250, 251)))); // Light gray background
+                    ? new SolidColorBrush(Color.FromRgb(254, 242, 242))
+                    : new SolidColorBrush(Color.FromRgb(249, 250, 251))));
 
             style.Setters.Add(new Setter(Button.ForegroundProperty,
                 isLowConfidence
-                    ? new SolidColorBrush(Color.FromRgb(185, 28, 28))  // Dark red text
-                    : new SolidColorBrush(Color.FromRgb(55, 65, 81))));  // Dark gray text
+                    ? new SolidColorBrush(Color.FromRgb(185, 28, 28))
+                    : new SolidColorBrush(Color.FromRgb(55, 65, 81))));
 
             style.Setters.Add(new Setter(Button.BorderBrushProperty,
                 new SolidColorBrush(Color.FromRgb(229, 231, 235))));
+        }
 
-            // Template for rounded corners and hover effect
+        // **************************************************
+        // Function: CreateButtonControlTemplate
+        // Description: Creates control template with rounded corners and triggers
+        // **************************************************
+        private ControlTemplate CreateButtonControlTemplate(bool isLowConfidence)
+        {
             var template = new ControlTemplate(typeof(Button));
+
+            var border = CreateButtonBorder();
+            template.VisualTree = border;
+
+            AddButtonTriggers(template, isLowConfidence);
+
+            return template;
+        }
+
+        // **************************************************
+        // Function: CreateButtonBorder
+        // Description: Creates border element for button template
+        // **************************************************
+        private FrameworkElementFactory CreateButtonBorder()
+        {
             var border = new FrameworkElementFactory(typeof(Border));
             border.Name = "border";
             border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
             border.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
             border.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
-            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(6));
+            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(BUTTON_CORNER_RADIUS));
 
+            var contentPresenter = CreateContentPresenter();
+            border.AppendChild(contentPresenter);
+
+            return border;
+        }
+
+        // **************************************************
+        // Function: CreateContentPresenter
+        // Description: Creates content presenter for button template
+        // **************************************************
+        private FrameworkElementFactory CreateContentPresenter()
+        {
             var contentPresenter = new FrameworkElementFactory(typeof(ContentPresenter));
             contentPresenter.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Left);
             contentPresenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
-            contentPresenter.SetValue(ContentPresenter.MarginProperty, new Thickness(8, 0, 8, 0));
+            contentPresenter.SetValue(ContentPresenter.MarginProperty,
+                new Thickness(CONTENT_PRESENTER_MARGIN, 0, CONTENT_PRESENTER_MARGIN, 0));
 
-            border.AppendChild(contentPresenter);
-            template.VisualTree = border;
+            return contentPresenter;
+        }
 
-            // Hover trigger
+        // **************************************************
+        // Function: AddButtonTriggers
+        // Description: Adds hover and pressed triggers to button template
+        // **************************************************
+        private void AddButtonTriggers(ControlTemplate template, bool isLowConfidence)
+        {
+            var hoverTrigger = CreateHoverTrigger(isLowConfidence);
+            template.Triggers.Add(hoverTrigger);
+
+            var pressedTrigger = CreatePressedTrigger(isLowConfidence);
+            template.Triggers.Add(pressedTrigger);
+        }
+
+        // **************************************************
+        // Function: CreateHoverTrigger
+        // Description: Creates mouse-over trigger for button
+        // **************************************************
+        private Trigger CreateHoverTrigger(bool isLowConfidence)
+        {
             var trigger = new Trigger { Property = Button.IsMouseOverProperty, Value = true };
+
             trigger.Setters.Add(new Setter(Button.BackgroundProperty,
                 isLowConfidence
-                    ? new SolidColorBrush(Color.FromRgb(239, 68, 68))  // Bright red on hover
-                    : new SolidColorBrush(Color.FromRgb(243, 244, 246)), "border"));  // Lighter gray on hover
+                    ? new SolidColorBrush(Color.FromRgb(239, 68, 68))
+                    : new SolidColorBrush(Color.FromRgb(243, 244, 246)), "border"));
 
             trigger.Setters.Add(new Setter(Button.ForegroundProperty,
                 isLowConfidence
-                    ? new SolidColorBrush(Colors.White)  // White text on hover for red
-                    : new SolidColorBrush(Color.FromRgb(17, 24, 39))));  // Darker text on hover
+                    ? new SolidColorBrush(Colors.White)
+                    : new SolidColorBrush(Color.FromRgb(17, 24, 39))));
 
-            template.Triggers.Add(trigger);
-
-            // Pressed trigger
-            var pressedTrigger = new Trigger { Property = Button.IsPressedProperty, Value = true };
-            pressedTrigger.Setters.Add(new Setter(Button.BackgroundProperty,
-                isLowConfidence
-                    ? new SolidColorBrush(Color.FromRgb(220, 38, 38))  // Darker red when pressed
-                    : new SolidColorBrush(Color.FromRgb(229, 231, 235)), "border"));  // Medium gray when pressed
-
-            template.Triggers.Add(pressedTrigger);
-
-            style.Setters.Add(new Setter(Button.TemplateProperty, template));
-
-            return style;
+            return trigger;
         }
-        // ******************************************************************************************************************************************
+
+        // **************************************************
+        // Function: CreatePressedTrigger
+        // Description: Creates button pressed trigger
+        // **************************************************
+        private Trigger CreatePressedTrigger(bool isLowConfidence)
+        {
+            var trigger = new Trigger { Property = Button.IsPressedProperty, Value = true };
+
+            trigger.Setters.Add(new Setter(Button.BackgroundProperty,
+                isLowConfidence
+                    ? new SolidColorBrush(Color.FromRgb(220, 38, 38))
+                    : new SolidColorBrush(Color.FromRgb(229, 231, 235)), "border"));
+
+            return trigger;
+        }
+
+        #endregion
     }
 }
