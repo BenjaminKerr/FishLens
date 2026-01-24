@@ -1,11 +1,20 @@
 ﻿using FishLens_App.Interfaces;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Text;
 using System.Text.Json;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 
 namespace FishLens_App
 {
@@ -14,160 +23,22 @@ namespace FishLens_App
     /// </summary>
     public partial class Settings : Page
     {
-        private const int DEFAULT_CONFIDENCE_THRESHOLD_PERCENT = 70;
-        private const int DEFAULT_FONT_SIZE = 14;
-        private const int LARGE_FONT_SIZE = 18;
-        private const string DEFAULT_BACKGROUND_COLOR = "#E8F4F8";
-        private const string DEFAULT_FOREGROUND_COLOR = "#0D3640";
-        private const string SETTINGS_FILE_NAME = "appsettings.json";
-        private const string DEFAULT_VIDEO_QUALITY = "Medium";
-
         private readonly IProjectPathResolver _pathResolver;
         private readonly IFileSystemManager _fileSystemManager;
         private readonly ILogger<MainWindow> _logger;
-        private readonly CheckBoxToggle _checkBoxes;
-        private readonly AppConfiguration _config;
+        private CheckBoxToggle _checkBoxes;
+        private AppConfiguration _config;
 
-        // **************************************************
-        // Function: Constructor
-        // Description: Initializes the Settings page with required dependencies and loads persisted settings
-        // **************************************************
         public Settings(IProjectPathResolver pathresolver, IFileSystemManager fileSystemManager, ILogger<MainWindow> logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _pathResolver = pathresolver ?? throw new ArgumentNullException(nameof(pathresolver));
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
-
             InitializeComponent();
+            _checkBoxes = (Application.Current as App).CheckBoxes;
+            _config = (Application.Current as App).Configuration;
 
-            _checkBoxes = GetCheckBoxToggleFromApplication();
-            _config = GetConfigurationFromApplication();
-
-            TryLoadSettings();
-        }
-
-        // **************************************************
-        // Function: ConfidenceThreshold_ValueChanged
-        // Description: Updates the confidence threshold percentage display when slider value changes
-        // **************************************************
-        private void ConfidenceThreshold_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (confidenceValue == null)
-                return;
-
-            int percent = (int)Math.Round(e.NewValue);
-            confidenceValue.Text = $"{percent}%";
-        }
-
-        // **************************************************
-        // Function: Cancel_Click
-        // Description: Handles cancel button click by navigating back or hiding the main frame
-        // **************************************************
-        private void Cancel_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (CanNavigateBack())
-                {
-                    NavigateBack();
-                    return;
-                }
-
-                HideMainFrame();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Cancel navigation failed");
-            }
-        }
-
-        // **************************************************
-        // Function: SaveSettings_Click
-        // Description: Saves all settings to configuration file and applies changes to the UI
-        // **************************************************
-        private void SaveSettings_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                UpdateConfigurationFromUI();
-                PersistSettingsToFile();
-                ApplySettingsToMainWindow();
-
-                ShowSaveSuccessMessage();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to save settings");
-                ShowSaveErrorMessage(ex.Message);
-            }
-        }
-
-        // **************************************************
-        // Function: LoadSettings
-        // Description: Loads settings from configuration file and updates UI controls
-        // **************************************************
-        private void LoadSettings()
-        {
-            SetDefaultUIValues();
-
-            string configPath = GetConfigurationFilePath();
-            if (!File.Exists(configPath))
-                return;
-
-            try
-            {
-                ParseAndApplySettingsFromFile(configPath);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not parse settings file; using defaults");
-            }
-        }
-
-        // **************************************************
-        // Function: ToggleErrorMessages
-        // Description: Toggles the visibility of error messages based on checkbox state
-        // **************************************************
-        private void ToggleErrorMessages(object sender, RoutedEventArgs e)
-        {
-            _checkBoxes.ErrorBox = hideErrors.IsChecked ?? false;
-        }
-
-        // **************************************************
-        // Function: ToggleOutputMessages
-        // Description: Toggles the visibility of output messages based on checkbox state
-        // **************************************************
-        private void ToggleOutputMessages(object sender, RoutedEventArgs e)
-        {
-            _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
-        }
-
-        #region Helper Methods
-
-        // **************************************************
-        // Function: GetCheckBoxToggleFromApplication
-        // Description: Retrieves the CheckBoxToggle instance from the application
-        // **************************************************
-        private CheckBoxToggle GetCheckBoxToggleFromApplication()
-        {
-            return (Application.Current as App)?.CheckBoxes;
-        }
-
-        // **************************************************
-        // Function: GetConfigurationFromApplication
-        // Description: Retrieves the AppConfiguration instance from the application
-        // **************************************************
-        private AppConfiguration GetConfigurationFromApplication()
-        {
-            return (Application.Current as App)?.Configuration;
-        }
-
-        // **************************************************
-        // Function: TryLoadSettings
-        // Description: Attempts to load settings with error handling
-        // **************************************************
-        private void TryLoadSettings()
-        {
+            // Initialize UI from current state / persisted settings
             try
             {
                 LoadSettings();
@@ -178,371 +49,209 @@ namespace FishLens_App
             }
         }
 
-        // **************************************************
-        // Function: CanNavigateBack
-        // Description: Checks if navigation service can navigate back
-        // **************************************************
-        private bool CanNavigateBack()
+        private void ConfidenceThreshold_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
         {
-            return NavigationService != null && NavigationService.CanGoBack;
+            if (confidenceValue == null) return;
+            var percent = (int)Math.Round(e.NewValue);
+            confidenceValue.Text = $"{percent}%";
         }
 
-        // **************************************************
-        // Function: NavigateBack
-        // Description: Navigates to the previous page
-        // **************************************************
-        private void NavigateBack()
+        private void Cancel_Click(object sender, RoutedEventArgs e)
         {
-            NavigationService.GoBack();
-        }
-
-        // **************************************************
-        // Function: HideMainFrame
-        // Description: Hides the main frame of the application
-        // **************************************************
-        private void HideMainFrame()
-        {
-            var mainWindow = Application.Current.MainWindow as MainWindow;
-            if (mainWindow != null)
-            {
-                mainWindow.MainFrame.Visibility = Visibility.Collapsed;
-            }
-        }
-
-        // **************************************************
-        // Function: UpdateConfigurationFromUI
-        // Description: Updates configuration objects with values from UI controls
-        // **************************************************
-        private void UpdateConfigurationFromUI()
-        {
-            _config.ConfidenceThreshold = GetConfidenceThresholdValue();
-
-            _checkBoxes.ErrorBox = hideErrors.IsChecked ?? false;
-            _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
-
-            _config.AutoPlayVideos = autoPlayVideos.IsChecked ?? false;
-            _config.VideoQuality = GetSelectedVideoQuality();
-            _config.HighContrastMode = highContrastMode.IsChecked ?? false;
-            _config.LargeText = largeText.IsChecked ?? false;
-        }
-
-        // **************************************************
-        // Function: GetConfidenceThresholdValue
-        // Description: Converts confidence threshold slider value to decimal (0-1 range)
-        // **************************************************
-        private double GetConfidenceThresholdValue()
-        {
-            return (confidenceThreshold?.Value ?? 0) / 100.0;
-        }
-
-        // **************************************************
-        // Function: GetSelectedVideoQuality
-        // Description: Retrieves the selected video quality from the combo box
-        // **************************************************
-        private string GetSelectedVideoQuality()
-        {
-            if (videoQuality?.SelectedItem is ComboBoxItem selected)
-            {
-                return selected.Content?.ToString() ?? DEFAULT_VIDEO_QUALITY;
-            }
-            return DEFAULT_VIDEO_QUALITY;
-        }
-
-        // **************************************************
-        // Function: PersistSettingsToFile
-        // Description: Serializes and saves settings to JSON configuration file
-        // **************************************************
-        private void PersistSettingsToFile()
-        {
-            var settingsObject = CreateSettingsObject();
-            string configPath = GetConfigurationFilePath();
-
-            var options = new JsonSerializerOptions { WriteIndented = true };
-            string json = JsonSerializer.Serialize(settingsObject, options);
-            File.WriteAllText(configPath, json);
-
-            _logger.LogInformation("Settings saved to {path}", configPath);
-        }
-
-        // **************************************************
-        // Function: CreateSettingsObject
-        // Description: Creates an anonymous object containing all settings for serialization
-        // **************************************************
-        private object CreateSettingsObject()
-        {
-            return new
-            {
-                ConfidenceThreshold = _config.ConfidenceThreshold,
-                OutputBox = _checkBoxes.OutputBox,
-                ErrorBox = _checkBoxes.ErrorBox,
-                AutoPlayVideos = _config.AutoPlayVideos,
-                VideoQuality = _config.VideoQuality,
-                HighContrastMode = _config.HighContrastMode,
-                LargeText = _config.LargeText
-            };
-        }
-
-        // **************************************************
-        // Function: GetConfigurationFilePath
-        // Description: Constructs the full path to the configuration file
-        // **************************************************
-        private string GetConfigurationFilePath()
-        {
-            string projectRoot = _pathResolver.ResolveProjectRoot();
-            return Path.Combine(projectRoot ?? string.Empty, SETTINGS_FILE_NAME);
-        }
-
-        // **************************************************
-        // Function: ApplySettingsToMainWindow
-        // Description: Applies visual settings (contrast, font size) to the main window
-        // **************************************************
-        private void ApplySettingsToMainWindow()
-        {
+            // Try to navigate back if possible, otherwise hide the main frame (return to home)
             try
             {
-                var mainWindow = Application.Current.MainWindow as MainWindow;
-                if (mainWindow == null)
+                if (this.NavigationService != null && this.NavigationService.CanGoBack)
+                {
+                    this.NavigationService.GoBack();
                     return;
+                }
 
-                ApplyHighContrastSetting(mainWindow);
-                ApplyLargeTextSetting(mainWindow);
+                var main = Application.Current.MainWindow as MainWindow;
+                if (main != null)
+                {
+                    main.MainFrame.Visibility = Visibility.Collapsed;
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to apply settings to main window");
+                _logger.LogError(ex, "Cancel navigation failed");
             }
         }
 
-        // **************************************************
-        // Function: ApplyHighContrastSetting
-        // Description: Applies or removes high contrast mode styling to main window
-        // **************************************************
-        private void ApplyHighContrastSetting(MainWindow mainWindow)
+        private void SaveSettings_Click(object sender, RoutedEventArgs e)
         {
-            mainWindow.Dispatcher.Invoke(() =>
+            try
             {
-                if (_config.HighContrastMode)
+                // Update configuration in memory
+                _config.ConfidenceThreshold = (confidenceThreshold?.Value ?? 0) / 100.0;
+
+                // Ensure CheckBoxToggle is up to date
+                _checkBoxes.ErrorBox = hideErrors.IsChecked ?? false;
+                _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
+
+                // Video and accessibility options
+                bool autoplay = autoPlayVideos.IsChecked ?? false;
+                string quality = "Medium";
+                if (videoQuality?.SelectedItem is ComboBoxItem selected)
                 {
-                    SetHighContrastColors(mainWindow);
+                    quality = selected.Content?.ToString() ?? quality;
                 }
-                else
+                bool highContrast = highContrastMode.IsChecked ?? false;
+                bool largeTxt = largeText.IsChecked ?? false;
+
+                // Persist settings to a JSON file in project root
+                // Update additional settings in shared config
+                _config.AutoPlayVideos = autoplay;
+                _config.VideoQuality = quality;
+                _config.HighContrastMode = highContrast;
+                _config.LargeText = largeTxt;
+
+                var settingsObj = new
                 {
-                    SetDefaultColors(mainWindow);
+                    ConfidenceThreshold = _config.ConfidenceThreshold,
+                    OutputBox = _checkBoxes.OutputBox,
+                    ErrorBox = _checkBoxes.ErrorBox,
+                    AutoPlayVideos = _config.AutoPlayVideos,
+                    VideoQuality = _config.VideoQuality,
+                    HighContrastMode = _config.HighContrastMode,
+                    LargeText = _config.LargeText
+                };
+
+                string projectRoot = _pathResolver.ResolveProjectRoot();
+                string configPath = System.IO.Path.Combine(projectRoot ?? string.Empty, "appsettings.json");
+                var options = new JsonSerializerOptions { WriteIndented = true };
+                File.WriteAllText(configPath, JsonSerializer.Serialize(settingsObj, options));
+
+                MessageBox.Show("Settings saved.", "Saved", MessageBoxButton.OK, MessageBoxImage.Information);
+                _logger.LogInformation("Settings saved to {path}", configPath);
+                // Apply certain settings immediately to main window
+                try
+                {
+                    var main = Application.Current.MainWindow as MainWindow;
+                    if (main != null)
+                    {
+                        // High contrast
+                        if (_config.HighContrastMode)
+                        {
+                            main.Dispatcher.Invoke(() =>
+                            {
+                                main.Background = new SolidColorBrush(Colors.Black);
+                                var titleTb = main.FindName("Title") as TextBlock;
+                                if (titleTb != null) titleTb.Foreground = new SolidColorBrush(Colors.White);
+                            });
+                        }
+                        else
+                        {
+                            main.Dispatcher.Invoke(() =>
+                            {
+                                main.Background = (SolidColorBrush)(new BrushConverter().ConvertFrom("#E8F4F8"));
+                                var titleTb = main.FindName("Title") as TextBlock;
+                                if (titleTb != null) titleTb.Foreground = (SolidColorBrush)(new BrushConverter().ConvertFrom("#0D3640"));
+                            });
+                        }
+
+                        // Large text
+                        main.Dispatcher.Invoke(() =>
+                        {
+                            main.FontSize = _config.LargeText ? 18 : 14;
+                        });
+                    }
                 }
-            });
-        }
-
-        // **************************************************
-        // Function: SetHighContrastColors
-        // Description: Sets high contrast colors (black background, white text)
-        // **************************************************
-        private void SetHighContrastColors(MainWindow mainWindow)
-        {
-            mainWindow.Background = new SolidColorBrush(Colors.Black);
-
-            var titleTextBlock = mainWindow.FindName("Title") as TextBlock;
-            if (titleTextBlock != null)
+                catch { }
+            }
+            catch (Exception ex)
             {
-                titleTextBlock.Foreground = new SolidColorBrush(Colors.White);
+                _logger.LogError(ex, "Failed to save settings");
+                MessageBox.Show($"Failed to save settings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        // **************************************************
-        // Function: SetDefaultColors
-        // Description: Sets default color scheme
-        // **************************************************
-        private void SetDefaultColors(MainWindow mainWindow)
+        private void LoadSettings()
         {
-            var brushConverter = new BrushConverter();
-            mainWindow.Background = (SolidColorBrush)brushConverter.ConvertFrom(DEFAULT_BACKGROUND_COLOR);
-
-            var titleTextBlock = mainWindow.FindName("Title") as TextBlock;
-            if (titleTextBlock != null)
-            {
-                titleTextBlock.Foreground = (SolidColorBrush)brushConverter.ConvertFrom(DEFAULT_FOREGROUND_COLOR);
-            }
-        }
-
-        // **************************************************
-        // Function: ApplyLargeTextSetting
-        // Description: Applies or removes large text setting to main window
-        // **************************************************
-        private void ApplyLargeTextSetting(MainWindow mainWindow)
-        {
-            mainWindow.Dispatcher.Invoke(() =>
-            {
-                mainWindow.FontSize = _config.LargeText ? LARGE_FONT_SIZE : DEFAULT_FONT_SIZE;
-            });
-        }
-
-        // **************************************************
-        // Function: SetDefaultUIValues
-        // Description: Sets default values for all UI controls from configuration
-        // **************************************************
-        private void SetDefaultUIValues()
-        {
-            double confidencePercent = (_config?.ConfidenceThreshold ?? 0.7) * 100;
-            confidenceThreshold.Value = Math.Round(confidencePercent);
-            confidenceValue.Text = $"{(int)Math.Round(confidencePercent)}%";
-
+            // Set defaults from current runtime state
+            confidenceThreshold.Value = Math.Round((_config?.ConfidenceThreshold ?? 0.7) * 100);
+            confidenceValue.Text = $"{(int)Math.Round((_config?.ConfidenceThreshold ?? 0.7) * 100)}%";
             hideErrors.IsChecked = _checkBoxes.ErrorBox;
             hideOutput.IsChecked = _checkBoxes.OutputBox;
-        }
 
-        // **************************************************
-        // Function: ParseAndApplySettingsFromFile
-        // Description: Reads and parses settings from JSON file, then applies to configuration and UI
-        // **************************************************
-        private void ParseAndApplySettingsFromFile(string configPath)
-        {
-            using var stream = File.OpenRead(configPath);
-            using var document = JsonDocument.Parse(stream);
-            var root = document.RootElement;
-
-            ApplyConfidenceThresholdFromJson(root);
-            ApplyOutputBoxFromJson(root);
-            ApplyErrorBoxFromJson(root);
-            ApplyAutoPlayVideosFromJson(root);
-            ApplyVideoQualityFromJson(root);
-            ApplyHighContrastModeFromJson(root);
-            ApplyLargeTextFromJson(root);
-        }
-
-        // **************************************************
-        // Function: ApplyConfidenceThresholdFromJson
-        // Description: Applies confidence threshold setting from JSON element
-        // **************************************************
-        private void ApplyConfidenceThresholdFromJson(JsonElement root)
-        {
-            if (root.TryGetProperty("ConfidenceThreshold", out var element) &&
-                element.ValueKind == JsonValueKind.Number)
+            // Try to read persisted settings
+            try
             {
-                double confidence = element.GetDouble();
-                _config.ConfidenceThreshold = confidence;
-                confidenceThreshold.Value = Math.Round(confidence * 100);
-                confidenceValue.Text = $"{(int)Math.Round(confidence * 100)}%";
-            }
-        }
+                string projectRoot = _pathResolver.ResolveProjectRoot();
+                string configPath = System.IO.Path.Combine(projectRoot ?? string.Empty, "appsettings.json");
+                if (!File.Exists(configPath)) return;
 
-        // **************************************************
-        // Function: ApplyOutputBoxFromJson
-        // Description: Applies output box visibility setting from JSON element
-        // **************************************************
-        private void ApplyOutputBoxFromJson(JsonElement root)
-        {
-            if (root.TryGetProperty("OutputBox", out var element) &&
-                (element.ValueKind == JsonValueKind.True || element.ValueKind == JsonValueKind.False))
-            {
-                _checkBoxes.OutputBox = element.GetBoolean();
-                hideOutput.IsChecked = _checkBoxes.OutputBox;
-            }
-        }
+                using var stream = File.OpenRead(configPath);
+                using var doc = JsonDocument.Parse(stream);
+                var root = doc.RootElement;
 
-        // **************************************************
-        // Function: ApplyErrorBoxFromJson
-        // Description: Applies error box visibility setting from JSON element
-        // **************************************************
-        private void ApplyErrorBoxFromJson(JsonElement root)
-        {
-            if (root.TryGetProperty("ErrorBox", out var element) &&
-                (element.ValueKind == JsonValueKind.True || element.ValueKind == JsonValueKind.False))
-            {
-                _checkBoxes.ErrorBox = element.GetBoolean();
-                hideErrors.IsChecked = _checkBoxes.ErrorBox;
-            }
-        }
-
-        // **************************************************
-        // Function: ApplyAutoPlayVideosFromJson
-        // Description: Applies auto-play videos setting from JSON element
-        // **************************************************
-        private void ApplyAutoPlayVideosFromJson(JsonElement root)
-        {
-            if (root.TryGetProperty("AutoPlayVideos", out var element) &&
-                (element.ValueKind == JsonValueKind.True || element.ValueKind == JsonValueKind.False))
-            {
-                _config.AutoPlayVideos = element.GetBoolean();
-                autoPlayVideos.IsChecked = _config.AutoPlayVideos;
-            }
-        }
-
-        // **************************************************
-        // Function: ApplyVideoQualityFromJson
-        // Description: Applies video quality setting from JSON element
-        // **************************************************
-        private void ApplyVideoQualityFromJson(JsonElement root)
-        {
-            if (root.TryGetProperty("VideoQuality", out var element) &&
-                element.ValueKind == JsonValueKind.String)
-            {
-                string quality = element.GetString();
-                SelectVideoQualityInComboBox(quality);
-            }
-        }
-
-        // **************************************************
-        // Function: SelectVideoQualityInComboBox
-        // Description: Selects the matching video quality item in the combo box
-        // **************************************************
-        private void SelectVideoQualityInComboBox(string quality)
-        {
-            foreach (var item in videoQuality.Items)
-            {
-                if (item is ComboBoxItem comboItem && comboItem.Content?.ToString() == quality)
+                if (root.TryGetProperty("ConfidenceThreshold", out var confEl) && confEl.ValueKind == JsonValueKind.Number)
                 {
-                    videoQuality.SelectedItem = comboItem;
-                    break;
+                    double conf = confEl.GetDouble();
+                    _config.ConfidenceThreshold = conf;
+                    confidenceThreshold.Value = Math.Round(conf * 100);
+                    confidenceValue.Text = $"{(int)Math.Round(conf * 100)}%";
+                }
+
+                if (root.TryGetProperty("OutputBox", out var outEl) && outEl.ValueKind == JsonValueKind.True || outEl.ValueKind == JsonValueKind.False)
+                {
+                    _checkBoxes.OutputBox = outEl.GetBoolean();
+                    hideOutput.IsChecked = _checkBoxes.OutputBox;
+                }
+
+                if (root.TryGetProperty("ErrorBox", out var errEl) && errEl.ValueKind == JsonValueKind.True || errEl.ValueKind == JsonValueKind.False)
+                {
+                    _checkBoxes.ErrorBox = errEl.GetBoolean();
+                    hideErrors.IsChecked = _checkBoxes.ErrorBox;
+                }
+
+                if (root.TryGetProperty("AutoPlayVideos", out var autoEl) && (autoEl.ValueKind == JsonValueKind.True || autoEl.ValueKind == JsonValueKind.False))
+                {
+                    _config.AutoPlayVideos = autoEl.GetBoolean();
+                    autoPlayVideos.IsChecked = _config.AutoPlayVideos;
+                }
+
+                if (root.TryGetProperty("VideoQuality", out var qualityEl) && qualityEl.ValueKind == JsonValueKind.String)
+                {
+                    string q = qualityEl.GetString();
+                    foreach (var item in videoQuality.Items)
+                    {
+                        if (item is ComboBoxItem c && c.Content?.ToString() == q)
+                        {
+                            videoQuality.SelectedItem = c;
+                            break;
+                        }
+                    }
+                }
+
+                if (root.TryGetProperty("HighContrastMode", out var hcEl) && (hcEl.ValueKind == JsonValueKind.True || hcEl.ValueKind == JsonValueKind.False))
+                {
+                    _config.HighContrastMode = hcEl.GetBoolean();
+                    highContrastMode.IsChecked = _config.HighContrastMode;
+                }
+
+                if (root.TryGetProperty("LargeText", out var ltEl) && (ltEl.ValueKind == JsonValueKind.True || ltEl.ValueKind == JsonValueKind.False))
+                {
+                    _config.LargeText = ltEl.GetBoolean();
+                    largeText.IsChecked = _config.LargeText;
                 }
             }
-        }
-
-        // **************************************************
-        // Function: ApplyHighContrastModeFromJson
-        // Description: Applies high contrast mode setting from JSON element
-        // **************************************************
-        private void ApplyHighContrastModeFromJson(JsonElement root)
-        {
-            if (root.TryGetProperty("HighContrastMode", out var element) &&
-                (element.ValueKind == JsonValueKind.True || element.ValueKind == JsonValueKind.False))
+            catch (Exception ex)
             {
-                _config.HighContrastMode = element.GetBoolean();
-                highContrastMode.IsChecked = _config.HighContrastMode;
+                _logger.LogWarning(ex, "Could not parse settings file; using defaults");
             }
         }
 
-        // **************************************************
-        // Function: ApplyLargeTextFromJson
-        // Description: Applies large text setting from JSON element
-        // **************************************************
-        private void ApplyLargeTextFromJson(JsonElement root)
+        private void ToggleErrorMessages(object sender, RoutedEventArgs e)
         {
-            if (root.TryGetProperty("LargeText", out var element) &&
-                (element.ValueKind == JsonValueKind.True || element.ValueKind == JsonValueKind.False))
-            {
-                _config.LargeText = element.GetBoolean();
-                largeText.IsChecked = _config.LargeText;
-            }
+            _checkBoxes.ErrorBox = hideErrors.IsChecked ?? false;
         }
 
-        // **************************************************
-        // Function: ShowSaveSuccessMessage
-        // Description: Displays a success message when settings are saved
-        // **************************************************
-        private void ShowSaveSuccessMessage()
+        private void ToggleOutputMessages(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Settings saved.", "Saved", MessageBoxButton.OK, MessageBoxImage.Information);
+            _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
         }
 
-        // **************************************************
-        // Function: ShowSaveErrorMessage
-        // Description: Displays an error message when settings fail to save
-        // **************************************************
-        private void ShowSaveErrorMessage(string errorMessage)
-        {
-            MessageBox.Show($"Failed to save settings: {errorMessage}", "Error",
-                MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-
-        #endregion
     }
 }

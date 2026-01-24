@@ -130,9 +130,139 @@ namespace FishLens_App
                 ShowErrorMessage("Unable to export report. Please check the logs for details.", "Error Exporting Report");
             }
         }
+
+        // Additional button handlers and filter helpers moved into Button Event Handlers region
+        // **************************************************
+        // Function: GroupBy_SelectionChanged
+        // Description: Handles group by selection changes and regenerates report
+        public void GroupBy_SelectionChanged(object sender, RoutedEventArgs e)
+        {
+            if (groupByCombo == null || groupByCombo.SelectedItem == null)
+                return;
+
+            var selectedItem = (ComboBoxItem)groupByCombo.SelectedItem;
+            string content = selectedItem.Content.ToString().ToLower();
+
+            if (content.Contains("species"))
+                _currentGroupBy = "species";
+            else if (content.Contains("date"))
+                _currentGroupBy = "datetime";
+            else if (content.Contains("location"))
+                _currentGroupBy = "location";
+
+            // Regenerate report if one exists
+            if (!string.IsNullOrEmpty(_currentReportText))
+            {
+                GenerateReportClick(sender, e);
+            }
+        }
+
+        // **************************************************
+        // Function: ConfidenceSlider_ValueChanged
+        // Description: Updates confidence filter and display when slider changes
+        public void ConfidenceSlider_ValueChanged(object sender, RoutedPropertyChangedEventHandler<double> e)
+        {
+            if (confidenceSlider == null || confidenceValueText == null)
+                return;
+
+            _filterMinConfidence = confidenceSlider.Value / 100.0; // Convert to 0-1 range
+            confidenceValueText.Text = $"{confidenceSlider.Value:F0}%";
+        }
+
+        // **************************************************
+        // Function: ApplyFiltersClick
+        // Description: Applies all selected filters and regenerates the report
+        public void ApplyFiltersClick(object sender, RoutedEventArgs e)
+        {
+            // Update filter values from UI
+            UpdateFiltersFromUI();
+
+            // Regenerate report with filters
+            GenerateReportClick(sender, e);
+        }
+
+        // **************************************************
+        // Function: ClearFiltersClick
+        // Description: Resets all filters to default values
+        public void ClearFiltersClick(object sender, RoutedEventArgs e)
+        {
+            // Reset filter state
+            _filterStartDate = null;
+            _filterEndDate = null;
+            _filterSpecies = "All";
+            _filterDirection = "All";
+            _filterMinConfidence = 0.0;
+
+            // Reset UI controls
+            if (startDatePicker != null)
+                startDatePicker.SelectedDate = null;
+
+            if (endDatePicker != null)
+                endDatePicker.SelectedDate = null;
+
+            if (speciesFilter != null)
+                speciesFilter.SelectedIndex = 0;
+
+            if (directionFilter != null)
+                directionFilter.SelectedIndex = 0;
+
+            if (cameraFilter != null)
+                cameraFilter.SelectedIndex = 0;
+
+            if (confidenceSlider != null)
+                confidenceSlider.Value = 0;
+
+            // Regenerate report
+            GenerateReportClick(sender, e);
+        }
+
+        // **************************************************
+        // Function: RefreshReportClick
+        // Description: Refreshes the current report with latest data
+        public void RefreshReportClick(object sender, RoutedEventArgs e)
+        {
+            GenerateReportClick(sender, e);
+        }
+
+        // **************************************************
+        // Function: AllDatesClick
+        // Description: Clears date filters to show all dates
+        public void AllDatesClick(object sender, RoutedEventArgs e)
+        {
+            _filterStartDate = null;
+            _filterEndDate = null;
+
+            if (startDatePicker != null)
+                startDatePicker.SelectedDate = null;
+
+            if (endDatePicker != null)
+                endDatePicker.SelectedDate = null;
+
+            MessageBox.Show("Date filters cleared. Click 'Apply Filters' to update the report.",
+                            "Filters Updated",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information);
+        }
+
+        // **************************************************
+        // Function: ReportType_SelectionChanged
+        // Description: 
+        public void ReportType_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+
+        }
+
+        // **************************************************
+        // Function: PrintReportClick
+        // Description: 
+        public void PrintReportClick(object sender, RoutedEventArgs e)
+        {
+
+        }
+
         #endregion
 
-        #region Data Processing
+        #region Statistics Calculations
 
         // **************************************************
         // Function: CalculateStatistics
@@ -420,6 +550,93 @@ namespace FishLens_App
             {
                 return confidence >= _filterMinConfidence;
             }
+            return true;
+        }
+
+        // **************************************************
+        // Function: UpdateFiltersFromUI
+        // Description: Updates internal filter state from UI control values
+        private void UpdateFiltersFromUI()
+        {
+            // Update date filters
+            if (startDatePicker?.SelectedDate != null)
+                _filterStartDate = startDatePicker.SelectedDate.Value;
+            else
+                _filterStartDate = null;
+
+            if (endDatePicker?.SelectedDate != null)
+                _filterEndDate = endDatePicker.SelectedDate.Value;
+            else
+                _filterEndDate = null;
+
+            // Update species filter
+            if (speciesFilter?.SelectedItem != null)
+            {
+                var selectedItem = (ComboBoxItem)speciesFilter.SelectedItem;
+                string content = selectedItem.Content.ToString();
+                _filterSpecies = content.Contains("All") ? "All" : content;
+            }
+
+            // Update direction filter
+            if (directionFilter?.SelectedItem != null)
+            {
+                var selectedItem = (ComboBoxItem)directionFilter.SelectedItem;
+                string content = selectedItem.Content.ToString();
+                _filterDirection = content.Contains("All") ? "All" : content;
+            }
+        }
+
+        // **************************************************
+        // Function: ApplyFilters (ENHANCED)
+        // Description: Filters CSV data based on current filter criteria including date range
+        private string[] ApplyFilters(string[] csvLines)
+        {
+            var filtered = new List<string>();
+
+            foreach (string line in csvLines)
+            {
+                string[] columns = line.Split(',');
+
+                if (columns.Length < 8)
+                    continue;
+
+                if (!PassesSpeciesFilter(columns[2]))
+                    continue;
+
+                if (!PassesDirectionFilter(columns[7]))
+                    continue;
+
+                if (!PassesConfidenceFilter(columns))
+                    continue;
+
+                if (!PassesDateFilter(columns))
+                    continue;
+
+                filtered.Add(line);
+            }
+
+            return filtered.ToArray();
+        }
+
+        // **************************************************
+        // Function: PassesDateFilter
+        // Description: Checks if a detection date falls within the selected date range
+        private bool PassesDateFilter(string[] columns)
+        {
+            // If no date filters set, pass everything
+            if (!_filterStartDate.HasValue && !_filterEndDate.HasValue)
+                return true;
+
+            // Try to parse date from column 1 (adjust index based on your CSV structure)
+            if (columns.Length > 1 && DateTime.TryParse(columns[1], out DateTime detectionDate))
+            {
+                if (_filterStartDate.HasValue && detectionDate.Date < _filterStartDate.Value.Date)
+                    return false;
+
+                if (_filterEndDate.HasValue && detectionDate.Date > _filterEndDate.Value.Date)
+                    return false;
+            }
+
             return true;
         }
 
@@ -1338,215 +1555,6 @@ namespace FishLens_App
                 sb.AppendLine($"{location.Key}: {location.Value} detections ({CalculatePercentage(location.Value, stats.TotalDetections):F1}%)");
             }
             sb.AppendLine();
-        }
-
-        // **************************************************
-        // Function: GroupBy_SelectionChanged
-        // Description: Handles group by selection changes and regenerates report
-        public void GroupBy_SelectionChanged(object sender, RoutedEventArgs e)
-        {
-            if (groupByCombo == null || groupByCombo.SelectedItem == null)
-                return;
-
-            var selectedItem = (ComboBoxItem)groupByCombo.SelectedItem;
-            string content = selectedItem.Content.ToString().ToLower();
-
-            if (content.Contains("species"))
-                _currentGroupBy = "species";
-            else if (content.Contains("date"))
-                _currentGroupBy = "datetime";
-            else if (content.Contains("location"))
-                _currentGroupBy = "location";
-
-            // Regenerate report if one exists
-            if (!string.IsNullOrEmpty(_currentReportText))
-            {
-                GenerateReportClick(sender, e);
-            }
-        }
-
-        // **************************************************
-        // Function: ConfidenceSlider_ValueChanged (IMPLEMENTED)
-        // Description: Updates confidence filter and display when slider changes
-        public void ConfidenceSlider_ValueChanged(object sender, RoutedPropertyChangedEventHandler<double> e)
-        {
-            if (confidenceSlider == null || confidenceValueText == null)
-                return;
-
-            _filterMinConfidence = confidenceSlider.Value / 100.0; // Convert to 0-1 range
-            confidenceValueText.Text = $"{confidenceSlider.Value:F0}%";
-        }
-
-        // **************************************************
-        // Function: ApplyFiltersClick (IMPLEMENTED)
-        // Description: Applies all selected filters and regenerates the report
-        public void ApplyFiltersClick(object sender, RoutedEventArgs e)
-        {
-            // Update filter values from UI
-            UpdateFiltersFromUI();
-
-            // Regenerate report with filters
-            GenerateReportClick(sender, e);
-        }
-
-        // **************************************************
-        // Function: ClearFiltersClick (IMPLEMENTED)
-        // Description: Resets all filters to default values
-        public void ClearFiltersClick(object sender, RoutedEventArgs e)
-        {
-            // Reset filter state
-            _filterStartDate = null;
-            _filterEndDate = null;
-            _filterSpecies = "All";
-            _filterDirection = "All";
-            _filterMinConfidence = 0.0;
-
-            // Reset UI controls
-            if (startDatePicker != null)
-                startDatePicker.SelectedDate = null;
-
-            if (endDatePicker != null)
-                endDatePicker.SelectedDate = null;
-
-            if (speciesFilter != null)
-                speciesFilter.SelectedIndex = 0;
-
-            if (directionFilter != null)
-                directionFilter.SelectedIndex = 0;
-
-            if (cameraFilter != null)
-                cameraFilter.SelectedIndex = 0;
-
-            if (confidenceSlider != null)
-                confidenceSlider.Value = 0;
-
-            // Regenerate report
-            GenerateReportClick(sender, e);
-        }
-
-        // **************************************************
-        // Function: RefreshReportClick (IMPLEMENTED)
-        // Description: Refreshes the current report with latest data
-        public void RefreshReportClick(object sender, RoutedEventArgs e)
-        {
-            GenerateReportClick(sender, e);
-        }
-
-        // **************************************************
-        // Function: AllDatesClick (IMPLEMENTED)
-        // Description: Clears date filters to show all dates
-        public void AllDatesClick(object sender, RoutedEventArgs e)
-        {
-            _filterStartDate = null;
-            _filterEndDate = null;
-
-            if (startDatePicker != null)
-                startDatePicker.SelectedDate = null;
-
-            if (endDatePicker != null)
-                endDatePicker.SelectedDate = null;
-
-            MessageBox.Show("Date filters cleared. Click 'Apply Filters' to update the report.",
-                            "Filters Updated",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Information);
-        }
-
-        // **************************************************
-        // Function: UpdateFiltersFromUI
-        // Description: Updates internal filter state from UI control values
-        private void UpdateFiltersFromUI()
-        {
-            // Update date filters
-            if (startDatePicker?.SelectedDate != null)
-                _filterStartDate = startDatePicker.SelectedDate.Value;
-            else
-                _filterStartDate = null;
-
-            if (endDatePicker?.SelectedDate != null)
-                _filterEndDate = endDatePicker.SelectedDate.Value;
-            else
-                _filterEndDate = null;
-
-            // Update species filter
-            if (speciesFilter?.SelectedItem != null)
-            {
-                var selectedItem = (ComboBoxItem)speciesFilter.SelectedItem;
-                string content = selectedItem.Content.ToString();
-                _filterSpecies = content.Contains("All") ? "All" : content;
-            }
-
-            // Update direction filter
-            if (directionFilter?.SelectedItem != null)
-            {
-                var selectedItem = (ComboBoxItem)directionFilter.SelectedItem;
-                string content = selectedItem.Content.ToString();
-                _filterDirection = content.Contains("All") ? "All" : content;
-            }
-        }
-
-        // **************************************************
-        // Function: ApplyFilters (ENHANCED)
-        // Description: Filters CSV data based on current filter criteria including date range
-        private string[] ApplyFilters(string[] csvLines)
-        {
-            var filtered = new List<string>();
-
-            foreach (string line in csvLines)
-            {
-                string[] columns = line.Split(',');
-
-                if (columns.Length < 8)
-                    continue;
-
-                if (!PassesSpeciesFilter(columns[2]))
-                    continue;
-
-                if (!PassesDirectionFilter(columns[7]))
-                    continue;
-
-                if (!PassesConfidenceFilter(columns))
-                    continue;
-
-                if (!PassesDateFilter(columns))
-                    continue;
-
-                filtered.Add(line);
-            }
-
-            return filtered.ToArray();
-        }
-
-        // **************************************************
-        // Function: PassesDateFilter
-        // Description: Checks if a detection date falls within the selected date range
-        private bool PassesDateFilter(string[] columns)
-        {
-            // If no date filters set, pass everything
-            if (!_filterStartDate.HasValue && !_filterEndDate.HasValue)
-                return true;
-
-            // Try to parse date from column 1 (adjust index based on your CSV structure)
-            if (columns.Length > 1 && DateTime.TryParse(columns[1], out DateTime detectionDate))
-            {
-                if (_filterStartDate.HasValue && detectionDate.Date < _filterStartDate.Value.Date)
-                    return false;
-
-                if (_filterEndDate.HasValue && detectionDate.Date > _filterEndDate.Value.Date)
-                    return false;
-            }
-
-            return true;
-        }
-
-        public void ReportType_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-
-        }
-
-        public void PrintReportClick(object sender, EventArgs e)
-        {
-
         }
 
         #endregion
