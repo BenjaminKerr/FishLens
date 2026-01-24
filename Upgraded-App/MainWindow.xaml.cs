@@ -717,12 +717,145 @@ namespace FishLens_App
 
         // **************************************************
         // Function: SaveButtonClick
-        // Description: Saves user modifications to AI-generated data
-        // Notes: TODO - Implementation pending
+        // Description: Saves user modifications to CSV file
         // **************************************************
         private void SaveButtonClick(object sender, RoutedEventArgs e)
         {
-            // TODO: Implement save functionality
+            try
+            {
+                string currentVideoName = videoName.Text;
+
+                if (string.IsNullOrEmpty(currentVideoName) || currentVideoName == "--")
+                {
+                    MessageBox.Show("No video selected to save changes for.", "Save Error",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                string csvPath = GetCsvScriptDirectory();
+
+                if (!File.Exists(csvPath))
+                {
+                    MessageBox.Show("CSV file not found.", "Save Error",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                UpdateCsvFile(csvPath, currentVideoName);
+
+                MessageBox.Show("Changes saved successfully!", "Save Successful",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error saving changes to CSV");
+                MessageBox.Show($"Error saving changes: {ex.Message}", "Save Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // **************************************************
+        // Function: UpdateCsvFile
+        // Description: Updates CSV file with modified video data
+        // **************************************************
+        private void UpdateCsvFile(string csvPath, string videoFileName)
+        {
+            string[] lines = File.ReadAllLines(csvPath);
+            List<string> updatedLines = new List<string>();
+
+            // Keep the header
+            updatedLines.Add(lines[0]);
+
+            bool videoFound = false;
+
+            for (int i = 1; i < lines.Length; i++)
+            {
+                string[] columns = lines[i].Split(',');
+
+                // Check if this is the row for the current video
+                if (columns[0].Trim() == videoFileName)
+                {
+                    // Update the row with modified values
+                    string updatedRow = CreateUpdatedCsvRow(columns);
+                    updatedLines.Add(updatedRow);
+                    videoFound = true;
+                }
+                else
+                {
+                    // Keep the original row
+                    updatedLines.Add(lines[i]);
+                }
+            }
+
+            if (!videoFound)
+            {
+                throw new InvalidOperationException($"Video {videoFileName} not found in CSV file.");
+            }
+
+            // Write all lines back to the CSV file
+            File.WriteAllLines(csvPath, updatedLines);
+        }
+
+        // **************************************************
+        // Function: CreateUpdatedCsvRow
+        // Description: Creates updated CSV row from UI values
+        // **************************************************
+        private string CreateUpdatedCsvRow(string[] originalColumns)
+        {
+            // Get values from UI controls
+            string likelyClass = GetFishPresentClass();
+            string direction = GetTravelDirectionValue();
+            string species = fishSpecies.Text.Trim();
+
+            // Keep original values for fields not editable in UI
+            string videoFile = originalColumns[0].Trim();
+            string trackId = originalColumns[1].Trim();
+            string confidence = originalColumns[3].Trim();
+            string startTime = originalColumns[4].Trim();
+            string endTime = originalColumns[5].Trim();
+            string avgConfidence = originalColumns[6].Trim();
+
+            // If user entered a species, update the likely_class
+            if (!string.IsNullOrEmpty(species) && species != "--")
+            {
+                likelyClass = species.ToLower();
+            }
+
+            // Build the CSV row
+            return $"{videoFile},{trackId},{likelyClass},{confidence},{startTime},{endTime},{avgConfidence},{direction}";
+        }
+
+        // **************************************************
+        // Function: GetFishPresentClass
+        // Description: Converts UI fish present status to CSV class value
+        // **************************************************
+        private string GetFishPresentClass()
+        {
+            var selectedItem = fishPresentStatus.SelectedItem as ComboBoxItem;
+
+            if (selectedItem == null)
+            {
+                return "unknown";
+            }
+
+            string status = selectedItem.Content.ToString();
+            return status == "Present" ? "fish" : "not_fish";
+        }
+
+        // **************************************************
+        // Function: GetTravelDirectionValue
+        // Description: Gets travel direction value from UI
+        // **************************************************
+        private string GetTravelDirectionValue()
+        {
+            var selectedItem = travelDirection.SelectedItem as ComboBoxItem;
+
+            if (selectedItem == null)
+            {
+                return "unknown";
+            }
+
+            return selectedItem.Content.ToString().ToLower();
         }
 
         #endregion

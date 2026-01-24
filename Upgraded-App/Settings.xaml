@@ -14,11 +14,11 @@
         
         
         <!-- Header -->
-        <Border Grid.Row="0" 
+            <Border Grid.Row="0" 
                 Background="#0D3640" 
                 Padding="30,20">
             <TextBlock Text="Settings" 
-                       FontSize="28" 
+                       FontSize="{DynamicResource LargeHeaderFontSize}"
                        FontWeight="SemiBold"
                        Foreground="White"/>
         </Border>
@@ -31,7 +31,7 @@
 
                 <!-- Analysis Settings -->
                 <TextBlock Text="Analysis" 
-                           FontSize="20" 
+                           FontSize="{DynamicResource LargeHeaderFontSize}"
                            FontWeight="SemiBold"
                            Foreground="#0D3640"
                            Margin="0,0,0,15"/>
@@ -46,12 +46,12 @@
 
                         <!-- Confidence Threshold -->
                         <TextBlock Text="Confidence Threshold for Data Entry" 
-                                   FontSize="14" 
+                                   FontSize="{DynamicResource BaseFontSize}"
                                    FontWeight="SemiBold"
                                    Foreground="#0D3640"
                                    Margin="0,0,0,8"/>
                         <TextBlock Text="Minimum confidence level required to automatically populate analysis fields" 
-                                   FontSize="12" 
+                                   FontSize="{DynamicResource BaseFontSize}"
                                    Foreground="#8BA5AE"
                                    Margin="0,0,0,10"
                                    TextWrapping="Wrap"/>
@@ -80,7 +80,7 @@
                                     MinWidth="60">
                                 <TextBlock x:Name="confidenceValue" 
                                            Text="75%"
-                                           FontSize="14"
+                                           FontSize="{DynamicResource BaseFontSize}"
                                            FontWeight="SemiBold"
                                            Foreground="White"
                                            HorizontalAlignment="Center"/>
@@ -91,40 +91,40 @@
                 </Border>
                 <!-- Script Output Settings -->
                 <TextBlock Text="Output" 
-                           FontSize="20" 
+                           FontSize="{DynamicResource LargeHeaderFontSize}"
                            FontWeight="SemiBold"
                            Foreground="#0D3640"
                            Margin="0,0,0,15"/>
-                <StackPanel>
+                    <StackPanel>
                     <!-- Hide Errors -->
                     <CheckBox x:Name="hideOutput"
                                   Content="Redirect Output Messages"
-                                  FontSize="14"
+                                  FontSize="{DynamicResource BaseFontSize}"
                                   Foreground="#0D3640"
                                   Margin="0,0,0,0"
                                   IsChecked="False"
                                   Click="ToggleOutputMessages"/>
                     <TextBlock Text="Show output messages as a pop-up window at the end of the program instead of in the terminal."
-                           FontSize="12"
+                           FontSize="{DynamicResource BaseFontSize}"
                                Margin="0,0,0,15"/>
 
                     <!-- Hide Output -->
                     <CheckBox x:Name="hideErrors"
                                   Content="Redirect Error Messages"
-                                  FontSize="14"
+                                  FontSize="{DynamicResource BaseFontSize}"
                                   Foreground="#0D3640"
                                   Margin="0,0,0,0"
                                   IsChecked="False"
                                   Click="ToggleErrorMessages"/>
                     <TextBlock Text="Show error messages as a pop-up window at the end of the program instead of in the terminal."
-                        FontSize="12"
+                        FontSize="{DynamicResource BaseFontSize}"
                         Margin="0,0,0,15"/>
                                   
                     
                 </StackPanel>
                 <!-- Video Settings -->
                 <TextBlock Text="Video" 
-                           FontSize="20" 
+                           FontSize="{DynamicResource LargeHeaderFontSize}"
                            FontWeight="SemiBold"
                            Foreground="#0D3640"
                            Margin="0,0,0,15"/>
@@ -140,19 +140,19 @@
                         <!-- Auto-play Videos -->
                         <CheckBox x:Name="autoPlayVideos"
                                   Content="Auto-play videos when selected"
-                                  FontSize="14"
+                                  FontSize="{DynamicResource BaseFontSize}"
                                   Foreground="#0D3640"
                                   Margin="0,0,0,15"
                                   IsChecked="True"/>
 
                         <!-- Video Quality -->
                         <TextBlock Text="Video Playback Quality" 
-                                   FontSize="14" 
+                                   FontSize="{DynamicResource BaseFontSize}"
                                    FontWeight="SemiBold"
                                    Foreground="#0D3640"
                                    Margin="0,0,0,8"/>
                         <ComboBox x:Name="videoQuality"
-                                  FontSize="14"
+                                  FontSize="{DynamicResource BaseFontSize}"
                                   Padding="8"
                                   BorderBrush="#8BA5AE"
                                   BorderThickness="1">
@@ -166,7 +166,7 @@
 
                 <!-- Accessibility Settings -->
                 <TextBlock Text="Accessibility" 
-                           FontSize="20" 
+                           FontSize="{DynamicResource LargeHeaderFontSize}"
                            FontWeight="SemiBold"
                            Foreground="#0D3640"
                            Margin="0,0,0,15"/>
@@ -182,14 +182,14 @@
                         <!-- High Contrast Mode -->
                         <CheckBox x:Name="highContrastMode"
                                   Content="High contrast mode"
-                                  FontSize="14"
+                                  FontSize="{DynamicResource BaseFontSize}"
                                   Foreground="#0D3640"
                                   Margin="0,0,0,15"/>
 
                         <!-- Large Text -->
                         <CheckBox x:Name="largeText"
                                   Content="Use larger text throughout the application"
-                                  FontSize="14"
+                                  FontSize="{DynamicResource BaseFontSize}"
                                   Foreground="#0D3640"
                                   Margin="0,0,0,15"/>
 
@@ -211,7 +211,7 @@
                         Click="SaveSettings_Click"
                         Background="#0D3640"
                         Foreground="White"
-                        FontSize="14"
+                    FontSize="{DynamicResource BaseFontSize}"
                         FontWeight="SemiBold"
                         Padding="20,10"
                         BorderThickness="0"

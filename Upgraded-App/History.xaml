@@ -16,12 +16,12 @@
                 Padding="30,25">
             <StackPanel>
                 <TextBlock Text="Reports &amp; Analytics" 
-                           FontSize="32" 
+                           FontSize="{DynamicResource LargeHeaderFontSize}"
                            FontWeight="SemiBold"
                            Foreground="White"
                            Margin="0,0,0,5"/>
                 <TextBlock Text="Filter, analyze, and export your detection data" 
-                           FontSize="14" 
+                           FontSize="{DynamicResource BaseFontSize}"
                            Foreground="#B0C4CB"
                            FontWeight="Normal"/>
             </StackPanel>
@@ -43,7 +43,7 @@
                     <StackPanel>
                         <!-- Filters Section -->
                         <TextBlock Text="🔍 Filters" 
-                                   FontSize="18" 
+                                   FontSize="{DynamicResource LargeFontSize}"
                                    FontWeight="SemiBold"
                                    Foreground="#0D3640"
                                    Margin="0,0,0,15"/>
@@ -51,18 +51,18 @@
                         <!-- Date Range Filter with Button -->
                         <Grid Margin="0,0,0,8">
                             <TextBlock Text="Date Range" 
-                                       FontSize="13" 
+                                       FontSize="{DynamicResource BaseFontSize}"
                                        FontWeight="SemiBold"
                                        Foreground="#14171A"
                                        HorizontalAlignment="Left"
                                        VerticalAlignment="Center"/>
 
-                            <Button Content="Select Entire Date Range" 
+                                <Button Content="Select Entire Date Range" 
                                     Click="AllDatesClick"
                                     Background="White"
                                     Foreground="#0D3640"
                                     BorderBrush="#C7D8DD"
-                                    FontSize="13"
+                                    FontSize="{DynamicResource BaseFontSize}"
                                     FontWeight="SemiBold"
                                     Padding="10,6"
                                     BorderThickness="1"
@@ -104,7 +104,7 @@
                                         Background="#F5F8FA"
                                         BorderBrush="#C7D8DD"
                                         Padding="10,8"
-                                        FontSize="12"/>
+                                        FontSize="{DynamicResource BaseFontSize}"/>
 
                             <TextBlock Grid.Column="1" 
                                        Text="—" 
@@ -117,7 +117,7 @@
                                         Background="#F5F8FA"
                                         BorderBrush="#C7D8DD"
                                         Padding="10,8"
-                                        FontSize="12"/>
+                                        FontSize="{DynamicResource BaseFontSize}"/>
                         </Grid>
 
                         <!-- Species Filter -->
@@ -131,7 +131,7 @@
                                   Background="#F5F8FA"
                                   BorderBrush="#C7D8DD"
                                   Padding="12,8"
-                                  FontSize="13"
+                                  FontSize="{DynamicResource BaseFontSize}"
                                   Margin="0,0,0,15"
                                   SelectedIndex="0">
                             <ComboBoxItem Content="All Species"/>
@@ -142,7 +142,7 @@
 
                         <!-- Direction Filter -->
                         <TextBlock Text="Direction" 
-                                   FontSize="13" 
+                                   FontSize="{DynamicResource BaseFontSize}"
                                    FontWeight="SemiBold"
                                    Foreground="#14171A"
                                    Margin="0,0,0,8"/>
@@ -151,7 +151,7 @@
                                   Background="#F5F8FA"
                                   BorderBrush="#C7D8DD"
                                   Padding="12,8"
-                                  FontSize="13"
+                                  FontSize="{DynamicResource BaseFontSize}"
                                   Margin="0,0,0,15"
                                   SelectedIndex="0">
                             <ComboBoxItem Content="All Directions"/>
@@ -161,7 +161,7 @@
 
                         <!-- Camera/Video Filter -->
                         <TextBlock Text="Location" 
-                                   FontSize="13" 
+                                   FontSize="{DynamicResource BaseFontSize}"
                                    FontWeight="SemiBold"
                                    Foreground="#14171A"
                                    Margin="0,0,0,8"/>
@@ -170,7 +170,7 @@
                                   Background="#F5F8FA"
                                   BorderBrush="#C7D8DD"
                                   Padding="12,8"
-                                  FontSize="13"
+                                  FontSize="{DynamicResource BaseFontSize}"
                                   Margin="0,0,0,20"
                                   SelectedIndex="0">
                             <ComboBoxItem Content="All Locations"/>
@@ -182,7 +182,7 @@
 
                         <!-- Group By Section -->
                         <TextBlock Text="Group By" 
-           FontSize="13" 
+           FontSize="{DynamicResource BaseFontSize}"
            FontWeight="SemiBold"
            Foreground="#14171A"
            Margin="0,0,0,8"/>
@@ -191,7 +191,7 @@
           Background="#F5F8FA"
           BorderBrush="#C7D8DD"
           Padding="12,8"
-          FontSize="13"
+          FontSize="{DynamicResource BaseFontSize}"
           Margin="0,0,0,20"
           SelectedIndex="0"
           SelectionChanged="GroupBy_SelectionChanged">
@@ -202,7 +202,7 @@
 
                         <!-- Confidence Threshold Filter -->
                         <TextBlock Text="Minimum Confidence" 
-           FontSize="13" 
+           FontSize="{DynamicResource BaseFontSize}"
            FontWeight="SemiBold"
            Foreground="#14171A"
            Margin="0,0,0,8"/>
@@ -224,7 +224,7 @@
                             <TextBlock x:Name="confidenceValueText"
                Grid.Column="1"
                Text="0%"
-               FontSize="13"
+               FontSize="{DynamicResource BaseFontSize}"
                FontWeight="SemiBold"
                Foreground="#0D3640"
                Margin="10,0,0,0"
@@ -232,7 +232,7 @@
                         </Grid>
 
                         <TextBlock Text="Filter detections below this confidence level" 
-           FontSize="11" 
+           FontSize="{DynamicResource BaseFontSize}"
            Foreground="#8BA5AE"
            Margin="0,0,0,20"/>
 
@@ -241,7 +241,7 @@
                                 Click="ApplyFiltersClick"
                                 Background="#0D3640"
                                 Foreground="White"
-                                FontSize="13"
+                            FontSize="{DynamicResource BaseFontSize}"
                                 FontWeight="SemiBold"
                                 Padding="0,10"
                                 BorderThickness="0"
@@ -276,7 +276,7 @@
                                 Foreground="#0D3640"
                                 BorderBrush="#C7D8DD"
                                 BorderThickness="1"
-                                FontSize="13"
+                            FontSize="{DynamicResource BaseFontSize}"
                                 FontWeight="SemiBold"
                                 Padding="0,10"
                                 Cursor="Hand"
@@ -336,7 +336,7 @@
                         <Grid>
                             <TextBlock x:Name="viewTitle"
                                        Text="Analysis Report" 
-                                       FontSize="16" 
+                                       FontSize="{DynamicResource LargeFontSize}"
                                        FontWeight="SemiBold"
                                        Foreground="#0D3640"
                                        VerticalAlignment="Center"/>
@@ -344,7 +344,7 @@
                             <StackPanel Orientation="Horizontal" 
                                         HorizontalAlignment="Right">
                                 <ComboBox x:Name="reportTypeCombo"
-                                          FontSize="12"
+                                          FontSize="{DynamicResource BaseFontSize}"
                                           Padding="10,5"
                                           Background="White"
                                           BorderBrush="#C7D8DD"
@@ -365,16 +365,16 @@
                                 HorizontalAlignment="Center" 
                                 VerticalAlignment="Center">
                         <TextBlock Text="📊" 
-                                   FontSize="80" 
+                                   FontSize="{DynamicResource LargeTitleFontSize}"
                                    HorizontalAlignment="Center"
                                    Opacity="0.3"/>
                         <TextBlock Text="Generate a report" 
-                                   FontSize="16" 
+                                   FontSize="{DynamicResource LargeFontSize}"
                                    Foreground="#8BA5AE"
                                    HorizontalAlignment="Center"
                                    Margin="0,20,0,0"/>
                         <TextBlock Text="Configure your filters and click the button below" 
-                                   FontSize="14" 
+                                   FontSize="{DynamicResource BaseFontSize}"
                                    Foreground="#8BA5AE"
                                    HorizontalAlignment="Center"
                                    Margin="0,5,0,0"/>
@@ -432,11 +432,11 @@
                             Visibility="Collapsed">
                         <StackPanel Orientation="Horizontal" 
                                     HorizontalAlignment="Center">
-                            <Button Content="💾 Export Report" 
+                                <Button Content="💾 Export Report" 
                                     Click="ExportReportClick"
                                     Background="#0D3640"
                                     Foreground="White"
-                                    FontSize="13"
+                                    FontSize="{DynamicResource BaseFontSize}"
                                     FontWeight="SemiBold"
                                     Padding="20,10"
                                     BorderThickness="0"
@@ -465,13 +465,13 @@
                                 </Button.Style>
                             </Button>
 
-                            <Button Content="🖨️ Print Report" 
+                                <Button Content="🖨️ Print Report" 
                                     Click="PrintReportClick"
                                     Background="White"
                                     Foreground="#0D3640"
                                     BorderBrush="#C7D8DD"
                                     BorderThickness="1"
-                                    FontSize="13"
+                                    FontSize="{DynamicResource BaseFontSize}"
                                     FontWeight="SemiBold"
                                     Padding="20,10"
                                     Cursor="Hand">
@@ -518,7 +518,7 @@
                             Click="GenerateReportClick"
                             Background="#0D3640"
                             Foreground="White"
-                            FontSize="14"
+                            FontSize="{DynamicResource BaseFontSize}"
                             FontWeight="SemiBold"
                             Padding="25,12"
                             BorderThickness="0"

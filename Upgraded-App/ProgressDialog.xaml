@@ -11,7 +11,7 @@
         <StackPanel>
             <TextBlock x:Name="messageText" 
                        Text="Processing videos, please wait..." 
-                       FontSize="14"
+                       FontSize="{DynamicResource BaseFontSize}"
                        Margin="0,0,0,20"
                        TextWrapping="Wrap"/>
             <ProgressBar x:Name="progressBar" 
