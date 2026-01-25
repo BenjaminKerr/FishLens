@@ -23,12 +23,15 @@ namespace FishLens_App
     /// </summary>
     public partial class Settings : Page
     {
+        #region Fields
         private readonly IProjectPathResolver _pathResolver;
         private readonly IFileSystemManager _fileSystemManager;
         private readonly ILogger<MainWindow> _logger;
         private CheckBoxToggle _checkBoxes;
         private AppConfiguration _config;
+        #endregion
 
+        #region Constructors
         public Settings(IProjectPathResolver pathresolver, IFileSystemManager fileSystemManager, ILogger<MainWindow> logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -48,7 +51,9 @@ namespace FishLens_App
                 _logger.LogError(ex, "Failed to load settings");
             }
         }
+        #endregion
 
+        #region Event Handlers
         private void ConfidenceThreshold_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
         {
             if (confidenceValue == null) return;
@@ -125,50 +130,9 @@ namespace FishLens_App
 
                 MessageBox.Show("Settings saved.", "Saved", MessageBoxButton.OK, MessageBoxImage.Information);
                 _logger.LogInformation("Settings saved to {path}", configPath);
-                // Apply certain settings immediately to main window
-                try
-                {
-                    var main = Application.Current.MainWindow as MainWindow;
-                    if (main != null)
-                    {
-                        // High contrast
-                        if (_config.HighContrastMode)
-                        {
-                            main.Dispatcher.Invoke(() =>
-                            {
-                                main.Background = new SolidColorBrush(Colors.Black);
-                                var titleTb = main.FindName("Title") as TextBlock;
-                                if (titleTb != null) titleTb.Foreground = new SolidColorBrush(Colors.White);
-                            });
-                        }
-                        else
-                        {
-                            main.Dispatcher.Invoke(() =>
-                            {
-                                main.Background = (SolidColorBrush)(new BrushConverter().ConvertFrom("#E8F4F8"));
-                                var titleTb = main.FindName("Title") as TextBlock;
-                                if (titleTb != null) titleTb.Foreground = (SolidColorBrush)(new BrushConverter().ConvertFrom("#0D3640"));
-                            });
-                        }
 
-                        // Apply large text setting
-                        if (_config.LargeText)
-                        {
-                            Application.Current.Resources["BaseFontSize"] = 18.0;
-                            Application.Current.Resources["HeaderFontSize"] = 32.0;
-                            Application.Current.Resources["LargeHeaderFontSize"] = 42.0;
-                            Application.Current.Resources["TitleFontSize"] = 72.0;
-                        }
-                        else
-                        {
-                            Application.Current.Resources["BaseFontSize"] = 14.0;
-                            Application.Current.Resources["HeaderFontSize"] = 24.0;
-                            Application.Current.Resources["LargeHeaderFontSize"] = 32.0;
-                            Application.Current.Resources["TitleFontSize"] = 56.0;
-                        }
-                    }
-                }
-                catch { }
+                // Apply certain settings immediately to main window
+                ApplySettingsToMainWindow();
             }
             catch (Exception ex)
             {
@@ -177,6 +141,18 @@ namespace FishLens_App
             }
         }
 
+        private void ToggleErrorMessages(object sender, RoutedEventArgs e)
+        {
+            _checkBoxes.ErrorBox = hideErrors.IsChecked ?? false;
+        }
+
+        private void ToggleOutputMessages(object sender, RoutedEventArgs e)
+        {
+            _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
+        }
+        #endregion
+
+        #region Private Methods
         private void LoadSettings()
         {
             // Set defaults from current runtime state
@@ -253,15 +229,38 @@ namespace FishLens_App
             }
         }
 
-        private void ToggleErrorMessages(object sender, RoutedEventArgs e)
+        private void ApplySettingsToMainWindow()
         {
-            _checkBoxes.ErrorBox = hideErrors.IsChecked ?? false;
-        }
+            try
+            {
+                var main = Application.Current.MainWindow as MainWindow;
+                if (main != null)
+                {
+                    // Apply high contrast mode (handles both enabled and disabled states)
+                    main.Dispatcher.Invoke(() =>
+                    {
+                        ThemeHelper.ApplyHighContrastMode(_config.HighContrastMode);
+                    });
 
-        private void ToggleOutputMessages(object sender, RoutedEventArgs e)
-        {
-            _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
+                    // Apply large text setting
+                    if (_config.LargeText)
+                    {
+                        Application.Current.Resources["BaseFontSize"] = 18.0;
+                        Application.Current.Resources["HeaderFontSize"] = 32.0;
+                        Application.Current.Resources["LargeHeaderFontSize"] = 42.0;
+                        Application.Current.Resources["TitleFontSize"] = 72.0;
+                    }
+                    else
+                    {
+                        Application.Current.Resources["BaseFontSize"] = 14.0;
+                        Application.Current.Resources["HeaderFontSize"] = 24.0;
+                        Application.Current.Resources["LargeHeaderFontSize"] = 32.0;
+                        Application.Current.Resources["TitleFontSize"] = 56.0;
+                    }
+                }
+            }
+            catch { }
         }
-
+        #endregion
     }
 }

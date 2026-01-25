@@ -17,7 +17,7 @@
         </Grid.ColumnDefinitions>
         <Frame x:Name="MainFrame" NavigationUIVisibility="Visible" Grid.Column="1" Panel.ZIndex="1"/>
         <!--Sidebar: Media Selector-->
-        <Border Grid.Column="0" Background="#1B4F5C" BorderThickness="0,0,1,0" BorderBrush="#0D3640">
+        <Border x:Name="SideBar" Grid.Column="0" Background="#1B4F5C" BorderThickness="0,0,1,0" BorderBrush="#0D3640">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>

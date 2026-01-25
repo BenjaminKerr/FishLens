@@ -68,6 +68,12 @@ namespace FishLens_App
 
             _checkBoxes = GetCheckBoxToggleFromApplication();
             _config = GetConfigurationFromApplication();
+
+            //// Apply high contrast if it was saved
+            //if (_config?.HighContrastMode ?? false)
+            //{
+            //    Loaded += (s, e) => ThemeHelper.ApplyHighContrastMode(true);
+            //}
         }
 
         // **************************************************
@@ -259,6 +265,15 @@ namespace FishLens_App
             try
             {
                 MainFrame.Navigate(new History(_pathResolver, _fileSystemManager, _logger));
+
+                // Only apply theme if high contrast mode is enabled
+                if (_config?.HighContrastMode ?? false)
+                {
+                    MainFrame.Dispatcher.InvokeAsync(() =>
+                    {
+                        ThemeHelper.ApplyHighContrastMode(true);
+                    }, System.Windows.Threading.DispatcherPriority.Loaded);
+                }
             }
             catch (Exception ex)
             {
@@ -278,6 +293,15 @@ namespace FishLens_App
             try
             {
                 MainFrame.Navigate(new Settings(_pathResolver, _fileSystemManager, _logger));
+
+                // Only apply theme if high contrast mode is enabled
+                if (_config?.HighContrastMode ?? false)
+                {
+                    MainFrame.Dispatcher.InvokeAsync(() =>
+                    {
+                        ThemeHelper.ApplyHighContrastMode(true);
+                    }, System.Windows.Threading.DispatcherPriority.Loaded);
+                }
             }
             catch (Exception ex)
             {
