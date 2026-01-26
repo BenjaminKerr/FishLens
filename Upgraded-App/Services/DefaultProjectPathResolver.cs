@@ -17,8 +17,9 @@ namespace FishLens_App.Services
     public class DefaultProjectPathResolver : IProjectPathResolver
     {
         // **************************************************
-        // Function: Resolves the Project Root
-        // Description: Finds the project root and returns it as a string
+        // Function: ResolveProjectRoot
+        // Description: Resolves the Project Root
+        // **************************************************
         public override string ResolveProjectRoot()
         {
             string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
@@ -26,32 +27,36 @@ namespace FishLens_App.Services
         }
 
         // **************************************************
-        // Function: Resolves the a Path
-        // Description: Finds the project root and returns it combined with the path
+        // Function: ResolvePath
+        // Description: Resolves the a Path
+        // **************************************************
         public override string ResolvePath(string subdirectory)
         {
             return Path.Combine(ResolveProjectRoot(), subdirectory);
         }
 
         // **************************************************
-        // Function: Resolves the Yolo Script Path
-        // Description: Finds the project root and returns it combined with "main.py"
+        // Function: ResolveYoloScriptPath
+        // Description: Resolves the Yolo Script Path
+        // **************************************************
         public override string ResolveYoloScriptPath()
         {
             return Path.Combine(ResolveProjectRoot(), "main.py");
         }
 
         // **************************************************
-        // Function: Resolves the CSV Script Path
-        // Description: Finds the project root and returns it combined with "fish_summary.csv"
+        // Function: ResolveCsvScriptDirectory
+        // Description: Resolves the CSV Script Path
+        // **************************************************
         public override string ResolveCsvScriptDirectory()
         {
             return Path.Combine(ResolveProjectRoot(), "fish_summary.csv");
         }
 
         // **************************************************
-        // Function: Resolves the Source Folder
-        // Description: Finds the folder selected by the user and returns it as a string
+        // Function: ResolveSourceFolder
+        // Description: Resolves the Source Folder
+        // **************************************************
         public override string ResolveSourceFolder()
         {
             // User opens a folder full of videos

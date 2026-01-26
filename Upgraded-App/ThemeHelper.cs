@@ -12,13 +12,12 @@ using System.Windows;
 
 namespace FishLens_App
 {
-    /// <summary>
-    /// Theme helper that switches application ResourceDictionaries for theming.
-    /// Manual control-property mutation methods were removed in favor of dictionary swapping.
-    /// </summary>
     public static class ThemeHelper
     {
-        /// <summary>Swap application theme to high-contrast or normal.</summary>
+        // **************************************************
+        // Function: ApplyHighContrastMode
+        // Description: Swap application theme to high-contrast or normal.
+        // **************************************************
         public static void ApplyHighContrastMode(bool enabled)
         {
             try
@@ -41,7 +40,10 @@ namespace FishLens_App
             }
         }
 
-        /// <summary>Replace existing theme dictionaries and load the requested one.</summary>
+        // **************************************************
+        // Function: SwapThemeDictionary
+        // Description: Replace existing theme dictionaries and load the requested one.
+        // **************************************************
         private static void SwapThemeDictionary(string themeFileName)
         {
             if (Application.Current == null) return;

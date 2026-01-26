@@ -6,6 +6,10 @@ using System.Threading.Tasks;
 
 namespace FishLens_App
 {
+    // **************************************************
+    // Function: CheckBoxToggle
+    // Description: Small DTO that stores UI toggle state for output and error redirection.
+    // **************************************************
     public class CheckBoxToggle
     {
         public bool OutputBox { get; set; } = false;

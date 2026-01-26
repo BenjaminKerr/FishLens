@@ -21,14 +21,17 @@ namespace FishLens_App.Services
 
         // **************************************************
         // Function: StandardFileSystemManager Constructor
+        // Description: Initializes StandardFileSystemManager with default logger
+        // **************************************************
         public StandardFileSystemManager() : this(GetDefaultLogger())
         {
         }
 
         // **************************************************
-        // Function: Gets the Default Logger
+        // Function: GetDefaultLogger
         // Description: Creates and returns a logger
         // Notes: TO-DO COMBINE WITH MAINWINDOW GETDEFAULTLOGGER()
+        // **************************************************
         private static ILogger<StandardFileSystemManager> GetDefaultLogger()
         {
             using var loggerFactory = LoggerFactory.Create(builder =>
@@ -40,23 +43,45 @@ namespace FishLens_App.Services
 
         // **************************************************
         // Function: Parameterized Constructor
+        // Description: Initializes StandardFileSystemManager with provided logger
+        // **************************************************
         public StandardFileSystemManager(ILogger<StandardFileSystemManager> logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         // **************************************************
-        // Function: Copies a File
+        // Function: CopyFile
+        // Description: Copies a File
         // Notes: TO-DO IMPLEMENT COPYFILE
+        // **************************************************
         public override bool CopyFile(string sourcePath, string destinationPath)
         {
-            throw new NotImplementedException();
+            try
+            {
+                // Ensure destination directory exists
+                var destDir = Path.GetDirectoryName(destinationPath) ?? string.Empty;
+                if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
+                {
+                    Directory.CreateDirectory(destDir);
+                }
+
+                File.Copy(sourcePath, destinationPath, overwrite: true);
+                _logger.LogInformation("File copied from {Source} to {Destination}", sourcePath, destinationPath);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to copy file from {Source} to {Destination}", sourcePath, destinationPath);
+                return false;
+            }
         }
 
 
         // **************************************************
-        // Function: Creates a Directory if it Doesn't Already Exist
-        // Description: Tries to create a directory, returns true if it can, false if not
+        // Function: CreateDirectoryIfNotExists
+        // Description: Creates a Directory if it Doesn't Already Exist
+        // **************************************************
         public override bool CreateDirectoryIfNotExists(string path)
         {
             try
@@ -73,11 +98,22 @@ namespace FishLens_App.Services
         }
 
         // **************************************************
-        // Function: Lists Files
+        // Function: ListFiles
+        // Description: Lists Files
         // Notes: TO-DO IMPLEMENT LISTFILES
+        // **************************************************
         public override IEnumerable<string> ListFiles(string directoryPath)
         {
-            throw new NotImplementedException();
+            try
+            {
+                if (!Directory.Exists(directoryPath)) return Array.Empty<string>();
+                return Directory.GetFiles(directoryPath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to list files in {Path}", directoryPath);
+                return Array.Empty<string>();
+            }
         }
     }
 }
