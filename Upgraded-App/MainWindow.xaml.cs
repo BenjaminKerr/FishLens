@@ -69,11 +69,17 @@ namespace FishLens_App
             _checkBoxes = GetCheckBoxToggleFromApplication();
             _config = GetConfigurationFromApplication();
 
-            //// Apply high contrast if it was saved
-            //if (_config?.HighContrastMode ?? false)
-            //{
-            //    Loaded += (s, e) => ThemeHelper.ApplyHighContrastMode(true);
-            //}
+            // Only reset theme if high contrast mode was enabled
+            Loaded += (s, e) =>
+            {
+                if (_config?.HighContrastMode ?? false)
+                {
+                    // Reset to normal mode
+                    _config.HighContrastMode = false;
+                    ThemeHelper.ApplyHighContrastMode(false);
+                }
+                // Otherwise, leave everything at default XAML values
+            };
         }
 
         // **************************************************
