@@ -1,8 +1,15 @@
 ﻿<Page x:Class="FishLens_App.History"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="History"
-        Background="#F5F8FA">
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="History"
+      Background="{DynamicResource PageBackgroundBrush}">
+    <Page.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/NormalTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Page.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -10,19 +17,18 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Header -->
         <Border Grid.Row="0" 
-                Background="#0D3640" 
+                Background="{DynamicResource PrimaryColorBrush}" 
                 Padding="30,25">
             <StackPanel>
                 <TextBlock Text="Reports &amp; Analytics" 
                            FontSize="{DynamicResource LargeHeaderFontSize}"
                            FontWeight="SemiBold"
-                           Foreground="White"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
                            Margin="0,0,0,5"/>
                 <TextBlock Text="Filter, analyze, and export your detection data" 
                            FontSize="{DynamicResource BaseFontSize}"
-                           Foreground="#B0C4CB"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
                            FontWeight="Normal"/>
             </StackPanel>
         </Border>
@@ -33,35 +39,32 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Filters & Controls Panel -->
             <Border Grid.Column="0"
-                    Background="White"
-                    BorderBrush="#E1E8ED"
+                    Background="{DynamicResource SecondaryBackgroundBrush}"
+                    BorderBrush="{DynamicResource BorderColorBrush}"
                     BorderThickness="0,0,1,0"
                     Padding="30,20">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <!-- Filters Section -->
                         <TextBlock Text="🔍 Filters" 
                                    FontSize="{DynamicResource LargeFontSize}"
                                    FontWeight="SemiBold"
-                                   Foreground="#0D3640"
+                                   Foreground="{DynamicResource PrimaryColorBrush}"
                                    Margin="0,0,0,15"/>
 
-                        <!-- Date Range Filter with Button -->
                         <Grid Margin="0,0,0,8">
                             <TextBlock Text="Date Range" 
                                        FontSize="{DynamicResource BaseFontSize}"
                                        FontWeight="SemiBold"
-                                       Foreground="#14171A"
+                                       Foreground="{DynamicResource PrimaryTextBrush}"
                                        HorizontalAlignment="Left"
                                        VerticalAlignment="Center"/>
 
-                                <Button Content="Select Entire Date Range" 
+                            <Button Content="Select Entire Date Range" 
                                     Click="AllDatesClick"
-                                    Background="White"
-                                    Foreground="#0D3640"
-                                    BorderBrush="#C7D8DD"
+                                    Background="{DynamicResource SecondaryBackgroundBrush}"
+                                    Foreground="{DynamicResource PrimaryColorBrush}"
+                                    BorderBrush="{DynamicResource BorderColorBrush}"
                                     FontSize="{DynamicResource BaseFontSize}"
                                     FontWeight="SemiBold"
                                     Padding="10,6"
@@ -74,6 +77,8 @@
                                             <Setter.Value>
                                                 <ControlTemplate TargetType="Button">
                                                     <Border Background="{TemplateBinding Background}"
+                                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                                            BorderThickness="{TemplateBinding BorderThickness}"
                                                             CornerRadius="6"
                                                             Padding="{TemplateBinding Padding}">
                                                         <ContentPresenter HorizontalAlignment="Center"
@@ -84,7 +89,7 @@
                                         </Setter>
                                         <Style.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="#F5F8FA"/>
+                                                <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
                                             </Trigger>
                                         </Style.Triggers>
                                     </Style>
@@ -101,8 +106,8 @@
 
                             <DatePicker x:Name="startDatePicker"
                                         Grid.Column="0"
-                                        Background="#F5F8FA"
-                                        BorderBrush="#C7D8DD"
+                                        Background="{DynamicResource PageBackgroundBrush}"
+                                        BorderBrush="{DynamicResource BorderColorBrush}"
                                         Padding="10,8"
                                         FontSize="{DynamicResource BaseFontSize}"/>
 
@@ -110,26 +115,25 @@
                                        Text="—" 
                                        VerticalAlignment="Center" 
                                        HorizontalAlignment="Center"
-                                       Foreground="#8BA5AE"/>
+                                       Foreground="{DynamicResource SecondaryTextBrush}"/>
 
                             <DatePicker x:Name="endDatePicker"
                                         Grid.Column="2"
-                                        Background="#F5F8FA"
-                                        BorderBrush="#C7D8DD"
+                                        Background="{DynamicResource PageBackgroundBrush}"
+                                        BorderBrush="{DynamicResource BorderColorBrush}"
                                         Padding="10,8"
                                         FontSize="{DynamicResource BaseFontSize}"/>
                         </Grid>
 
-                        <!-- Species Filter -->
                         <TextBlock Text="Species" 
                                    FontSize="13" 
                                    FontWeight="SemiBold"
-                                   Foreground="#14171A"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                    Margin="0,0,0,8"/>
 
                         <ComboBox x:Name="speciesFilter"
-                                  Background="#F5F8FA"
-                                  BorderBrush="#C7D8DD"
+                                  Background="{DynamicResource PageBackgroundBrush}"
+                                  BorderBrush="{DynamicResource BorderColorBrush}"
                                   Padding="12,8"
                                   FontSize="{DynamicResource BaseFontSize}"
                                   Margin="0,0,0,15"
@@ -140,16 +144,15 @@
                             <ComboBoxItem Content="Other"/>
                         </ComboBox>
 
-                        <!-- Direction Filter -->
                         <TextBlock Text="Direction" 
                                    FontSize="{DynamicResource BaseFontSize}"
                                    FontWeight="SemiBold"
-                                   Foreground="#14171A"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                    Margin="0,0,0,8"/>
 
                         <ComboBox x:Name="directionFilter"
-                                  Background="#F5F8FA"
-                                  BorderBrush="#C7D8DD"
+                                  Background="{DynamicResource PageBackgroundBrush}"
+                                  BorderBrush="{DynamicResource BorderColorBrush}"
                                   Padding="12,8"
                                   FontSize="{DynamicResource BaseFontSize}"
                                   Margin="0,0,0,15"
@@ -159,16 +162,15 @@
                             <ComboBoxItem Content="Downstream"/>
                         </ComboBox>
 
-                        <!-- Camera/Video Filter -->
                         <TextBlock Text="Location" 
                                    FontSize="{DynamicResource BaseFontSize}"
                                    FontWeight="SemiBold"
-                                   Foreground="#14171A"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                    Margin="0,0,0,8"/>
 
                         <ComboBox x:Name="cameraFilter"
-                                  Background="#F5F8FA"
-                                  BorderBrush="#C7D8DD"
+                                  Background="{DynamicResource PageBackgroundBrush}"
+                                  BorderBrush="{DynamicResource BorderColorBrush}"
                                   Padding="12,8"
                                   FontSize="{DynamicResource BaseFontSize}"
                                   Margin="0,0,0,20"
@@ -179,33 +181,30 @@
                             <ComboBoxItem Content="Spencer Creek"/>
                         </ComboBox>
 
-
-                        <!-- Group By Section -->
                         <TextBlock Text="Group By" 
-           FontSize="{DynamicResource BaseFontSize}"
-           FontWeight="SemiBold"
-           Foreground="#14171A"
-           Margin="0,0,0,8"/>
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
+                                   Margin="0,0,0,8"/>
 
                         <ComboBox x:Name="groupByCombo"
-          Background="#F5F8FA"
-          BorderBrush="#C7D8DD"
-          Padding="12,8"
-          FontSize="{DynamicResource BaseFontSize}"
-          Margin="0,0,0,20"
-          SelectedIndex="0"
-          SelectionChanged="GroupBy_SelectionChanged">
+                                  Background="{DynamicResource PageBackgroundBrush}"
+                                  BorderBrush="{DynamicResource BorderColorBrush}"
+                                  Padding="12,8"
+                                  FontSize="{DynamicResource BaseFontSize}"
+                                  Margin="0,0,0,20"
+                                  SelectedIndex="0"
+                                  SelectionChanged="GroupBy_SelectionChanged">
                             <ComboBoxItem Content="🔤 Species"/>
                             <ComboBoxItem Content="📅 Date &amp; Time"/>
                             <ComboBoxItem Content="📍 Location"/>
                         </ComboBox>
 
-                        <!-- Confidence Threshold Filter -->
                         <TextBlock Text="Minimum Confidence" 
-           FontSize="{DynamicResource BaseFontSize}"
-           FontWeight="SemiBold"
-           Foreground="#14171A"
-           Margin="0,0,0,8"/>
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
+                                   Margin="0,0,0,8"/>
 
                         <Grid Margin="0,0,0,5">
                             <Grid.ColumnDefinitions>
@@ -214,34 +213,33 @@
                             </Grid.ColumnDefinitions>
 
                             <Slider x:Name="confidenceSlider"
-            Grid.Column="0"
-            Minimum="0"
-            Maximum="100"
-            Value="0"
-            TickFrequency="10"
-            IsSnapToTickEnabled="True"/>
+                                    Grid.Column="0"
+                                    Minimum="0"
+                                    Maximum="100"
+                                    Value="0"
+                                    TickFrequency="10"
+                                    IsSnapToTickEnabled="True"/>
 
                             <TextBlock x:Name="confidenceValueText"
-               Grid.Column="1"
-               Text="0%"
-               FontSize="{DynamicResource BaseFontSize}"
-               FontWeight="SemiBold"
-               Foreground="#0D3640"
-               Margin="10,0,0,0"
-               VerticalAlignment="Center"/>
+                                       Grid.Column="1"
+                                       Text="0%"
+                                       FontSize="{DynamicResource BaseFontSize}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource PrimaryColorBrush}"
+                                       Margin="10,0,0,0"
+                                       VerticalAlignment="Center"/>
                         </Grid>
 
                         <TextBlock Text="Filter detections below this confidence level" 
-           FontSize="{DynamicResource BaseFontSize}"
-           Foreground="#8BA5AE"
-           Margin="0,0,0,20"/>
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Margin="0,0,0,20"/>
 
-                        <!-- Filter Action Buttons -->
                         <Button Content="Apply Filters" 
                                 Click="ApplyFiltersClick"
-                                Background="#0D3640"
-                                Foreground="White"
-                            FontSize="{DynamicResource BaseFontSize}"
+                                Background="{DynamicResource PrimaryColorBrush}"
+                                Foreground="{DynamicResource SecondaryTextBrush}"
+                                FontSize="{DynamicResource BaseFontSize}"
                                 FontWeight="SemiBold"
                                 Padding="0,10"
                                 BorderThickness="0"
@@ -263,7 +261,7 @@
                                     </Setter>
                                     <Style.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="Background" Value="#165666"/>
+                                            <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
                                         </Trigger>
                                     </Style.Triggers>
                                 </Style>
@@ -272,11 +270,11 @@
 
                         <Button Content="Clear Filters" 
                                 Click="ClearFiltersClick"
-                                Background="White"
-                                Foreground="#0D3640"
-                                BorderBrush="#C7D8DD"
+                                Background="{DynamicResource SecondaryBackgroundBrush}"
+                                Foreground="{DynamicResource PrimaryColorBrush}"
+                                BorderBrush="{DynamicResource BorderColorBrush}"
                                 BorderThickness="1"
-                            FontSize="{DynamicResource BaseFontSize}"
+                                FontSize="{DynamicResource BaseFontSize}"
                                 FontWeight="SemiBold"
                                 Padding="0,10"
                                 Cursor="Hand"
@@ -299,7 +297,7 @@
                                     </Setter>
                                     <Style.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="Background" Value="#F5F8FA"/>
+                                            <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
                                         </Trigger>
                                     </Style.Triggers>
                                 </Style>
@@ -309,13 +307,12 @@
                 </ScrollViewer>
             </Border>
 
-            <!-- Report Display Panel -->
             <Border Grid.Column="1" 
                     Margin="30,20,30,30" 
-                    Background="White" 
+                    Background="{DynamicResource SecondaryBackgroundBrush}" 
                     CornerRadius="12"
                     BorderThickness="1"
-                    BorderBrush="#C7D8DD"
+                    BorderBrush="{DynamicResource BorderColorBrush}"
                     VerticalAlignment="Stretch">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.15"/>
@@ -328,9 +325,8 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Report Header -->
                     <Border Grid.Row="0" 
-                            Background="#F5F8FA" 
+                            Background="{DynamicResource PageBackgroundBrush}" 
                             Padding="20,15"
                             CornerRadius="12,12,0,0">
                         <Grid>
@@ -338,7 +334,7 @@
                                        Text="Analysis Report" 
                                        FontSize="{DynamicResource LargeFontSize}"
                                        FontWeight="SemiBold"
-                                       Foreground="#0D3640"
+                                       Foreground="{DynamicResource PrimaryColorBrush}"
                                        VerticalAlignment="Center"/>
 
                             <StackPanel Orientation="Horizontal" 
@@ -346,8 +342,8 @@
                                 <ComboBox x:Name="reportTypeCombo"
                                           FontSize="{DynamicResource BaseFontSize}"
                                           Padding="10,5"
-                                          Background="White"
-                                          BorderBrush="#C7D8DD"
+                                          Background="{DynamicResource SecondaryBackgroundBrush}"
+                                          BorderBrush="{DynamicResource BorderColorBrush}"
                                           SelectedIndex="0"
                                           SelectionChanged="ReportType_SelectionChanged">
                                     <ComboBoxItem Content="Standard Report"/>
@@ -359,7 +355,6 @@
                         </Grid>
                     </Border>
 
-                    <!-- Placeholder when no report generated -->
                     <StackPanel x:Name="placeholderPanel"
                                 Grid.Row="1"
                                 HorizontalAlignment="Center" 
@@ -367,20 +362,20 @@
                         <TextBlock Text="📊" 
                                    FontSize="{DynamicResource LargeTitleFontSize}"
                                    HorizontalAlignment="Center"
-                                   Opacity="0.3"/>
+                                   Opacity="0.3"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"/>
                         <TextBlock Text="Generate a report" 
                                    FontSize="{DynamicResource LargeFontSize}"
-                                   Foreground="#8BA5AE"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                    HorizontalAlignment="Center"
                                    Margin="0,20,0,0"/>
                         <TextBlock Text="Configure your filters and click the button below" 
                                    FontSize="{DynamicResource BaseFontSize}"
-                                   Foreground="#8BA5AE"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                    HorizontalAlignment="Center"
                                    Margin="0,5,0,0"/>
                     </StackPanel>
 
-                    <!-- Video Player (kept for compatibility) -->
                     <MediaElement x:Name="videoPlayer"
                                   Grid.Row="1"
                                   LoadedBehavior="Manual"
@@ -388,54 +383,27 @@
                                   Margin="20"
                                   Visibility="Collapsed"/>
 
-                    <!-- Report View -->
                     <ScrollViewer x:Name="reportScrollViewer"
                                   Grid.Row="1"
                                   VerticalScrollBarVisibility="Auto"
                                   Visibility="Collapsed"
                                   Padding="30,20">
                         <StackPanel x:Name="reportPanel">
-                            <!-- Report content will be added dynamically -->
                         </StackPanel>
                     </ScrollViewer>
 
-                    <!-- History List (for reference) -->
-                    <ScrollViewer x:Name="historyScrollViewer"
-                                  Grid.Row="1"
-                                  VerticalScrollBarVisibility="Auto"
-                                  Visibility="Collapsed"
-                                  Padding="20">
-                        <StackPanel x:Name="historyList">
-                            <!-- History items would go here if needed -->
-                        </StackPanel>
-                    </ScrollViewer>
-
-                    <!-- Video Controls (kept for compatibility) -->
-                    <Border x:Name="videoControls"
-                            Grid.Row="2" 
-                            Background="#F5F8FA" 
-                            Padding="20,15"
-                            CornerRadius="0,0,12,12"
-                            Visibility="Collapsed">
-                        <StackPanel Orientation="Horizontal" 
-                                    HorizontalAlignment="Center">
-                            <!-- Video control buttons would go here -->
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Report Controls -->
                     <Border x:Name="reportControls"
                             Grid.Row="2" 
-                            Background="#F5F8FA" 
+                            Background="{DynamicResource PageBackgroundBrush}" 
                             Padding="20,15"
                             CornerRadius="0,0,12,12"
                             Visibility="Collapsed">
                         <StackPanel Orientation="Horizontal" 
                                     HorizontalAlignment="Center">
-                                <Button Content="💾 Export Report" 
+                            <Button Content="💾 Export Report" 
                                     Click="ExportReportClick"
-                                    Background="#0D3640"
-                                    Foreground="White"
+                                    Background="{DynamicResource PrimaryColorBrush}"
+                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                     FontSize="{DynamicResource BaseFontSize}"
                                     FontWeight="SemiBold"
                                     Padding="20,10"
@@ -458,18 +426,18 @@
                                         </Setter>
                                         <Style.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="#165666"/>
+                                                <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
                                             </Trigger>
                                         </Style.Triggers>
                                     </Style>
                                 </Button.Style>
                             </Button>
 
-                                <Button Content="🖨️ Print Report" 
+                            <Button Content="🖨️ Print Report" 
                                     Click="PrintReportClick"
-                                    Background="White"
-                                    Foreground="#0D3640"
-                                    BorderBrush="#C7D8DD"
+                                    Background="{DynamicResource SecondaryBackgroundBrush}"
+                                    Foreground="{DynamicResource PrimaryColorBrush}"
+                                    BorderBrush="{DynamicResource BorderColorBrush}"
                                     BorderThickness="1"
                                     FontSize="{DynamicResource BaseFontSize}"
                                     FontWeight="SemiBold"
@@ -493,7 +461,7 @@
                                         </Setter>
                                         <Style.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="#F5F8FA"/>
+                                                <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
                                             </Trigger>
                                         </Style.Triggers>
                                     </Style>
@@ -505,10 +473,9 @@
             </Border>
         </Grid>
 
-        <!-- Footer Buttons -->
         <Border Grid.Row="2" 
-                Background="White" 
-                BorderBrush="#E1E8ED" 
+                Background="{DynamicResource SecondaryBackgroundBrush}" 
+                BorderBrush="{DynamicResource BorderColorBrush}" 
                 BorderThickness="0,1,0,0"
                 Padding="30,20">
             <Grid>
@@ -516,8 +483,8 @@
                             HorizontalAlignment="Right">
                     <Button Content="📊 Generate Report" 
                             Click="GenerateReportClick"
-                            Background="#0D3640"
-                            Foreground="White"
+                            Background="{DynamicResource PrimaryColorBrush}"
+                            Foreground="{DynamicResource SecondaryTextBrush}"
                             FontSize="{DynamicResource BaseFontSize}"
                             FontWeight="SemiBold"
                             Padding="25,12"
@@ -539,7 +506,7 @@
                                 </Setter>
                                 <Style.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#165666"/>
+                                        <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
                                     </Trigger>
                                 </Style.Triggers>
                             </Style>

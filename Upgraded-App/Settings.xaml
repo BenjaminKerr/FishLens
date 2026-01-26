@@ -1,9 +1,8 @@
 ﻿<Page x:Class="FishLens_App.Settings"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Settings"
-        Background="#F5F8FA">
-
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="Settings"
+      Background="{DynamicResource WindowBackground}">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -11,48 +10,43 @@
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        
-        
-        <!-- Header -->
-            <Border Grid.Row="0" 
-                Background="#0D3640" 
+
+        <Border Grid.Row="0" 
+                Background="{DynamicResource HeaderBackground}" 
                 Padding="30,20">
             <TextBlock Text="Settings" 
                        FontSize="{DynamicResource LargeHeaderFontSize}"
                        FontWeight="SemiBold"
-                       Foreground="White"/>
+                       Foreground="{DynamicResource OnAccentForeground}"/>
         </Border>
 
-        <!-- Settings Content -->
         <ScrollViewer Grid.Row="1" 
                       VerticalScrollBarVisibility="Auto"
                       Padding="30">
             <StackPanel MaxWidth="800" HorizontalAlignment="Center">
 
-                <!-- Analysis Settings -->
                 <TextBlock Text="Analysis" 
                            FontSize="{DynamicResource LargeHeaderFontSize}"
                            FontWeight="SemiBold"
-                           Foreground="#0D3640"
+                           Foreground="{DynamicResource PrimaryText}"
                            Margin="0,0,0,15"/>
 
-                <Border Background="White" 
-                        BorderBrush="#E1E8ED" 
+                <Border Background="{DynamicResource CardBackground}" 
+                        BorderBrush="{DynamicResource BorderBrush}" 
                         BorderThickness="1" 
                         CornerRadius="8"
                         Padding="20"
                         Margin="0,0,0,30">
                     <StackPanel>
-
-                        <!-- Confidence Threshold -->
                         <TextBlock Text="Confidence Threshold for Data Entry" 
                                    FontSize="{DynamicResource BaseFontSize}"
                                    FontWeight="SemiBold"
-                                   Foreground="#0D3640"
+                                   Foreground="{DynamicResource PrimaryText}"
                                    Margin="0,0,0,8"/>
+
                         <TextBlock Text="Minimum confidence level required to automatically populate analysis fields" 
                                    FontSize="{DynamicResource BaseFontSize}"
-                                   Foreground="#8BA5AE"
+                                   Foreground="{DynamicResource SecondaryText}"
                                    Margin="0,0,0,10"
                                    TextWrapping="Wrap"/>
 
@@ -74,7 +68,7 @@
                                     ValueChanged="ConfidenceThreshold_ValueChanged"/>
 
                             <Border Grid.Column="1"
-                                    Background="#0D3640"
+                                    Background="{DynamicResource HeaderBackground}"
                                     CornerRadius="4"
                                     Padding="12,6"
                                     MinWidth="60">
@@ -82,136 +76,131 @@
                                            Text="75%"
                                            FontSize="{DynamicResource BaseFontSize}"
                                            FontWeight="SemiBold"
-                                           Foreground="White"
+                                           Foreground="{DynamicResource OnAccentForeground}"
                                            HorizontalAlignment="Center"/>
                             </Border>
                         </Grid>
-
                     </StackPanel>
                 </Border>
-                <!-- Script Output Settings -->
+
                 <TextBlock Text="Output" 
                            FontSize="{DynamicResource LargeHeaderFontSize}"
                            FontWeight="SemiBold"
-                           Foreground="#0D3640"
+                           Foreground="{DynamicResource PrimaryText}"
                            Margin="0,0,0,15"/>
-                    <StackPanel>
-                    <!-- Hide Errors -->
-                    <CheckBox x:Name="hideOutput"
-                                  Content="Redirect Output Messages"
-                                  FontSize="{DynamicResource BaseFontSize}"
-                                  Foreground="#0D3640"
-                                  Margin="0,0,0,0"
-                                  IsChecked="False"
-                                  Click="ToggleOutputMessages"/>
-                    <TextBlock Text="Show output messages as a pop-up window at the end of the program instead of in the terminal."
-                           FontSize="{DynamicResource BaseFontSize}"
-                               Margin="0,0,0,15"/>
 
-                    <!-- Hide Output -->
+                <StackPanel>
+                    <CheckBox x:Name="hideOutput"
+                              Content="Redirect Output Messages"
+                              FontSize="{DynamicResource BaseFontSize}"
+                              Foreground="{DynamicResource PrimaryText}"
+                              Margin="0,0,0,0"
+                              IsChecked="False"
+                              Click="ToggleOutputMessages"/>
+
+                    <TextBlock Text="Show output messages as a pop-up window at the end of the program instead of in the terminal."
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"
+                               Margin="0,0,0,15"
+                               TextWrapping="Wrap"/>
+
                     <CheckBox x:Name="hideErrors"
-                                  Content="Redirect Error Messages"
-                                  FontSize="{DynamicResource BaseFontSize}"
-                                  Foreground="#0D3640"
-                                  Margin="0,0,0,0"
-                                  IsChecked="False"
-                                  Click="ToggleErrorMessages"/>
+                              Content="Redirect Error Messages"
+                              FontSize="{DynamicResource BaseFontSize}"
+                              Foreground="{DynamicResource PrimaryText}"
+                              Margin="0,0,0,0"
+                              IsChecked="False"
+                              Click="ToggleErrorMessages"/>
+
                     <TextBlock Text="Show error messages as a pop-up window at the end of the program instead of in the terminal."
-                        FontSize="{DynamicResource BaseFontSize}"
-                        Margin="0,0,0,15"/>
-                                  
-                    
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"
+                               Margin="0,0,0,15"
+                               TextWrapping="Wrap"/>
                 </StackPanel>
-                <!-- Video Settings -->
+
                 <TextBlock Text="Video" 
                            FontSize="{DynamicResource LargeHeaderFontSize}"
                            FontWeight="SemiBold"
-                           Foreground="#0D3640"
+                           Foreground="{DynamicResource PrimaryText}"
                            Margin="0,0,0,15"/>
 
-                <Border Background="White" 
-                        BorderBrush="#E1E8ED" 
+                <Border Background="{DynamicResource CardBackground}" 
+                        BorderBrush="{DynamicResource BorderBrush}" 
                         BorderThickness="1" 
                         CornerRadius="8"
                         Padding="20"
                         Margin="0,0,0,30">
                     <StackPanel>
-
-                        <!-- Auto-play Videos -->
                         <CheckBox x:Name="autoPlayVideos"
                                   Content="Auto-play videos when selected"
                                   FontSize="{DynamicResource BaseFontSize}"
-                                  Foreground="#0D3640"
+                                  Foreground="{DynamicResource PrimaryText}"
                                   Margin="0,0,0,15"
                                   IsChecked="True"/>
 
-                        <!-- Video Quality -->
                         <TextBlock Text="Video Playback Quality" 
                                    FontSize="{DynamicResource BaseFontSize}"
                                    FontWeight="SemiBold"
-                                   Foreground="#0D3640"
+                                   Foreground="{DynamicResource PrimaryText}"
                                    Margin="0,0,0,8"/>
+
                         <ComboBox x:Name="videoQuality"
                                   FontSize="{DynamicResource BaseFontSize}"
                                   Padding="8"
-                                  BorderBrush="#8BA5AE"
+                                  Background="{DynamicResource CardBackground}"
+                                  Foreground="{DynamicResource PrimaryText}"
+                                  BorderBrush="{DynamicResource BorderBrush}"
                                   BorderThickness="1">
                             <ComboBoxItem Content="High"/>
                             <ComboBoxItem Content="Medium" IsSelected="True"/>
                             <ComboBoxItem Content="Low"/>
                         </ComboBox>
-
                     </StackPanel>
                 </Border>
 
-                <!-- Accessibility Settings -->
                 <TextBlock Text="Accessibility" 
                            FontSize="{DynamicResource LargeHeaderFontSize}"
                            FontWeight="SemiBold"
-                           Foreground="#0D3640"
+                           Foreground="{DynamicResource PrimaryText}"
                            Margin="0,0,0,15"/>
 
-                <Border Background="White" 
-                        BorderBrush="#E1E8ED" 
+                <Border Background="{DynamicResource CardBackground}" 
+                        BorderBrush="{DynamicResource BorderBrush}" 
                         BorderThickness="1" 
                         CornerRadius="8"
                         Padding="20"
                         Margin="0,0,0,30">
                     <StackPanel>
-
-                        <!-- High Contrast Mode -->
                         <CheckBox x:Name="highContrastMode"
                                   Content="High contrast mode"
                                   FontSize="{DynamicResource BaseFontSize}"
-                                  Foreground="#0D3640"
+                                  Foreground="{DynamicResource PrimaryText}"
                                   Margin="0,0,0,15"/>
 
-                        <!-- Large Text -->
                         <CheckBox x:Name="largeText"
                                   Content="Use larger text throughout the application"
                                   FontSize="{DynamicResource BaseFontSize}"
-                                  Foreground="#0D3640"
+                                  Foreground="{DynamicResource PrimaryText}"
                                   Margin="0,0,0,15"/>
-
                     </StackPanel>
                 </Border>
             </StackPanel>
         </ScrollViewer>
 
-        <!-- Footer Buttons -->
         <Border Grid.Row="2" 
-                Background="White" 
-                BorderBrush="#E1E8ED" 
+                Background="{DynamicResource CardBackground}" 
+                BorderBrush="{DynamicResource BorderBrush}" 
                 BorderThickness="0,1,0,0"
                 Padding="30,20">
             <StackPanel Orientation="Horizontal" 
                         HorizontalAlignment="Right">
-                
-                <Button Content="Save Settings" 
+
+                        <Button Content="Save Settings" 
                         Click="SaveSettings_Click"
-                        Background="#0D3640"
-                        Foreground="White"
-                    FontSize="{DynamicResource BaseFontSize}"
+                        Background="{DynamicResource HeaderBackground}"
+                        Foreground="{DynamicResource OnAccentForeground}"
+                        FontSize="{DynamicResource BaseFontSize}"
                         FontWeight="SemiBold"
                         Padding="20,10"
                         BorderThickness="0"
@@ -232,7 +221,7 @@
                             </Setter>
                             <Style.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="#165666"/>
+                                    <Setter Property="Opacity" Value="0.8"/>
                                 </Trigger>
                             </Style.Triggers>
                         </Style>
@@ -240,6 +229,5 @@
                 </Button>
             </StackPanel>
         </Border>
-
     </Grid>
 </Page>

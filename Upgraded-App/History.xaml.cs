@@ -518,7 +518,8 @@ namespace FishLens_App
         public void ShowEmptyState()
         {
             var emptyPanel = CreateEmptyStatePanel();
-            historyList.Children.Add(emptyPanel);
+            // Add empty state to the report panel (report area) since historyList was removed
+            reportPanel.Children.Add(emptyPanel);
         }
 
         #endregion
@@ -1045,7 +1046,7 @@ namespace FishLens_App
         {
             placeholderPanel.Visibility = Visibility.Collapsed;
             videoPlayer.Visibility = Visibility.Collapsed;
-            videoControls.Visibility = Visibility.Collapsed;
+            // 'videoControls' control was removed/renamed in XAML; ensure video player is hidden.
             reportScrollViewer.Visibility = Visibility.Visible;
             reportControls.Visibility = Visibility.Visible;
             viewTitle.Text = "Analysis Report";
