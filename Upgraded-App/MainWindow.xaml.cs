@@ -8,6 +8,7 @@
 // **************************************************
 
 using FishLens_App.Interfaces;
+using FishLens_App.Models;
 using FishLens_App.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
@@ -440,12 +441,12 @@ namespace FishLens_App
         // Function: ProcessVideos
         // Description: Orchestrates complete video processing workflow
         // **************************************************
-        private void ProcessVideos(string inputFolder, string outputDirectory)
+        private async void ProcessVideos(string inputFolder, string outputDirectory)
         {
             MakeDirectoryIfNotExists(outputDirectory);
             DisplayDataInUi(outputDirectory);
             EnterDataInFile(inputFolder, outputDirectory);
-            RunYolo();
+            await RunYolo();
 
             List<(FileInfo vid, Video data)> videoDataList = CreateSortedListOfVideos(outputDirectory);
             CreateVideoButtonsList(videoDataList);

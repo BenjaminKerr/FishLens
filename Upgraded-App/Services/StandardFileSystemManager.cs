@@ -8,6 +8,7 @@
 // **************************************************
 
 using FishLens_App.Interfaces;
+using FishLens_App.Services;
 using System;
 using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
@@ -30,13 +31,12 @@ namespace FishLens_App.Services
         // **************************************************
         // Function: GetDefaultLogger
         // Description: Creates and returns a logger
-        // Notes: TO-DO COMBINE WITH MAINWINDOW GETDEFAULTLOGGER()
         // **************************************************
         private static ILogger<StandardFileSystemManager> GetDefaultLogger()
         {
             using var loggerFactory = LoggerFactory.Create(builder =>
             {
-                builder.SetMinimumLevel(LogLevel.Information); //Most verbose setting
+                builder.SetMinimumLevel(LogLevel.Information);
             });
             return loggerFactory.CreateLogger<StandardFileSystemManager>();
         }
@@ -53,9 +53,8 @@ namespace FishLens_App.Services
         // **************************************************
         // Function: CopyFile
         // Description: Copies a File
-        // Notes: TO-DO IMPLEMENT COPYFILE
         // **************************************************
-        public override bool CopyFile(string sourcePath, string destinationPath)
+        public bool CopyFile(string sourcePath, string destinationPath)
         {
             try
             {
@@ -82,7 +81,7 @@ namespace FishLens_App.Services
         // Function: CreateDirectoryIfNotExists
         // Description: Creates a Directory if it Doesn't Already Exist
         // **************************************************
-        public override bool CreateDirectoryIfNotExists(string path)
+        public bool CreateDirectoryIfNotExists(string path)
         {
             try
             {
@@ -100,9 +99,8 @@ namespace FishLens_App.Services
         // **************************************************
         // Function: ListFiles
         // Description: Lists Files
-        // Notes: TO-DO IMPLEMENT LISTFILES
         // **************************************************
-        public override IEnumerable<string> ListFiles(string directoryPath)
+        public IEnumerable<string> ListFiles(string directoryPath)
         {
             try
             {

@@ -9,6 +9,7 @@ using System.Windows.Shapes;
 using System.Text;
 using System.Linq;
 using System.Collections.Generic;
+using FishLens_App.Models;
 
 namespace FishLens_App
 {

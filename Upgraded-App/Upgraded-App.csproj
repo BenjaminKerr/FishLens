@@ -8,6 +8,12 @@
 		<ApplicationManifest>app.manifest</ApplicationManifest>
 	</PropertyGroup>
 	<ItemGroup>
+	  <Compile Remove="SavedVids\**" />
+	  <EmbeddedResource Remove="SavedVids\**" />
+	  <None Remove="SavedVids\**" />
+	  <Page Remove="SavedVids\**" />
+	</ItemGroup>
+	<ItemGroup>
 		<PackageReference Include="ClosedXML" Version="0.105.0" />
 		<PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.1" />

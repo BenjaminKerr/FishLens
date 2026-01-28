@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace FishLens_App
+namespace FishLens_App.Models
 {
     public class ReportStatistics
     {

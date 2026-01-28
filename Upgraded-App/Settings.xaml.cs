@@ -1,4 +1,5 @@
 ﻿using FishLens_App.Interfaces;
+using FishLens_App.Models;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;

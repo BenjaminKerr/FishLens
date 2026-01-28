@@ -20,7 +20,7 @@ namespace FishLens_App.Services
         // Function: ResolveProjectRoot
         // Description: Resolves the Project Root
         // **************************************************
-        public override string ResolveProjectRoot()
+        public string ResolveProjectRoot()
         {
             string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
             return Directory.GetParent(baseDirectory).Parent.Parent.Parent.Parent.FullName;
@@ -30,7 +30,7 @@ namespace FishLens_App.Services
         // Function: ResolvePath
         // Description: Resolves the a Path
         // **************************************************
-        public override string ResolvePath(string subdirectory)
+        public string ResolvePath(string subdirectory)
         {
             return Path.Combine(ResolveProjectRoot(), subdirectory);
         }
@@ -39,7 +39,7 @@ namespace FishLens_App.Services
         // Function: ResolveYoloScriptPath
         // Description: Resolves the Yolo Script Path
         // **************************************************
-        public override string ResolveYoloScriptPath()
+        public string ResolveYoloScriptPath()
         {
             return Path.Combine(ResolveProjectRoot(), "main.py");
         }
@@ -48,7 +48,7 @@ namespace FishLens_App.Services
         // Function: ResolveCsvScriptDirectory
         // Description: Resolves the CSV Script Path
         // **************************************************
-        public override string ResolveCsvScriptDirectory()
+        public string ResolveCsvScriptDirectory()
         {
             return Path.Combine(ResolveProjectRoot(), "fish_summary.csv");
         }
@@ -57,7 +57,7 @@ namespace FishLens_App.Services
         // Function: ResolveSourceFolder
         // Description: Resolves the Source Folder
         // **************************************************
-        public override string ResolveSourceFolder()
+        public string ResolveSourceFolder()
         {
             // User opens a folder full of videos
             OpenFolderDialog openFolderDialog = new OpenFolderDialog();

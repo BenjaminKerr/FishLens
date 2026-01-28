@@ -1,4 +1,5 @@
-﻿using System;
+﻿using FishLens_App.Models;
+using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
