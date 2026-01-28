@@ -40,6 +40,7 @@ namespace FishLens_App
         private const int CONTENT_PRESENTER_MARGIN = 8;
         private const string SAVED_VIDEOS_FOLDER = "SavedVids";
         private const string SAMPLE_DATA_FOLDER = "sample_data";
+        private string folderName = "";
 
         #endregion
 
@@ -428,6 +429,7 @@ namespace FishLens_App
         private void OpenFolderClick(object sender, RoutedEventArgs e)
         {
             string sourceFolderPath = GetSourceFolderPath();
+            folderName = Path.GetFileName(sourceFolderPath);
             if (string.IsNullOrEmpty(sourceFolderPath))
                 return;
 
@@ -495,6 +497,11 @@ namespace FishLens_App
         #endregion
 
         #region Video Data Management
+
+        public void DeleteSelectedVideosClick(object sender, EventArgs e)
+        {
+
+        }
 
         // **************************************************
         // Function: CreateSortedListOfVideos
@@ -955,11 +962,73 @@ namespace FishLens_App
         // **************************************************
         private void CreateVideoButtonsList(List<(FileInfo videoFile, Video videoData)> videoDataList)
         {
+            CreateFolderHeader();
+            CreateVideoButtons(videoDataList);
+        }
+
+        // **************************************************
+        // Function: CreateFolderHeader
+        // Description: Creates folder name display with checkbox and separator
+        // **************************************************
+        private void CreateFolderHeader()
+        {
+            Grid folderNameGrid = new Grid();
+            folderNameGrid.HorizontalAlignment = HorizontalAlignment.Stretch;
+            folderNameGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            folderNameGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            // Folder name
+            TextBox textBox = new TextBox();
+            textBox.Text = folderName;
+            textBox.Foreground = new SolidColorBrush(Colors.LightGray);
+            textBox.Background = Brushes.Transparent;
+            textBox.BorderThickness = new Thickness(0);
+            textBox.IsReadOnly = true;
+
+            // Folder deletion checkbox - this one should select all the checkboxes in the folder
+            CheckBox folderCheckBox = new CheckBox();
+            folderCheckBox.Padding = new Thickness(5);
+            folderCheckBox.VerticalAlignment = VerticalAlignment.Center;
+
+            // Add elements
+            Grid.SetColumn(folderCheckBox, 1);
+            folderNameGrid.Children.Add(textBox);
+            folderNameGrid.Children.Add(folderCheckBox);
+            videoList.Children.Add(folderNameGrid);
+
+            // Horizontal line separator
+            Separator separator = new Separator();
+            separator.Margin = new Thickness(0, 5, 0, 5);
+            videoList.Children.Add(separator);
+        }
+
+        // **************************************************
+        // Function: CreateVideoButtons
+        // Description: Creates individual video buttons with checkboxes
+        // **************************************************
+        private void CreateVideoButtons(List<(FileInfo videoFile, Video videoData)> videoDataList)
+        {
             foreach (var (videoFile, videoData) in videoDataList)
             {
+                Grid grid = new Grid();
+                grid.HorizontalAlignment = HorizontalAlignment.Stretch;
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                // Video button
                 Button button = CreateSingleVideoButton(videoFile, videoData);
                 button.Click += VideoButtonClick;
-                videoList.Children.Add(button);
+                Grid.SetColumn(button, 0);
+
+                // Video deletion checkbox
+                CheckBox checkBox = new CheckBox();
+                checkBox.Padding = new Thickness(5);
+                checkBox.VerticalAlignment = VerticalAlignment.Center;
+                Grid.SetColumn(checkBox, 1);
+
+                grid.Children.Add(button);
+                grid.Children.Add(checkBox);
+                videoList.Children.Add(grid);
             }
         }
 
