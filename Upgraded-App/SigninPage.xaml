@@ -1,0 +1,63 @@
+﻿<!-- ***************************************************************************************************************************
+// File: SigninPage.xaml
+// Description: This is the xaml code for our signin page which contains the design of the page.
+// Notes: Currently the login functionality is temporary, it does not actually check login information only whether or not it 
+// contains text.
+// ***************************************************************************************************************************-->
+    <Window x:Class="FishLens_App.SigninPage"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Sign in"
+        Width="1000" Height="700"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        WindowState="Maximized"
+        Background="#0D3640">
+
+    <Grid>
+        <!--Start of Title header-->
+            <Border Width="1000" Padding="30" Background="#E8F4F8" CornerRadius="12" HorizontalAlignment="Center" VerticalAlignment="Top">
+            <StackPanel>
+
+            <TextBlock Name="Title" 
+             FontSize="56" 
+             FontFamily="Georgia" 
+             FontWeight="Bold"
+             Foreground="#0D3640" HorizontalAlignment="Center">
+      FishLens
+            </TextBlock>
+        </StackPanel>
+
+        </Border>
+        <!--End of Title header-->
+
+        <!--Sign in block Begins-->
+        <Border Width="300" Padding="30" Background="#E8F4F8" CornerRadius="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <StackPanel>
+
+            <TextBlock Text="Sign in"
+                       FontSize="26"
+                       FontWeight="SemiBold"
+                       Foreground="Black"
+                       HorizontalAlignment="Center"/>
+            <TextBlock Text="Username" FontSize="12" Foreground="Gray"></TextBlock>
+                <TextBox x:Name="UserName" Height="38" Padding="10" FontSize="14" BorderBrush="Black" BorderThickness="1"></TextBox>
+
+                <TextBlock Text="Password" FontSize="12" Foreground="Gray"></TextBlock>
+                <PasswordBox x:Name="PassWord" Height="38" Padding="10" FontSize="14" BorderBrush="Black" BorderThickness="1"></PasswordBox>
+
+                <Button Content="Sign In"
+                    Width="120"
+                    Padding="8"
+                    Click="SigninButtonClick"
+                    Background="#2D7A8F"
+                    Foreground="White"
+                    Margin="10"
+                    BorderThickness="2"
+                    BorderBrush="Black"
+                    Cursor="Hand"/>
+        </StackPanel>
+        </Border>
+        <!--Sign in block Ends-->
+    </Grid>
+</Window>

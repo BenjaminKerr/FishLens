@@ -8,6 +8,10 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+Python/
+venv/
+*.pyc
+__pycache__/
 build/
 develop-eggs/
 dist/
@@ -218,3 +222,12 @@ SavedVids/*
 
 # Temporary video storage
 SavedVids/
+Upgraded-App/bin/
+Upgraded-App/obj/
+Upgraded-App/.vs/
+
+# Added for Fish Classifier code
+*.whl
+dist/
+build/
+fish_classifier_model.h5

@@ -13,5 +13,8 @@
     <Compile Update="Settings.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Update="SigninPage.xaml.cs">
+      <SubType>Code</SubType>
+    </Compile>
   </ItemGroup>
 </Project>
