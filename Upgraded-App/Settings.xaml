@@ -119,46 +119,6 @@
                                TextWrapping="Wrap"/>
                 </StackPanel>
 
-                <TextBlock Text="Video" 
-                           FontSize="{DynamicResource LargeHeaderFontSize}"
-                           FontWeight="SemiBold"
-                           Foreground="{DynamicResource PrimaryText}"
-                           Margin="0,0,0,15"/>
-
-                <Border Background="{DynamicResource CardBackground}" 
-                        BorderBrush="{DynamicResource BorderBrush}" 
-                        BorderThickness="1" 
-                        CornerRadius="8"
-                        Padding="20"
-                        Margin="0,0,0,30">
-                    <StackPanel>
-                        <CheckBox x:Name="autoPlayVideos"
-                                  Content="Auto-play videos when selected"
-                                  FontSize="{DynamicResource BaseFontSize}"
-                                  Foreground="{DynamicResource PrimaryText}"
-                                  Margin="0,0,0,15"
-                                  IsChecked="True"/>
-
-                        <TextBlock Text="Video Playback Quality" 
-                                   FontSize="{DynamicResource BaseFontSize}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource PrimaryText}"
-                                   Margin="0,0,0,8"/>
-
-                        <ComboBox x:Name="videoQuality"
-                                  FontSize="{DynamicResource BaseFontSize}"
-                                  Padding="8"
-                                  Background="{DynamicResource CardBackground}"
-                                  Foreground="{DynamicResource PrimaryText}"
-                                  BorderBrush="{DynamicResource BorderBrush}"
-                                  BorderThickness="1">
-                            <ComboBoxItem Content="High"/>
-                            <ComboBoxItem Content="Medium" IsSelected="True"/>
-                            <ComboBoxItem Content="Low"/>
-                        </ComboBox>
-                    </StackPanel>
-                </Border>
-
                 <TextBlock Text="Accessibility" 
                            FontSize="{DynamicResource LargeHeaderFontSize}"
                            FontWeight="SemiBold"

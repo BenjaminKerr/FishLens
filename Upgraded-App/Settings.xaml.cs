@@ -96,20 +96,11 @@ namespace FishLens_App
                 _checkBoxes.ErrorBox = hideErrors.IsChecked ?? false;
                 _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
 
-                // Video and accessibility options
-                bool autoplay = autoPlayVideos.IsChecked ?? false;
-                string quality = "Medium";
-                if (videoQuality?.SelectedItem is ComboBoxItem selected)
-                {
-                    quality = selected.Content?.ToString() ?? quality;
-                }
                 bool highContrast = highContrastMode.IsChecked ?? false;
                 bool largeTxt = largeText.IsChecked ?? false;
 
                 // Persist settings to a JSON file in project root
                 // Update additional settings in shared config
-                _config.AutoPlayVideos = autoplay;
-                _config.VideoQuality = quality;
                 _config.HighContrastMode = highContrast;
                 _config.LargeText = largeTxt;
 
@@ -196,18 +187,23 @@ namespace FishLens_App
                 if (root.TryGetProperty("AutoPlayVideos", out var autoEl) && (autoEl.ValueKind == JsonValueKind.True || autoEl.ValueKind == JsonValueKind.False))
                 {
                     _config.AutoPlayVideos = autoEl.GetBoolean();
-                    autoPlayVideos.IsChecked = _config.AutoPlayVideos;
+                    var ap = this.FindName("autoPlayVideos") as CheckBox;
+                    if (ap != null) ap.IsChecked = _config.AutoPlayVideos;
                 }
 
                 if (root.TryGetProperty("VideoQuality", out var qualityEl) && qualityEl.ValueKind == JsonValueKind.String)
                 {
                     string q = qualityEl.GetString();
-                    foreach (var item in videoQuality.Items)
+                    var vq = this.FindName("videoQuality") as ComboBox;
+                    if (vq != null)
                     {
-                        if (item is ComboBoxItem c && c.Content?.ToString() == q)
+                        foreach (var item in vq.Items)
                         {
-                            videoQuality.SelectedItem = c;
-                            break;
+                            if (item is ComboBoxItem c && c.Content?.ToString() == q)
+                            {
+                                vq.SelectedItem = c;
+                                break;
+                            }
                         }
                     }
                 }

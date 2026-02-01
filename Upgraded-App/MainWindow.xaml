@@ -90,41 +90,33 @@ Height="70">
                     <StackPanel x:Name="videoList" Margin="10,0"/>
                 </ScrollViewer>
 
-                <!-- Delete Button -->
-                <Button x:Name="deleteSelectedVideos"
-                Grid.Row="2"
-                Click="DeleteSelectedVideosClick"
-                Background="{DynamicResource HeaderBackground}"
-                Foreground="{DynamicResource OnAccentForeground}"
-                FontSize="{DynamicResource BaseFontSize}"
-                FontWeight="SemiBold"
-                Padding="20,12"
-                Margin="20,0,20,20"
-                BorderThickness="0"
-                Cursor="Hand">
-                    <Button.Resources>
-                        <Style TargetType="Button">
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border Background="{TemplateBinding Background}"
-                                        CornerRadius="6"
-                                        Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter HorizontalAlignment="Center"
-                                                      VerticalAlignment="Center"/>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </Button.Resources>
-                    Delete Selected Videos
-                </Button>
+                <!-- Delete + Undo Buttons -->
+                <StackPanel Grid.Row="2" Orientation="Vertical" Margin="20,0,20,20">
+                    <Button x:Name="deleteSelectedVideos"
+                            Click="DeleteSelectedVideosClick"
+                            Background="{DynamicResource HeaderBackground}"
+                            Foreground="{DynamicResource OnAccentForeground}"
+                            FontSize="{DynamicResource BaseFontSize}"
+                            FontWeight="SemiBold"
+                            Padding="12"
+                            Margin="0,0,0,8"
+                            BorderThickness="0"
+                            Cursor="Hand">
+                        Delete Selected Videos
+                    </Button>
+
+                    <Button x:Name="undoLastDelete"
+                            Click="UndoLastDeleteClick"
+                            Background="{DynamicResource CardBackground}"
+                            Foreground="{DynamicResource PrimaryText}"
+                            FontSize="{DynamicResource BaseFontSize}"
+                            FontWeight="SemiBold"
+                            Padding="12"
+                            BorderThickness="0"
+                            Cursor="Hand">
+                        Undo Last Delete
+                    </Button>
+                </StackPanel>
             </Grid>
         </Border>
 

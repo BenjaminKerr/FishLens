@@ -51,8 +51,20 @@ namespace FishLens_App
         private readonly ILogger<MainWindow> _logger;
         private readonly AppConfiguration _config;
         private readonly CheckBoxToggle _checkBoxes;
+        // Stack of deletion batches for undo support
+        private readonly Stack<DeletionBatch> _deletionHistory = new Stack<DeletionBatch>();
 
         #endregion
+
+        // **************************************************
+        // Type: DeletionBatch
+        // Description: Tracks moved files and CSV rows for undo
+        // **************************************************
+        private class DeletionBatch
+        {
+            public string TrashFolder { get; set; }
+            public List<(string originalPath, string trashPath, string csvRow, Video video, string folder)> Items { get; } = new List<(string, string, string, Video, string)>();
+        }
 
         #region Constructors
 
@@ -452,6 +464,18 @@ namespace FishLens_App
 
             List<(FileInfo vid, Video data)> videoDataList = CreateSortedListOfVideos(outputDirectory);
             CreateVideoButtonsList(videoDataList);
+
+            // If configured, load (and auto-play) the first uploaded video
+            try
+            {
+                if (videoDataList != null && videoDataList.Count > 0)
+                {
+                    var firstVideoPath = videoDataList[0].vid.FullName;
+                    // Load the video into the player. LoadVideoInPlayer will respect _config.AutoPlayVideos
+                    Dispatcher.Invoke(() => LoadVideoInPlayer(firstVideoPath));
+                }
+            }
+            catch { }
         }
 
         // **************************************************
@@ -500,7 +524,297 @@ namespace FishLens_App
 
         public void DeleteSelectedVideosClick(object sender, EventArgs e)
         {
+            var selected = GetSelectedVideoGrids();
+            if (selected.Count == 0)
+            {
+                MessageBox.Show("No videos selected for deletion.", "Delete Videos", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
 
+            if (!ConfirmDelete(selected.Count)) return;
+
+            string csvPath = GetCsvScriptDirectory();
+
+            DeleteFilesAndCsvEntries(selected.Select(x => x.path).ToList(), csvPath);
+
+            RemoveUiGrids(selected.Select(x => x.grid).ToList());
+
+            MessageBox.Show($"Deleted {selected.Count} video(s).", "Delete Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        // **************************************************
+        // Function: GetSelectedVideoGrids
+        // Description: Returns list of selected video grids and their file paths
+        // **************************************************
+        private List<(Grid grid, string path)> GetSelectedVideoGrids()
+        {
+            var result = new List<(Grid, string)>();
+            foreach (var child in videoList.Children)
+            {
+                if (child is Grid g)
+                {
+                    CheckBox cb = null;
+                    Button btn = null;
+                    foreach (var elem in g.Children)
+                    {
+                        if (elem is CheckBox c) cb = c;
+                        if (elem is Button b) btn = b;
+                    }
+
+                    if (cb != null && cb.IsChecked == true && btn != null && btn.Tag is string path)
+                    {
+                        result.Add((g, path));
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        // **************************************************
+        // Function: ConfirmDelete
+        // Description: Confirms deletion with the user
+        // **************************************************
+        private bool ConfirmDelete(int count)
+        {
+            var result = MessageBox.Show($"Delete {count} selected video(s) and remove their analysis?","Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            return result == MessageBoxResult.Yes;
+        }
+
+        // **************************************************
+        // Function: DeleteFilesAndCsvEntries
+        // Description: Deletes files and removes their CSV rows
+        // **************************************************
+        private void DeleteFilesAndCsvEntries(List<string> paths, string csvPath)
+        {
+            // Create a trash folder to hold deleted files for potential undo
+            string trashRoot = Path.Combine(GetPath(SAVED_VIDEOS_FOLDER), ".trash");
+            Directory.CreateDirectory(trashRoot);
+            var batch = new DeletionBatch { TrashFolder = Path.Combine(trashRoot, Guid.NewGuid().ToString()) };
+            Directory.CreateDirectory(batch.TrashFolder);
+
+            for (int i = 0; i < paths.Count; i++)
+            {
+                string fullPath = paths[i];
+                try
+                {
+                    // capture video data and CSV row before removal
+                    string fileName = Path.GetFileName(fullPath);
+                    string csvRow = null;
+                    if (File.Exists(csvPath))
+                    {
+                        var all = File.ReadAllLines(csvPath);
+                        for (int r = 1; r < all.Length; r++)
+                        {
+                            var cols = all[r].Split(',');
+                            if (cols.Length > 0 && string.Equals(cols[0].Trim(), fileName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                csvRow = all[r];
+                                break;
+                            }
+                        }
+                    }
+
+                    var videoData = FishLens_App.Services.CsvUtils.ReadVideoFromCsv(csvPath, fileName);
+
+                    if (videoPlayer.Source != null && string.Equals(videoPlayer.Source.LocalPath, fullPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        videoPlayer.Stop();
+                        videoPlayer.Source = null;
+                    }
+
+                    string trashPath = Path.Combine(batch.TrashFolder, Path.GetFileName(fullPath));
+                    if (File.Exists(fullPath))
+                    {
+                        File.Move(fullPath, trashPath, overwrite: true);
+                    }
+
+                    batch.Items.Add((fullPath, trashPath, csvRow, videoData, (GetFolderTagForPath(fullPath))));
+
+                    // remove CSV entry
+                    if (File.Exists(csvPath) && csvRow != null)
+                    {
+                        FishLens_App.Services.CsvUtils.RemoveVideoFromCsv(csvPath, fileName);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete/move file {path}", fullPath);
+                }
+            }
+
+            // push batch for undo
+            if (batch.Items.Count > 0)
+            {
+                _deletionHistory.Push(batch);
+            }
+        }
+
+        // **************************************************
+        // Function: RemoveUiGrids
+        // Description: Removes video grids and cleans up empty folder headers/separators
+        // **************************************************
+        private void RemoveUiGrids(List<Grid> grids)
+        {
+            foreach (var g in grids)
+            {
+                videoList.Children.Remove(g);
+            }
+
+            var headersToRemove = new List<UIElement>();
+            foreach (var child in videoList.Children)
+            {
+                if (child is Grid headerGrid && headerGrid.Tag is string t && t.StartsWith("header:"))
+                {
+                    string folder = t.Substring("header:".Length);
+                    bool anyRemaining = false;
+                    foreach (var c2 in videoList.Children)
+                    {
+                        if (c2 is Grid g2 && g2.Tag is string t2 && t2 == folder)
+                        {
+                            anyRemaining = true;
+                            break;
+                        }
+                    }
+
+                    if (!anyRemaining) headersToRemove.Add(headerGrid);
+                }
+            }
+
+            foreach (var h in headersToRemove)
+            {
+                int idx = videoList.Children.IndexOf(h);
+                if (idx >= 0)
+                {
+                    videoList.Children.RemoveAt(idx);
+                    if (videoList.Children.Count > idx && videoList.Children[idx] is Separator)
+                    {
+                        videoList.Children.RemoveAt(idx);
+                    }
+                }
+            }
+        }
+
+        // **************************************************
+        // Function: GetFolderTagForPath
+        // Description: Derives the folder tag (folder name) for a given file path
+        // **************************************************
+        private string GetFolderTagForPath(string path)
+        {
+            try
+            {
+                var dir = Path.GetDirectoryName(path);
+                if (string.IsNullOrEmpty(dir)) return string.Empty;
+                return Path.GetFileName(dir);
+            }
+            catch { return string.Empty; }
+        }
+
+        // **************************************************
+        // Function: UndoLastDeleteClick
+        // Description: UI handler to undo the most recent deletion batch
+        // **************************************************
+        public void UndoLastDeleteClick(object sender, EventArgs e)
+        {
+            if (_deletionHistory.Count == 0)
+            {
+                MessageBox.Show("Nothing to undo.", "Undo", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var batch = _deletionHistory.Pop();
+            // restore files
+            var restoredFiles = new List<string>();
+            var rowsToRestore = new List<string>();
+
+            foreach (var item in batch.Items)
+            {
+                try
+                {
+                    if (File.Exists(item.trashPath))
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(item.originalPath) ?? GetPath(SAVED_VIDEOS_FOLDER));
+                        File.Move(item.trashPath, item.originalPath, overwrite: true);
+                    }
+                    restoredFiles.Add(item.originalPath);
+                    if (!string.IsNullOrEmpty(item.csvRow)) rowsToRestore.Add(item.csvRow);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to restore file {path}", item.originalPath);
+                }
+            }
+
+            // restore CSV rows
+            try
+            {
+                if (rowsToRestore.Count > 0)
+                {
+                    FishLens_App.Services.CsvUtils.AppendRows(GetCsvScriptDirectory(), rowsToRestore);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to restore CSV rows");
+            }
+
+            // restore UI
+            RestoreUiForFiles(restoredFiles, batch);
+
+            // cleanup trash folder
+            try { if (Directory.Exists(batch.TrashFolder)) Directory.Delete(batch.TrashFolder, recursive: true); } catch { }
+
+            MessageBox.Show($"Restored {restoredFiles.Count} file(s).", "Undo Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        // **************************************************
+        // Function: RestoreUiForFiles
+        // Description: Recreates UI entries for restored files using saved video data
+        // **************************************************
+        private void RestoreUiForFiles(List<string> restoredFiles, DeletionBatch batch)
+        {
+            foreach (var filePath in restoredFiles)
+            {
+                // find corresponding item in batch
+                var item = batch.Items.Find(x => x.originalPath == filePath);
+                if (item.originalPath == null) continue;
+
+                // ensure folder header exists
+                bool headerExists = false;
+                foreach (var child in videoList.Children)
+                {
+                    if (child is Grid g && g.Tag is string t && t == $"header:{item.folder}") { headerExists = true; break; }
+                }
+                if (!headerExists)
+                {
+                    // temporarily set folderName so CreateFolderHeader uses it
+                    var prev = folderName;
+                    folderName = item.folder;
+                    CreateFolderHeader();
+                    folderName = prev;
+                }
+
+                // create video grid and add
+                Grid grid = new Grid();
+                grid.Tag = item.folder;
+                grid.HorizontalAlignment = HorizontalAlignment.Stretch;
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                FileInfo fi = new FileInfo(filePath);
+                Button button = CreateSingleVideoButton(fi, item.video);
+                button.Click += VideoButtonClick;
+                Grid.SetColumn(button, 0);
+
+                CheckBox checkBox = new CheckBox();
+                checkBox.Padding = new Thickness(5);
+                checkBox.VerticalAlignment = VerticalAlignment.Center;
+                Grid.SetColumn(checkBox, 1);
+
+                grid.Children.Add(button);
+                grid.Children.Add(checkBox);
+                videoList.Children.Add(grid);
+            }
         }
 
         // **************************************************
@@ -554,7 +868,7 @@ namespace FishLens_App
 
             try
             {
-                return GetVideoFileValues(vid, csvPath, videoFileName);
+                return FishLens_App.Services.CsvUtils.ReadVideoFromCsv(csvPath, videoFileName);
             }
             catch (Exception ex)
             {
@@ -563,65 +877,7 @@ namespace FishLens_App
                 return vid;
             }
         }
-
-        // **************************************************
-        // Function: GetVideoFileValues
-        // Description: Parses CSV row to populate Video object
-        // Notes: Helper function for GetData
-        // **************************************************
-        private Video GetVideoFileValues(Video vid, string csvPath, string videoFileName)
-        {
-            string[] lines = File.ReadAllLines(csvPath);
-
-            for (int i = 1; i < lines.Length; i++)
-            {
-                string[] columns = lines[i].Split(',');
-
-                if (columns[0].Trim() == videoFileName)
-                {
-                    return PopulateVideoFromColumns(vid, columns);
-                }
-            }
-
-            return CreateDefaultVideo(videoFileName);
-        }
-
-        // **************************************************
-        // Function: PopulateVideoFromColumns
-        // Description: Populates Video object from CSV columns
-        // **************************************************
-        private Video PopulateVideoFromColumns(Video vid, string[] columns)
-        {
-            vid.name = columns[0].Trim();
-            vid.trackId = columns[1].Trim();
-            vid.likelyClass = columns[2].Trim();
-            vid.confidence = columns[3].Trim();
-            vid.startTime = columns[4].Trim();
-            vid.endTime = columns[5].Trim();
-            vid.avgConfidence = double.Parse(columns[6].Trim());
-            vid.direction = columns[7].Trim();
-
-            return vid;
-        }
-
-        // **************************************************
-        // Function: CreateDefaultVideo
-        // Description: Creates Video object with default values when not found in CSV
-        // **************************************************
-        private Video CreateDefaultVideo(string videoFileName)
-        {
-            return new Video
-            {
-                name = videoFileName,
-                trackId = "-1",
-                likelyClass = "N/A",
-                confidence = "00.00%",
-                startTime = "00.00",
-                endTime = "00.00",
-                avgConfidence = 0.0,
-                direction = "Unknown"
-            };
-        }
+        
 
         #endregion
 
@@ -798,41 +1054,27 @@ namespace FishLens_App
         // **************************************************
         private void UpdateCsvFile(string csvPath, string videoFileName)
         {
+            // Create updated row using current UI values
             string[] lines = File.ReadAllLines(csvPath);
-            List<string> updatedLines = new List<string>();
-
-            // Keep the header
-            updatedLines.Add(lines[0]);
-
-            bool videoFound = false;
-
+            string[] columns = null;
             for (int i = 1; i < lines.Length; i++)
             {
-                string[] columns = lines[i].Split(',');
-
-                // Check if this is the row for the current video
-                if (columns[0].Trim() == videoFileName)
+                var cols = lines[i].Split(',');
+                if (cols.Length > 0 && string.Equals(cols[0].Trim(), videoFileName, StringComparison.OrdinalIgnoreCase))
                 {
-                    // Update the row with modified values
-                    string updatedRow = CreateUpdatedCsvRow(columns);
-                    updatedLines.Add(updatedRow);
-                    videoFound = true;
-                }
-                else
-                {
-                    // Keep the original row
-                    updatedLines.Add(lines[i]);
+                    columns = cols;
+                    break;
                 }
             }
 
-            if (!videoFound)
-            {
+            if (columns == null)
                 throw new InvalidOperationException($"Video {videoFileName} not found in CSV file.");
-            }
 
-            // Write all lines back to the CSV file
-            File.WriteAllLines(csvPath, updatedLines);
+            string updatedRow = CreateUpdatedCsvRow(columns);
+            FishLens_App.Services.CsvUtils.UpdateCsvRow(csvPath, videoFileName, updatedRow);
         }
+
+        // CSV removal moved to CsvUtils for reuse and testability
 
         // **************************************************
         // Function: CreateUpdatedCsvRow
@@ -980,7 +1222,7 @@ namespace FishLens_App
             // Folder name
             TextBox textBox = new TextBox();
             textBox.Text = folderName;
-            textBox.Foreground = new SolidColorBrush(Colors.LightGray);
+            textBox.Foreground = new SolidColorBrush(Colors.White);
             textBox.Background = Brushes.Transparent;
             textBox.BorderThickness = new Thickness(0);
             textBox.IsReadOnly = true;
@@ -989,6 +1231,45 @@ namespace FishLens_App
             CheckBox folderCheckBox = new CheckBox();
             folderCheckBox.Padding = new Thickness(5);
             folderCheckBox.VerticalAlignment = VerticalAlignment.Center;
+
+            // capture folder name at time of header creation so handlers affect only this folder's videos
+            string thisFolder = folderName;
+            folderNameGrid.Tag = $"header:{thisFolder}";
+
+            // When folder checkbox toggled, check/uncheck all video checkboxes belonging to this folder
+            folderCheckBox.Checked += (s, e) =>
+            {
+                foreach (var child in videoList.Children)
+                {
+                    if (child is Grid g && g.Tag is string t && t == thisFolder)
+                    {
+                        foreach (var elem in g.Children)
+                        {
+                            if (elem is CheckBox cb)
+                            {
+                                cb.IsChecked = true;
+                            }
+                        }
+                    }
+                }
+            };
+
+            folderCheckBox.Unchecked += (s, e) =>
+            {
+                foreach (var child in videoList.Children)
+                {
+                    if (child is Grid g && g.Tag is string t && t == thisFolder)
+                    {
+                        foreach (var elem in g.Children)
+                        {
+                            if (elem is CheckBox cb)
+                            {
+                                cb.IsChecked = false;
+                            }
+                        }
+                    }
+                }
+            };
 
             // Add elements
             Grid.SetColumn(folderCheckBox, 1);
@@ -1011,6 +1292,8 @@ namespace FishLens_App
             foreach (var (videoFile, videoData) in videoDataList)
             {
                 Grid grid = new Grid();
+                // tag this grid with the current folder name so folder header can target it
+                grid.Tag = folderName;
                 grid.HorizontalAlignment = HorizontalAlignment.Stretch;
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
