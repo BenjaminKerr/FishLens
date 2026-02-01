@@ -16,6 +16,12 @@ import os
 # This is the folder where the script lives
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+PARENT_DIR = os.path.dirname(BASE_DIR)
+
+EXPORT_PATH = os.path.join(PARENT_DIR, 'fish_classifier_model.h5')
+
+# Model will be saved at the project root
+
 train_dir = os.path.join(BASE_DIR, 'data', 'train')  
 
 train_datagen = ImageDataGenerator(
@@ -84,6 +90,6 @@ history = model.fit(
 )
 
 # Defines the saved model file for use
-model.save("fish_classifier_model.h5")
+model.save(EXPORT_PATH)
 # Only runs as a confirmation that the model was saved
 print("Model saved successfully as fish_classifier_model.h5")
