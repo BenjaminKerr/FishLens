@@ -1,4 +1,3 @@
-using FishLens_App;
 using FishLens_App.Models;
 using Xunit;
 

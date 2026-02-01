@@ -49,7 +49,7 @@ namespace FishLens_App.Services
                 if (cols.Length == 0) continue;
                 if (string.Equals(cols[0].Trim(), videoFileName, StringComparison.OrdinalIgnoreCase))
                 {
-                    return PopulateVideoFromColumns(cols);
+                    return ParseVideoFromColumns(cols);
                 }
             }
 
@@ -105,17 +105,36 @@ namespace FishLens_App.Services
             File.WriteAllLines(csvPath, lines);
         }
 
-        private static Models.Video PopulateVideoFromColumns(string[] columns)
+        // Parse row columns according to CSV layout:
+        // 0: video_file, 1: track_id, 2: image_path, 3: likely_class, 4: confidence,
+        // 5: start_time_sec, 6: end_time_sec, 7: avg_confidence, 8: direction,
+        // 9: species, 10: species_confidence
+        public static Models.Video ParseVideoFromColumns(string[] columns)
         {
             var v = new Models.Video();
             v.name = columns.Length > 0 ? columns[0].Trim() : string.Empty;
             v.trackId = columns.Length > 1 ? columns[1].Trim() : "-1";
-            v.likelyClass = columns.Length > 2 ? columns[2].Trim() : "N/A";
-            v.confidence = columns.Length > 3 ? columns[3].Trim() : "00.00%";
-            v.startTime = columns.Length > 4 ? columns[4].Trim() : "00.00";
-            v.endTime = columns.Length > 5 ? columns[5].Trim() : "00.00";
-            v.avgConfidence = columns.Length > 6 && double.TryParse(columns[6].Trim(), out var d) ? d : 0.0;
-            v.direction = columns.Length > 7 ? columns[7].Trim() : "Unknown";
+            v.likelyClass = columns.Length > 3 ? columns[3].Trim() : "N/A";
+            v.confidence = columns.Length > 4 ? columns[4].Trim() : "00.00%";
+            v.startTime = columns.Length > 5 ? columns[5].Trim() : "00.00";
+            v.endTime = columns.Length > 6 ? columns[6].Trim() : "00.00";
+
+            // avg_confidence may include a '%' suffix or be a decimal; try to parse robustly
+            v.avgConfidence = 0.0;
+            if (columns.Length > 7)
+            {
+                var raw = columns[7].Trim().TrimEnd('%');
+                if (double.TryParse(raw, out var d))
+                {
+                    // If value looks like a percent (e.g., 81 or 81.0), normalize to 0-1 if >1
+                    if (d > 1) d = d / 100.0;
+                    v.avgConfidence = d;
+                }
+            }
+
+            v.direction = columns.Length > 8 ? columns[8].Trim() : "Unknown";
+            v.species = columns.Length > 9 ? columns[9].Trim() : string.Empty;
+            v.species_confidence = columns.Length > 10 ? columns[10].Trim() : string.Empty;
             return v;
         }
 
@@ -130,7 +149,9 @@ namespace FishLens_App.Services
                 startTime = "00.00",
                 endTime = "00.00",
                 avgConfidence = 0.0,
-                direction = "Unknown"
+                direction = "Unknown",
+                species = string.Empty,
+                species_confidence = string.Empty
             };
         }
     }

@@ -7,7 +7,7 @@
 // ***********************************
 // **************************************************
 
-namespace FishLens_App.Models
+namespace FishLens_App
 {
     // **************************************************
     // Function: Video (class)
@@ -19,7 +19,7 @@ namespace FishLens_App.Models
         public string name { get; set; } 
         // Identifier for the detected track associated with the video.
         public string trackId { get; set; }
-        // Most-likely detected class (for example "fish").
+        // Most-likely detected class (for example "salmon").
         public string likelyClass { get; set; }
         // Confidence text value as stored in CSV (e.g. "00.00%").
         public string confidence { get; set; }
@@ -31,9 +31,5 @@ namespace FishLens_App.Models
         public double avgConfidence { get; set; }
         // Detected travel direction (for example "upstream" or "downstream").
         public string direction { get; set; }
-        // Species label (if provided separately from likelyClass)
-        public string species { get; set; }
-        // Confidence for species label (text as stored in CSV)
-        public string species_confidence { get; set; }
     }
 }

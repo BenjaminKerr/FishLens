@@ -63,7 +63,7 @@ namespace FishLens_App
         private class DeletionBatch
         {
             public string TrashFolder { get; set; }
-            public List<(string originalPath, string trashPath, string csvRow, Video video, string folder)> Items { get; } = new List<(string, string, string, Video, string)>();
+            public List<(string originalPath, string trashPath, string csvRow, FishLens_App.Models.Video video, string folder)> Items { get; } = new List<(string, string, string, FishLens_App.Models.Video, string)>();
         }
 
         #region Constructors
@@ -462,7 +462,7 @@ namespace FishLens_App
             EnterDataInFile(inputFolder, outputDirectory);
             await RunYolo();
 
-            List<(FileInfo vid, Video data)> videoDataList = CreateSortedListOfVideos(outputDirectory);
+            List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList = CreateSortedListOfVideos(outputDirectory);
             CreateVideoButtonsList(videoDataList);
 
             // If configured, load (and auto-play) the first uploaded video
@@ -629,7 +629,7 @@ namespace FishLens_App
                         File.Move(fullPath, trashPath, overwrite: true);
                     }
 
-                    batch.Items.Add((fullPath, trashPath, csvRow, videoData, (GetFolderTagForPath(fullPath))));
+                    batch.Items.Add((fullPath, trashPath, csvRow, videoData, GetFolderTagForPath(fullPath)));
 
                     // remove CSV entry
                     if (File.Exists(csvPath) && csvRow != null)
@@ -821,18 +821,18 @@ namespace FishLens_App
         // Function: CreateSortedListOfVideos
         // Description: Creates list of videos sorted by confidence rating
         // **************************************************
-        private List<(FileInfo vid, Video data)> CreateSortedListOfVideos(string directory)
+        private List<(FileInfo vid, FishLens_App.Models.Video data)> CreateSortedListOfVideos(string directory)
         {
             DirectoryInfo vidsInfo = new DirectoryInfo(directory);
             FileInfo[] fileInfos = vidsInfo.GetFiles("*");
 
-            List<(FileInfo vid, Video data)> videoDataList = new List<(FileInfo, Video)>();
+            List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList = new List<(FileInfo, FishLens_App.Models.Video)>();
 
             foreach (FileInfo vid in fileInfos)
             {
                 if (IsVideoFile(vid))
                 {
-                    Video data = GetData(vid.Name);
+                    FishLens_App.Models.Video data = GetData(vid.Name);
                     videoDataList.Add((vid, data));
                 }
             }
@@ -854,9 +854,9 @@ namespace FishLens_App
         // Function: GetData
         // Description: Retrieves video analysis data from CSV file
         // **************************************************
-        private Video GetData(string videoFileName)
+        private FishLens_App.Models.Video GetData(string videoFileName)
         {
-            Video vid = new Video();
+            FishLens_App.Models.Video vid = new FishLens_App.Models.Video();
             string csvPath = GetCsvScriptDirectory();
 
             if (!File.Exists(csvPath))
@@ -1177,7 +1177,7 @@ namespace FishLens_App
         // **************************************************
         private void DisplayDataInUi(string videoFileName)
         {
-            Video vid = GetData(videoFileName);
+            FishLens_App.Models.Video vid = GetData(videoFileName);
 
             videoName.Text = vid.name;
             videoDateTime.Text = $"Duration: {vid.startTime}s - {vid.endTime}s";
@@ -1202,7 +1202,7 @@ namespace FishLens_App
         // Function: CreateVideoButtonsList
         // Description: Creates and adds buttons for all videos to sidebar
         // **************************************************
-        private void CreateVideoButtonsList(List<(FileInfo videoFile, Video videoData)> videoDataList)
+        private void CreateVideoButtonsList(List<(FileInfo videoFile, FishLens_App.Models.Video videoData)> videoDataList)
         {
             CreateFolderHeader();
             CreateVideoButtons(videoDataList);
@@ -1287,7 +1287,7 @@ namespace FishLens_App
         // Function: CreateVideoButtons
         // Description: Creates individual video buttons with checkboxes
         // **************************************************
-        private void CreateVideoButtons(List<(FileInfo videoFile, Video videoData)> videoDataList)
+        private void CreateVideoButtons(List<(FileInfo videoFile, FishLens_App.Models.Video videoData)> videoDataList)
         {
             foreach (var (videoFile, videoData) in videoDataList)
             {
@@ -1320,7 +1320,7 @@ namespace FishLens_App
         // Description: Creates styled button for a single video
         // Notes: Helper function for CreateVideoButtonsList
         // **************************************************
-        private Button CreateSingleVideoButton(FileInfo videoFile, Video videoData)
+        private Button CreateSingleVideoButton(FileInfo videoFile, FishLens_App.Models.Video videoData)
         {
             bool isLowConfidence = IsLowConfidence(videoData.avgConfidence);
 

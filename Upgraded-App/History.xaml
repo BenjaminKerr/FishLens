@@ -40,7 +40,7 @@
                     Padding="30,20">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <TextBlock Text="🔍 Filters" 
+                        <TextBlock Text="Filters" 
                                    FontSize="{DynamicResource LargeFontSize}"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource PrimaryColorBrush}"
@@ -181,7 +181,7 @@
                                    Foreground="{DynamicResource PrimaryTextBrush}"
                                    Margin="0,0,0,8"/>
 
-                        <ComboBox x:Name="groupByCombo"
+                            <ComboBox x:Name="groupByCombo"
                                   Background="{DynamicResource PageBackgroundBrush}"
                                   BorderBrush="{DynamicResource BorderColorBrush}"
                                   Padding="12,8"
@@ -189,9 +189,9 @@
                                   Margin="0,0,0,20"
                                   SelectedIndex="0"
                                   SelectionChanged="GroupBy_SelectionChanged">
-                            <ComboBoxItem Content="🔤 Species"/>
-                            <ComboBoxItem Content="📅 Date &amp; Time"/>
-                            <ComboBoxItem Content="📍 Location"/>
+                            <ComboBoxItem Content="Species"/>
+                            <ComboBoxItem Content="Date &amp; Time"/>
+                            <ComboBoxItem Content="Location"/>
                         </ComboBox>
 
                         <TextBlock Text="Minimum Confidence" 
@@ -353,11 +353,7 @@
                                 Grid.Row="1"
                                 HorizontalAlignment="Center" 
                                 VerticalAlignment="Center">
-                        <TextBlock Text="📊" 
-                                   FontSize="{DynamicResource LargeTitleFontSize}"
-                                   HorizontalAlignment="Center"
-                                   Opacity="0.3"
-                                   Foreground="{DynamicResource SecondaryTextBrush}"/>
+                        <!-- Placeholder icon removed (no emojis) -->
                         <TextBlock Text="Generate a report" 
                                    FontSize="{DynamicResource LargeFontSize}"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
@@ -394,7 +390,7 @@
                             Visibility="Collapsed">
                         <StackPanel Orientation="Horizontal" 
                                     HorizontalAlignment="Center">
-                            <Button Content="💾 Export Report" 
+                            <Button Content="Export Report" 
                                     Click="ExportReportClick"
                                     Background="{DynamicResource PrimaryColorBrush}"
                                     Foreground="{DynamicResource SecondaryTextBrush}"
@@ -427,7 +423,7 @@
                                 </Button.Style>
                             </Button>
 
-                            <Button Content="🖨️ Print Report" 
+                            <Button Content="Print Report" 
                                     Click="PrintReportClick"
                                     Background="{DynamicResource SecondaryBackgroundBrush}"
                                     Foreground="{DynamicResource PrimaryColorBrush}"
@@ -475,7 +471,7 @@
             <Grid>
                 <StackPanel Orientation="Horizontal" 
                             HorizontalAlignment="Right">
-                    <Button Content="📊 Generate Report" 
+                    <Button Content="Generate Report" 
                             Click="GenerateReportClick"
                             Background="{DynamicResource PrimaryColorBrush}"
                             Foreground="{DynamicResource SecondaryTextBrush}"
