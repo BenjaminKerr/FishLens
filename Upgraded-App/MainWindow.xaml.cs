@@ -340,19 +340,37 @@ namespace FishLens_App
         // **************************************************
         private async Task RunYolo()
         {
-            ProcessStartInfo processInfo = CreateYoloProcessStartInfo();
+            ProcessStartInfo start = CreateYoloProcessStartInfo();
 
-            ProgressDialog progressDialog = new ProgressDialog();
-            progressDialog.Show();
-            await Task.Delay(100);
+            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
+            string scriptDirectory = System.IO.Path.Combine(projectRoot, "main.py");
 
+            string pythonExe = System.IO.Path.Combine(
+                projectRoot,
+                "Python",
+                "venv",
+                "Scripts",
+                "python.exe"
+            );
+
+            start.FileName = System.IO.Path.Combine(projectRoot, "venv", "scripts", "python.exe");
+
+            string sampleDataPatch = System.IO.Path.Combine(projectRoot, "sample_data");
+            start.Arguments = $"\"{scriptDirectory}\" \"{sampleDataPatch}\"";
+
+            start.UseShellExecute = false;
             try
             {
-                await ExecuteYoloProcess(processInfo, progressDialog);
+                Process process = Process.Start(start);
+                string output = process.StandardOutput.ReadToEnd();
+                string error = process.StandardError.ReadToEnd();
+                process.WaitForExit();
+                MessageBox.Show($"Output:\n{output}\n\nErrors:\n{error}");
             }
+
             catch (Exception ex)
             {
-                progressDialog.Close();
                 MessageBox.Show(ex.Message, "Could not process videos.", MessageBoxButton.OK);
             }
         }
