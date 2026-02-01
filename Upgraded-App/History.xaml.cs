@@ -324,10 +324,27 @@ namespace FishLens_App
                 ProcessVideoData(stats, videoName);
                 totalConfidence += ProcessConfidenceData(stats, columns);
 
-                // NEW: Process date/time data
-                if (columns.Length > 1 && DateTime.TryParse(columns[1], out DateTime timestamp))
+                // NEW: Process date/time data (columns: date at 11, time at 12)
+                DateTime? timestamp = null;
+                if (columns.Length > 11)
                 {
-                    DateTime dateOnly = timestamp.Date;
+                    var datePart = columns[11].Trim();
+                    var timePart = columns.Length > 12 ? columns[12].Trim() : string.Empty;
+                    if (!string.IsNullOrEmpty(timePart))
+                    {
+                        if (DateTime.TryParse($"{datePart} {timePart}", out DateTime ts))
+                            timestamp = ts;
+                    }
+                    else
+                    {
+                        if (DateTime.TryParse(datePart, out DateTime ts2))
+                            timestamp = ts2;
+                    }
+                }
+
+                if (timestamp.HasValue)
+                {
+                    DateTime dateOnly = timestamp.Value.Date;
                     uniqueDates.Add(dateOnly);
 
                     if (stats.DetectionsByDate.ContainsKey(dateOnly))
@@ -335,7 +352,17 @@ namespace FishLens_App
                     else
                         stats.DetectionsByDate[dateOnly] = 1;
 
-                    ProcessGroupedByDateTime(stats, timestamp, species);
+                    ProcessGroupedByDateTime(stats, timestamp.Value, species);
+
+                    // Track min/max detection timestamps
+                    if (!stats.MinDetectionTimestamp.HasValue || timestamp.Value < stats.MinDetectionTimestamp.Value)
+                        stats.MinDetectionTimestamp = timestamp.Value;
+                    if (!stats.MaxDetectionTimestamp.HasValue || timestamp.Value > stats.MaxDetectionTimestamp.Value)
+                        stats.MaxDetectionTimestamp = timestamp.Value;
+
+                    // Hourly counts
+                    int hr = timestamp.Value.Hour;
+                    if (stats.DetectionsByHour.ContainsKey(hr)) stats.DetectionsByHour[hr]++; else stats.DetectionsByHour[hr] = 1;
                 }
 
                 // NEW: Process location data (extract from video name or separate column)
@@ -495,14 +522,16 @@ namespace FishLens_App
         // Description: Adds a 24-hour activity distribution chart
         private void AddTimeDistribution(ReportStatistics stats)
         {
-            int maxHourly = stats.DetectionsByHour.Values.Max();
-
+            // Build ordered hour points (0-23)
+            var points = new List<(string label, int value)>();
             for (int hour = 0; hour < 24; hour++)
             {
                 int count = stats.DetectionsByHour.ContainsKey(hour) ? stats.DetectionsByHour[hour] : 0;
-                string timeLabel = $"{hour:D2}:00";
-                AddBarChart(timeLabel, count, maxHourly, "#FF6F00", true);
+                points.Add(($"{hour:D2}:00", count));
             }
+
+            var chart = CreateLineChart(points, "#FF6F00", 140, reportPanel?.ActualWidth ?? 0);
+            reportPanel.Children.Add(chart);
         }
 
         // **************************************************
@@ -787,12 +816,16 @@ namespace FishLens_App
         // **************************************************
         // Function: AppendReportHeader
         // Description: Appends the report header section to the StringBuilder
-        private void AppendReportHeader(StringBuilder sb)
+        private void AppendReportHeader(StringBuilder sb, ReportStatistics stats)
         {
             sb.AppendLine("═══════════════════════════════════════════════════════");
             sb.AppendLine("              FISHLENS ANALYSIS REPORT");
             sb.AppendLine("═══════════════════════════════════════════════════════");
             sb.AppendLine($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            if (stats.MinDetectionTimestamp.HasValue && stats.MaxDetectionTimestamp.HasValue)
+            {
+                sb.AppendLine($"Data Range: {stats.MinDetectionTimestamp.Value:yyyy-MM-dd HH:mm:ss} to {stats.MaxDetectionTimestamp.Value:yyyy-MM-dd HH:mm:ss}");
+            }
             sb.AppendLine();
         }
 
@@ -1015,6 +1048,161 @@ namespace FishLens_App
             grid.Children.Add(barFill);
 
             return grid;
+        }
+
+        // **************************************************
+        // Function: CreateLineChart
+        // Description: Creates a simple line chart from ordered (label,value) points
+        private FrameworkElement CreateLineChart(List<(string label, int value)> points, string color, double height = 180, double availableWidth = 0)
+        {
+            int maxValue = points.Count > 0 ? Math.Max(1, points.Max(p => p.value)) : 1;
+            // Use provided availableWidth if valid, otherwise try to use the report panel width, else fallback
+            double totalWidth = (availableWidth > 200) ? availableWidth : (reportPanel?.ActualWidth > 200 ? reportPanel.ActualWidth : 720);
+
+            double leftMargin = 56; // space for y-axis labels
+            double rightMargin = 12;
+            double topMargin = 8;
+            double bottomMargin = 36; // space for x-axis labels
+
+            double chartWidth = totalWidth - leftMargin - rightMargin;
+            double chartHeight = height - topMargin - bottomMargin;
+
+            var container = new Grid { Margin = new Thickness(0, 6, 0, 12), Width = double.NaN, HorizontalAlignment = HorizontalAlignment.Stretch };
+            var canvas = new Canvas { Width = totalWidth, Height = height, Background = Brushes.Transparent };
+
+            // Draw horizontal grid lines and Y-axis tick labels
+            int yTicks = 4;
+            for (int t = 0; t <= yTicks; t++)
+            {
+                double frac = (double)t / yTicks;
+                double y = topMargin + frac * chartHeight;
+                // grid line
+                var line = new Line
+                {
+                    X1 = leftMargin,
+                    X2 = leftMargin + chartWidth,
+                    Y1 = y,
+                    Y2 = y,
+                    Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E6EDF2")),
+                    StrokeThickness = 1
+                };
+                canvas.Children.Add(line);
+
+                // label (invert frac because y increases downward)
+                int labelValue = (int)Math.Round((1 - frac) * maxValue);
+                var lbl = new TextBlock
+                {
+                    Text = labelValue.ToString(),
+                    FontSize = 11,
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#657786")),
+                    Width = leftMargin - 8,
+                    TextAlignment = TextAlignment.Right
+                };
+                Canvas.SetLeft(lbl, 0);
+                Canvas.SetTop(lbl, y - 8);
+                canvas.Children.Add(lbl);
+            }
+
+            // Baseline (x-axis)
+            double baseY = topMargin + chartHeight;
+            var xAxis = new Line
+            {
+                X1 = leftMargin,
+                X2 = leftMargin + chartWidth,
+                Y1 = baseY,
+                Y2 = baseY,
+                Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#CCDDE6")),
+                StrokeThickness = 1.5
+            };
+            canvas.Children.Add(xAxis);
+
+            // Polyline for data
+            var poly = new Polyline
+            {
+                Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)),
+                StrokeThickness = 2,
+                Fill = Brushes.Transparent
+            };
+
+            // Compute and draw points
+            for (int i = 0; i < points.Count; i++)
+            {
+                double x = leftMargin + (points.Count == 1 ? chartWidth / 2 : (i * (chartWidth / Math.Max(1, points.Count - 1))));
+                double v = points[i].value;
+                double y = topMargin + (1.0 - (double)v / maxValue) * chartHeight;
+                poly.Points.Add(new System.Windows.Point(x, y));
+
+                // Marker
+                var marker = new Ellipse
+                {
+                    Width = 6,
+                    Height = 6,
+                    Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)),
+                    Stroke = Brushes.White,
+                    StrokeThickness = 1
+                };
+                Canvas.SetLeft(marker, x - 3);
+                Canvas.SetTop(marker, y - 3);
+                canvas.Children.Add(marker);
+
+                // X-axis tick (small)
+                var tick = new Line
+                {
+                    X1 = x,
+                    X2 = x,
+                    Y1 = baseY,
+                    Y2 = baseY + 6,
+                    Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#CCDDE6")),
+                    StrokeThickness = 1
+                };
+                canvas.Children.Add(tick);
+
+                // X-axis label (sparse)
+                int labelEvery = Math.Max(1, points.Count / 8);
+                if (i % labelEvery == 0 || i == points.Count - 1)
+                {
+                    var xl = new TextBlock
+                    {
+                        Text = points[i].label,
+                        FontSize = 10,
+                        Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#657786"))
+                    };
+                    Canvas.SetLeft(xl, x - 20);
+                    Canvas.SetTop(xl, baseY + 8);
+                    canvas.Children.Add(xl);
+                }
+            }
+
+            canvas.Children.Add(poly);
+            container.Children.Add(canvas);
+            // If the panel resizes later, redraw to fit: attach to SizeChanged to update canvas width
+            if (reportPanel != null)
+            {
+                void ResizeHandler(object s, SizeChangedEventArgs e)
+                {
+                    double newW = e.NewSize.Width - leftMargin - rightMargin;
+                    if (newW > 100)
+                    {
+                        canvas.Width = e.NewSize.Width;
+                        // Recompute points positions by recreating the chart; easiest is to remove handler and re-add chart
+                        reportPanel.SizeChanged -= ResizeHandler;
+                        // Replace this container with a new one using the new width
+                        var parent = container.Parent as Panel;
+                        if (parent != null)
+                        {
+                            int idx = parent.Children.IndexOf(container);
+                            if (idx >= 0)
+                            {
+                                parent.Children.RemoveAt(idx);
+                                parent.Children.Insert(idx, CreateLineChart(points, color, height, e.NewSize.Width));
+                            }
+                        }
+                    }
+                }
+
+                reportPanel.SizeChanged += ResizeHandler;
+            }
+            return container;
         }
 
         // **************************************************
@@ -1524,25 +1712,10 @@ namespace FishLens_App
             if (stats.DetectionsByDate.Count == 0) return;
 
             var sortedDates = stats.DetectionsByDate.OrderBy(x => x.Key).ToList();
-            int maxCount = sortedDates.Max(x => x.Value);
+            var points = sortedDates.Select(kvp => (kvp.Key.ToString("MMM dd"), kvp.Value)).ToList();
 
-            foreach (var kvp in sortedDates)
-            {
-                string dateLabel = kvp.Key.ToString("MMM dd");
-                AddBarChart(dateLabel, kvp.Value, maxCount, "#7E57C2", true);
-            }
-
-            // Add average line indicator
-            double avgPerDay = stats.FishPerDay;
-            var avgIndicator = new TextBlock
-            {
-                Text = $"Daily Average: {avgPerDay:F1} fish/day",
-                FontSize = 12,
-                FontStyle = FontStyles.Italic,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#657786")),
-                Margin = new Thickness(0, 10, 0, 0)
-            };
-            reportPanel.Children.Add(avgIndicator);
+            var chart = CreateLineChart(points, "#7E57C2", 160, reportPanel?.ActualWidth ?? 0);
+            reportPanel.Children.Add(chart);
         }
 
         // **************************************************
@@ -1552,7 +1725,7 @@ namespace FishLens_App
         {
             var sb = new StringBuilder();
 
-            AppendReportHeader(sb);
+            AppendReportHeader(sb, stats);
             AppendSummaryStatistics(sb, stats);
             AppendEnhancedMetrics(sb, stats);
             AppendMovementStatistics(sb, stats);

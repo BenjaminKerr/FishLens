@@ -25,6 +25,9 @@ namespace FishLens_App.Models
         public double EstimatedUpstreamCount { get; set; }
         public double AverageCorrectness { get; set; }
         public double AverageLengthCm { get; set; } // Placeholder
+        // Earliest and latest detection timestamps found in the report data
+        public DateTime? MinDetectionTimestamp { get; set; }
+        public DateTime? MaxDetectionTimestamp { get; set; }
         public Dictionary<string, Dictionary<string, int>> GroupedBySpecies { get; set; }
         public Dictionary<DateTime, Dictionary<string, int>> GroupedByDateTime { get; set; }
         public Dictionary<string, Dictionary<string, int>> GroupedByLocation { get; set; }

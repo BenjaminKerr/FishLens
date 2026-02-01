@@ -7,6 +7,8 @@
 // ***********************************
 // **************************************************
 
+using System;
+
 namespace FishLens_App.Models
 {
     // **************************************************
@@ -35,5 +37,10 @@ namespace FishLens_App.Models
         public string species { get; set; }
         // Confidence for species label (text as stored in CSV)
         public string species_confidence { get; set; }
+        // Detection date and time (as strings from CSV)
+        public string date { get; set; }
+        public string time { get; set; }
+        // Combined detection timestamp (nullable)
+        public DateTime? detectionTimestamp { get; set; }
     }
 }

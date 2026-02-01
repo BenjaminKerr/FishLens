@@ -135,6 +135,15 @@ namespace FishLens_App.Services
             v.direction = columns.Length > 8 ? columns[8].Trim() : "Unknown";
             v.species = columns.Length > 9 ? columns[9].Trim() : string.Empty;
             v.species_confidence = columns.Length > 10 ? columns[10].Trim() : string.Empty;
+            v.date = columns.Length > 11 ? columns[11].Trim() : string.Empty;
+            v.time = columns.Length > 12 ? columns[12].Trim() : string.Empty;
+
+            // Try to parse combined date/time if available
+            if (!string.IsNullOrEmpty(v.date) && !string.IsNullOrEmpty(v.time))
+            {
+                if (DateTime.TryParse($"{v.date} {v.time}", out var ts))
+                    v.detectionTimestamp = ts;
+            }
             return v;
         }
 
