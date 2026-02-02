@@ -5,7 +5,7 @@
 		<UseWPF>true</UseWPF>
 		<RootNamespace>FishLens_App</RootNamespace>
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-		<ApplicationManifest>app.manifest</ApplicationManifest>
+		<ApplicationManifest></ApplicationManifest>
 	</PropertyGroup>
 	<ItemGroup>
 	  <Compile Remove="SavedVids\**" />
