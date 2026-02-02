@@ -103,72 +103,7 @@ namespace FishLens_App
             return SigninSuccessful;
         }
 
-        // ****************************************************************
-        // Function: Signup
-        // Description: Creates username and password credentials for signin with salting
-        //     
-        // Notes: Temporarily stores into Kaharra SQL, also sign up button is currently on main page wont be in future
-        public bool SignUp(string username, string password)
-        {
-            bool success = false;
-            bool Pass = true;
-            String query = "Kaharra.AddUser @puser = @Username , @pPassword = @Password";
-
-            if (query.Contains(';') || query.Contains(')'))
-            {
-                Pass = false;
-            }
-      
-            Console.WriteLine(query);
-            try
-            {
-                using (SqlConnection conn = new SqlConnection(connectionString))
-
-                {
-
-                    conn.Open();
-
-                    if (conn.State == System.Data.ConnectionState.Open)
-
-                    {
-
-                        using (SqlCommand cmd = conn.CreateCommand())
-
-                        {
-
-                            cmd.CommandText = query;
-
-                            cmd.Parameters.AddWithValue("@Username", username);
-                            cmd.Parameters.AddWithValue("@Password", password);
-
-                            String newQuery = cmd.ToString();
-                            Console.WriteLine(newQuery);
-                            if (Pass == true)
-                            {
-                                cmd.ExecuteNonQuery();
-                                success = true;
-                            }
-
-
-                        }
-
-                    }
-
-                }
-
-            }
-
-            catch (Exception eSql)
-
-            {
-
-                Debug.WriteLine("Exception: " + eSql.Message);
-
-            }
-
-
-            return success;
-        }
+        
         // ****************************************************************
         // Function: SigninButtonClick
         // Description: Handle signin button click, validate credentials, and
@@ -194,26 +129,7 @@ namespace FishLens_App
             }
         }
 
-        public void SignupButtonClick(object sender, RoutedEventArgs e)
-        {
-            bool Status;
-
-            String username = UserName.Text;
-
-            String password = PassWord.Password;
-            Status = SignUp(username, password);
-            if (Status == true)
-            {
-                MessageBox.Show("Sign up successful, Login saved");
-                MainWindow main = new MainWindow();
-                main.Show();
-                this.Close();
-            }
-            else
-            {
-                MessageBox.Show("Sign up unsuccessful, retry");
-            }
-        }
+       
 
     }
 }

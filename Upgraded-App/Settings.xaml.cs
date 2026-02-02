@@ -62,6 +62,10 @@ namespace FishLens_App
 
         #region Event Handlers
 
+        // ****************************************************************
+        // Function: CreateUserClick
+        // Description: Handle create user button click and calls signup
+        // Notes: Temporary message boxes for debug
         public void CreateUserClick(object sender, RoutedEventArgs e)
         {
             bool Status;
@@ -72,9 +76,10 @@ namespace FishLens_App
             Status = SignUp(username, password);
             if (Status == true)
             {
-                MessageBox.Show("Sign up successful, Login saved");
                 NewUsername.Text = "";
                 NewPassword.Password = "";
+                MessageBox.Show("Sign up successful, Login saved");
+              
 
             }
             else
@@ -171,6 +176,11 @@ namespace FishLens_App
 
         #region Private Methods
 
+        // ****************************************************************
+        // Function: Signup
+        // Description: Creates username and password credentials for signin with salting
+        //     
+        // Notes: Temporarily stores into Kaharra SQL
         private bool SignUp(string username, string password)
         {
             bool success = false;
