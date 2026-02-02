@@ -56,7 +56,17 @@
                     BorderThickness="2"
                     BorderBrush="Black"
                     Cursor="Hand"/>
-        </StackPanel>
+                <Button Content="Sign up"
+    Width="120"
+    Padding="8"
+    Click="SignupButtonClick"
+    Background="#2D7A8F"
+    Foreground="White"
+    Margin="10"
+    BorderThickness="2"
+    BorderBrush="Black"
+    Cursor="Hand"/>
+            </StackPanel>
         </Border>
         <!--Sign in block Ends-->
     </Grid>
