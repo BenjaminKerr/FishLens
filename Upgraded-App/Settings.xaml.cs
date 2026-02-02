@@ -3,6 +3,7 @@ using FishLens_App.Models;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -16,6 +17,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using System.Data.SqlClient;
 
 namespace FishLens_App
 {
@@ -25,6 +27,10 @@ namespace FishLens_App
     public partial class Settings : Page
     {
         #region Fields
+        private string connectionString = "server=aura.cset.oit.edu,5433; " +
+   "database=kaharra; " +
+   "UID=kaharra; " +
+   "password=kaharra";
         private readonly IProjectPathResolver _pathResolver;
         private readonly IFileSystemManager _fileSystemManager;
         private readonly ILogger<MainWindow> _logger;
@@ -55,6 +61,27 @@ namespace FishLens_App
         #endregion
 
         #region Event Handlers
+
+        public void CreateUserClick(object sender, RoutedEventArgs e)
+        {
+            bool Status;
+
+            String username = NewUsername.Text;
+
+            String password = NewPassword.Password;
+            Status = SignUp(username, password);
+            if (Status == true)
+            {
+                MessageBox.Show("Sign up successful, Login saved");
+                NewUsername.Text = "";
+                NewPassword.Password = "";
+
+            }
+            else
+            {
+                MessageBox.Show("Sign up unsuccessful, retry");
+            }
+        }
         private void ConfidenceThreshold_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
         {
             if (confidenceValue == null) return;
@@ -143,6 +170,69 @@ namespace FishLens_App
         #endregion
 
         #region Private Methods
+
+        private bool SignUp(string username, string password)
+        {
+            bool success = false;
+            bool Pass = true;
+            String query = "Kaharra.AddUser @puser = @Username , @pPassword = @Password";
+
+            if (query.Contains(';') || query.Contains(')'))
+            {
+                Pass = false;
+            }
+
+            Console.WriteLine(query);
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(connectionString))
+
+                {
+
+                    conn.Open();
+
+                    if (conn.State == System.Data.ConnectionState.Open)
+
+                    {
+
+                        using (SqlCommand cmd = conn.CreateCommand())
+
+                        {
+
+                            cmd.CommandText = query;
+
+                            cmd.Parameters.AddWithValue("@Username", username);
+                            cmd.Parameters.AddWithValue("@Password", password);
+
+                            String newQuery = cmd.ToString();
+                            Console.WriteLine(newQuery);
+                            if (Pass == true)
+                            {
+                                cmd.ExecuteNonQuery();
+                                success = true;
+                            }
+
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+            catch (Exception eSql)
+
+            {
+
+                Debug.WriteLine("Exception: " + eSql.Message);
+
+            }
+
+
+            return success;
+        }
+
         private void LoadSettings()
         {
             // Set defaults from current runtime state
@@ -233,5 +323,7 @@ namespace FishLens_App
             catch { }
         }
         #endregion
+
+
     }
 }
