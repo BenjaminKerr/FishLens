@@ -23,7 +23,13 @@ namespace FishLens_App.Services
         public string ResolveProjectRoot()
         {
             string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
-            return Directory.GetParent(baseDirectory).Parent.Parent.Parent.Parent.FullName;
+            var projectRoot = Directory.GetParent(baseDirectory)?.Parent?.Parent?.Parent?.Parent?.FullName;
+
+            if (string.IsNullOrEmpty(projectRoot))
+            {
+                throw new InvalidOperationException("Unable to resolve project root.");
+            }
+            return projectRoot;
         }
 
         // **************************************************
@@ -45,10 +51,10 @@ namespace FishLens_App.Services
         }
 
         // **************************************************
-        // Function: ResolveCsvScriptDirectory
+        // Function: ResolveCsvScriptPath
         // Description: Resolves the CSV Script Path
         // **************************************************
-        public string ResolveCsvScriptDirectory()
+        public string ResolveCsvScriptPath()
         {
             return Path.Combine(ResolveProjectRoot(), "fish_summary.csv");
         }

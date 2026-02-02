@@ -17,18 +17,18 @@ namespace FishLens_App.Interfaces
         // Function: CreateDirectoryIfNotExists
         // Description: Ensures the specified directory exists, creating it if necessary.
         // **************************************************
-        public bool CreateDirectoryIfNotExists(string path);
+        bool CreateDirectoryIfNotExists(string path);
 
         // **************************************************
         // Function: CopyFile
         // Description: Copies a file from sourcePath to destinationPath.
         // **************************************************
-        public bool CopyFile(string sourcePath, string destinationPath);
+        bool CopyFile(string sourcePath, string destinationPath);
 
         // **************************************************
         // Function: ListFiles
         // Description: Lists files contained in the specified directory.
         // **************************************************
-        public IEnumerable<string> ListFiles(string directoryPath);
+        IEnumerable<string> ListFiles(string directoryPath);
     }
 }

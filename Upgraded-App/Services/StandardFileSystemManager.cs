@@ -13,6 +13,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
 using System.IO;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FishLens_App.Services
 {
@@ -24,21 +25,8 @@ namespace FishLens_App.Services
         // Function: StandardFileSystemManager Constructor
         // Description: Initializes StandardFileSystemManager with default logger
         // **************************************************
-        public StandardFileSystemManager() : this(GetDefaultLogger())
+        public StandardFileSystemManager() : this(NullLogger<StandardFileSystemManager>.Instance)
         {
-        }
-
-        // **************************************************
-        // Function: GetDefaultLogger
-        // Description: Creates and returns a logger
-        // **************************************************
-        private static ILogger<StandardFileSystemManager> GetDefaultLogger()
-        {
-            using var loggerFactory = LoggerFactory.Create(builder =>
-            {
-                builder.SetMinimumLevel(LogLevel.Information);
-            });
-            return loggerFactory.CreateLogger<StandardFileSystemManager>();
         }
 
         // **************************************************

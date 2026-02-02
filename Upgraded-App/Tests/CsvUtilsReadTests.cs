@@ -22,9 +22,9 @@ namespace FishLens.Tests
                 File.WriteAllLines(temp, lines);
 
                 var v = CsvUtils.ReadVideoFromCsv(temp, "target.mp4");
-                Assert.Equal("target.mp4", v.name);
-                Assert.Equal("2", v.trackId);
-                Assert.Equal(80, (int)v.avgConfidence);
+                Assert.Equal("target.mp4", v.Name);
+                Assert.Equal("2", v.TrackId);
+                Assert.Equal(80, (int)v.AvgConfidence);
             }
             finally
             {
@@ -46,8 +46,8 @@ namespace FishLens.Tests
                 File.WriteAllLines(temp, lines);
 
                 var v = CsvUtils.ReadVideoFromCsv(temp, "missing.mp4");
-                Assert.Equal("missing.mp4", v.name);
-                Assert.Equal("N/A", v.likelyClass);
+                Assert.Equal("missing.mp4", v.Name);
+                Assert.Equal("N/A", v.LikelyClass);
             }
             finally
             {
@@ -70,8 +70,8 @@ namespace FishLens.Tests
                 File.WriteAllLines(temp, lines);
 
                 var v = CsvUtils.ReadVideoFromCsv(temp, "target.mp4");
-                Assert.Equal("target.mp4", v.name);
-                Assert.Equal("2", v.trackId);
+                Assert.Equal("target.mp4", v.Name);
+                Assert.Equal("2", v.TrackId);
             }
             finally
             {

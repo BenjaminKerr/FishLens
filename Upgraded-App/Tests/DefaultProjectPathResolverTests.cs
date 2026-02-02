@@ -25,10 +25,10 @@ namespace FishLens.Tests
         }
 
         [Fact]
-        public void ResolveCsvScriptDirectory_EndsWithCsv()
+        public void ResolveCsvScriptPath_EndsWithCsv()
         {
             var resolver = new DefaultProjectPathResolver();
-            var path = resolver.ResolveCsvScriptDirectory();
+            var path = resolver.ResolveCsvScriptPath();
             Assert.EndsWith("fish_summary.csv", path, StringComparison.OrdinalIgnoreCase);
         }
     }

@@ -109,8 +109,6 @@ namespace FishLens_App
                     ConfidenceThreshold = _config.ConfidenceThreshold,
                     OutputBox = _checkBoxes.OutputBox,
                     ErrorBox = _checkBoxes.ErrorBox,
-                    AutoPlayVideos = _config.AutoPlayVideos,
-                    VideoQuality = _config.VideoQuality,
                     HighContrastMode = _config.HighContrastMode,
                     LargeText = _config.LargeText
                 };
@@ -182,30 +180,6 @@ namespace FishLens_App
                 {
                     _checkBoxes.ErrorBox = errEl.GetBoolean();
                     hideErrors.IsChecked = _checkBoxes.ErrorBox;
-                }
-
-                if (root.TryGetProperty("AutoPlayVideos", out var autoEl) && (autoEl.ValueKind == JsonValueKind.True || autoEl.ValueKind == JsonValueKind.False))
-                {
-                    _config.AutoPlayVideos = autoEl.GetBoolean();
-                    var ap = this.FindName("autoPlayVideos") as CheckBox;
-                    if (ap != null) ap.IsChecked = _config.AutoPlayVideos;
-                }
-
-                if (root.TryGetProperty("VideoQuality", out var qualityEl) && qualityEl.ValueKind == JsonValueKind.String)
-                {
-                    string q = qualityEl.GetString();
-                    var vq = this.FindName("videoQuality") as ComboBox;
-                    if (vq != null)
-                    {
-                        foreach (var item in vq.Items)
-                        {
-                            if (item is ComboBoxItem c && c.Content?.ToString() == q)
-                            {
-                                vq.SelectedItem = c;
-                                break;
-                            }
-                        }
-                    }
                 }
 
                 if (root.TryGetProperty("HighContrastMode", out var hcEl) && (hcEl.ValueKind == JsonValueKind.True || hcEl.ValueKind == JsonValueKind.False))

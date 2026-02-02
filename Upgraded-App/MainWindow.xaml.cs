@@ -194,7 +194,7 @@ namespace FishLens_App
         // **************************************************
         private string GetCsvScriptDirectory()
         {
-            return _pathResolver.ResolveCsvScriptDirectory();
+            return _pathResolver.ResolveCsvScriptPath();
         }
 
         // **************************************************
@@ -270,6 +270,7 @@ namespace FishLens_App
         // **************************************************
         private void HomeButtonClick(object sender, RoutedEventArgs e)
         {
+            ExpandSidebar();
             MainFrame.Visibility = Visibility.Collapsed;
         }
 
@@ -279,6 +280,8 @@ namespace FishLens_App
         // **************************************************
         private void HistoryButtonClick(object sender, RoutedEventArgs e)
         {
+            CollapseSidebar();
+
             MainFrame.Visibility = Visibility.Visible;
             _logger.LogInformation("History button clicked.");
 
@@ -307,6 +310,7 @@ namespace FishLens_App
         // **************************************************
         private void SettingsButtonClick(object sender, RoutedEventArgs e)
         {
+            CollapseSidebar();
             MainFrame.Visibility = Visibility.Visible;
             _logger.LogInformation("Settings button clicked.");
 
@@ -837,7 +841,7 @@ namespace FishLens_App
                 }
             }
 
-            return videoDataList.OrderBy(x => x.data.avgConfidence).ToList();
+            return videoDataList.OrderBy(x => x.data.AvgConfidence).ToList();
         }
 
         // **************************************************
@@ -1142,6 +1146,70 @@ namespace FishLens_App
 
         #region UI Display
 
+        private void CollapseSidebar()
+        {
+            var animation = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                To = 106,
+                Duration = TimeSpan.FromMilliseconds(250),
+                EasingFunction = new System.Windows.Media.Animation.CubicEase()
+            };
+
+            SideBar.BeginAnimation(Border.WidthProperty, animation);
+
+            videoList.Visibility = Visibility.Collapsed;
+            deleteSelectedVideos.Visibility = Visibility.Collapsed;
+            undoLastDelete.Visibility = Visibility.Collapsed;
+            sidebarSeperator.Visibility = Visibility.Collapsed;
+            videoLibraryTitle.Visibility = Visibility.Collapsed;
+
+            ButtonGrid.RowDefinitions.Clear();
+            ButtonGrid.ColumnDefinitions.Clear();
+            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            Grid.SetRow(Home, 0);
+            Grid.SetColumn(Home, 0);
+            Grid.SetRow(History, 1);
+            Grid.SetColumn(History, 0);
+            Grid.SetRow(Settings, 2);
+            Grid.SetColumn(Settings, 0);
+        }
+
+        private void ExpandSidebar()
+        {
+            var animation = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                To = 320,
+                Duration = TimeSpan.FromMilliseconds(250),
+                EasingFunction = new System.Windows.Media.Animation.CubicEase()
+            };
+
+            SideBar.BeginAnimation(Border.WidthProperty, animation);
+
+            // Show video list
+            videoList.Visibility = Visibility.Visible;
+            deleteSelectedVideos.Visibility = Visibility.Visible;
+            undoLastDelete.Visibility = Visibility.Visible;
+            sidebarSeperator.Visibility = Visibility.Visible;
+            videoLibraryTitle.Visibility = Visibility.Visible;
+
+            // Restore horizontal button layout
+            ButtonGrid.RowDefinitions.Clear();
+            ButtonGrid.ColumnDefinitions.Clear();
+            ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            Grid.SetRow(Home, 0);
+            Grid.SetColumn(Home, 0);
+            Grid.SetRow(History, 0);
+            Grid.SetColumn(History, 1);
+            Grid.SetRow(Settings, 0);
+            Grid.SetColumn(Settings, 2);
+        }
+
         // **************************************************
         // Function: VideoButtonClick
         // Description: Displays selected video and its data
@@ -1164,11 +1232,7 @@ namespace FishLens_App
         private void LoadVideoInPlayer(string videoPath)
         {
             videoPlayer.Source = new Uri(videoPath);
-
-            if (_config?.AutoPlayVideos ?? true)
-            {
-                videoPlayer.Play();
-            }
+            videoPlayer.Play();
         }
 
         // **************************************************
@@ -1179,11 +1243,11 @@ namespace FishLens_App
         {
             FishLens_App.Models.Video vid = GetData(videoFileName);
 
-            videoName.Text = vid.name;
-            videoDateTime.Text = $"Duration: {vid.startTime}s - {vid.endTime}s";
-            fishPresentStatus.Text = vid.likelyClass == "fish" ? "Present" : "Not Present";
-            fishPresentConfidence.Text = vid.avgConfidence.ToString();
-            travelDirection.Text = CapitalizeFirstLetter(vid.direction);
+            videoName.Text = vid.Name;
+            videoDateTime.Text = $"Duration: {vid.StartTime}s - {vid.EndTime}s";
+            fishPresentStatus.Text = vid.LikelyClass == "fish" ? "Present" : "Not Present";
+            fishPresentConfidence.Text = vid.AvgConfidence.ToString();
+            travelDirection.Text = CapitalizeFirstLetter(vid.Direction);
         }
 
         // **************************************************
@@ -1322,7 +1386,7 @@ namespace FishLens_App
         // **************************************************
         private Button CreateSingleVideoButton(FileInfo videoFile, FishLens_App.Models.Video videoData)
         {
-            bool isLowConfidence = IsLowConfidence(videoData.avgConfidence);
+            bool isLowConfidence = IsLowConfidence(videoData.AvgConfidence);
 
             return new Button
             {

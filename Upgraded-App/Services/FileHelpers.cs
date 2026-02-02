@@ -12,7 +12,7 @@ namespace FishLens_App.Services
 
         public static string[] SafeReadAllLines(string path)
         {
-            for (int i = 0; i < RETRY_COUNT; i++)
+            for (int attempt = 0; attempt < RETRY_COUNT; attempt++)
             {
                 try
                 {
@@ -21,11 +21,11 @@ namespace FishLens_App.Services
                 }
                 catch (IOException)
                 {
-                    Thread.Sleep(RETRY_DELAY_MS * (i + 1));
+                    Thread.Sleep(RETRY_DELAY_MS * (attempt + 1));
                 }
                 catch (UnauthorizedAccessException)
                 {
-                    Thread.Sleep(RETRY_DELAY_MS * (i + 1));
+                    Thread.Sleep(RETRY_DELAY_MS * (attempt + 1));
                 }
             }
 
@@ -34,7 +34,7 @@ namespace FishLens_App.Services
 
         public static bool SafeWriteAllLines(string path, IEnumerable<string> lines)
         {
-            for (int i = 0; i < RETRY_COUNT; i++)
+            for (int attempt = 0; attempt < RETRY_COUNT; attempt++)
             {
                 try
                 {
@@ -45,11 +45,11 @@ namespace FishLens_App.Services
                 }
                 catch (IOException)
                 {
-                    Thread.Sleep(RETRY_DELAY_MS * (i + 1));
+                    Thread.Sleep(RETRY_DELAY_MS * (attempt + 1));
                 }
                 catch (UnauthorizedAccessException)
                 {
-                    Thread.Sleep(RETRY_DELAY_MS * (i + 1));
+                    Thread.Sleep(RETRY_DELAY_MS * (attempt + 1));
                 }
             }
 
@@ -58,22 +58,22 @@ namespace FishLens_App.Services
 
         public static bool SafeCopy(string sourcePath, string destinationPath, bool overwrite = false)
         {
-            for (int i = 0; i < RETRY_COUNT; i++)
+            for (int attempt = 0; attempt < RETRY_COUNT; attempt++)
             {
                 try
                 {
-                    var destDir = Path.GetDirectoryName(destinationPath);
-                    if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
+                    var directory = Path.GetDirectoryName(destinationPath);
+                    if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory)) Directory.CreateDirectory(directory);
                     File.Copy(sourcePath, destinationPath, overwrite);
                     return true;
                 }
                 catch (IOException)
                 {
-                    Thread.Sleep(RETRY_DELAY_MS * (i + 1));
+                    Thread.Sleep(RETRY_DELAY_MS * (attempt + 1));
                 }
                 catch (UnauthorizedAccessException)
                 {
-                    Thread.Sleep(RETRY_DELAY_MS * (i + 1));
+                    Thread.Sleep(RETRY_DELAY_MS * (attempt + 1));
                 }
             }
 
@@ -82,23 +82,23 @@ namespace FishLens_App.Services
 
         public static bool SafeMove(string sourcePath, string destinationPath, bool overwrite = false)
         {
-            for (int i = 0; i < RETRY_COUNT; i++)
+            for (int attempt = 0; attempt < RETRY_COUNT; attempt++)
             {
                 try
                 {
-                    var destDir = Path.GetDirectoryName(destinationPath);
-                    if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
+                    var directory = Path.GetDirectoryName(destinationPath);
+                    if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory)) Directory.CreateDirectory(directory);
                     if (overwrite && File.Exists(destinationPath)) File.Delete(destinationPath);
                     File.Move(sourcePath, destinationPath);
                     return true;
                 }
                 catch (IOException)
                 {
-                    Thread.Sleep(RETRY_DELAY_MS * (i + 1));
+                    Thread.Sleep(RETRY_DELAY_MS * (attempt + 1));
                 }
                 catch (UnauthorizedAccessException)
                 {
-                    Thread.Sleep(RETRY_DELAY_MS * (i + 1));
+                    Thread.Sleep(RETRY_DELAY_MS * (attempt + 1));
                 }
             }
 
@@ -107,7 +107,7 @@ namespace FishLens_App.Services
 
         public static bool SafeDelete(string path)
         {
-            for (int i = 0; i < RETRY_COUNT; i++)
+            for (int attempt = 0; attempt < RETRY_COUNT; attempt++)
             {
                 try
                 {
@@ -116,11 +116,11 @@ namespace FishLens_App.Services
                 }
                 catch (IOException)
                 {
-                    Thread.Sleep(RETRY_DELAY_MS * (i + 1));
+                    Thread.Sleep(RETRY_DELAY_MS * (attempt + 1));
                 }
                 catch (UnauthorizedAccessException)
                 {
-                    Thread.Sleep(RETRY_DELAY_MS * (i + 1));
+                    Thread.Sleep(RETRY_DELAY_MS * (attempt + 1));
                 }
             }
 

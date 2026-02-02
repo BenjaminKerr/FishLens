@@ -175,24 +175,7 @@
                             <ComboBoxItem Content="Spencer Creek"/>
                         </ComboBox>
 
-                        <TextBlock Text="Group By" 
-                                   FontSize="{DynamicResource BaseFontSize}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource PrimaryTextBrush}"
-                                   Margin="0,0,0,8"/>
-
-                            <ComboBox x:Name="groupByCombo"
-                                  Background="{DynamicResource PageBackgroundBrush}"
-                                  BorderBrush="{DynamicResource BorderColorBrush}"
-                                  Padding="12,8"
-                                  FontSize="{DynamicResource BaseFontSize}"
-                                  Margin="0,0,0,20"
-                                  SelectedIndex="0"
-                                  SelectionChanged="GroupBy_SelectionChanged">
-                            <ComboBoxItem Content="Species"/>
-                            <ComboBoxItem Content="Date &amp; Time"/>
-                            <ComboBoxItem Content="Location"/>
-                        </ComboBox>
+                        <!-- Group By removed per user request -->
 
                         <TextBlock Text="Minimum Confidence" 
                                    FontSize="{DynamicResource BaseFontSize}"
@@ -353,7 +336,11 @@
                                 Grid.Row="1"
                                 HorizontalAlignment="Center" 
                                 VerticalAlignment="Center">
-                        <!-- Placeholder icon removed (no emojis) -->
+                        <TextBlock Text="📊" 
+                                   FontSize="{DynamicResource LargeTitleFontSize}"
+                                   HorizontalAlignment="Center"
+                                   Opacity="0.3"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"/>
                         <TextBlock Text="Generate a report" 
                                    FontSize="{DynamicResource LargeFontSize}"
                                    Foreground="{DynamicResource SecondaryTextBrush}"

@@ -27,6 +27,7 @@ namespace FishLens_App
         private DateTime? _filterEndDate;
         private string _filterSpecies = "All";
         private string _filterDirection = "All";
+        private string _filterCamera = "All";
         private double _filterMinConfidence = 0.0;
         private string _currentGroupBy = "species"; // "species", "datetime", "location"
 
@@ -69,7 +70,7 @@ namespace FishLens_App
         {
             try
             {
-                string csvPath = _pathResolver.ResolveCsvScriptDirectory();
+                string csvPath = _pathResolver.ResolveCsvScriptPath();
 
                 if (!File.Exists(csvPath))
                 {
@@ -137,30 +138,7 @@ namespace FishLens_App
         }
 
         // Additional button handlers and filter helpers moved into Button Event Handlers region
-        // **************************************************
-        // Function: GroupBy_SelectionChanged
-        // Description: Handles group by selection changes and regenerates report
-        public void GroupBy_SelectionChanged(object sender, RoutedEventArgs e)
-        {
-            if (groupByCombo == null || groupByCombo.SelectedItem == null)
-                return;
-
-            var selectedItem = (ComboBoxItem)groupByCombo.SelectedItem;
-            string content = selectedItem.Content.ToString().ToLower();
-
-            if (content.Contains("species"))
-                _currentGroupBy = "species";
-            else if (content.Contains("date"))
-                _currentGroupBy = "datetime";
-            else if (content.Contains("location"))
-                _currentGroupBy = "location";
-
-            // Regenerate report if one exists
-            if (!string.IsNullOrEmpty(_currentReportText))
-            {
-                GenerateReportClick(sender, e);
-            }
-        }
+        // GroupBy removed from UI; keep default grouping behavior (species)
 
         // **************************************************
         // Function: ConfidenceSlider_ValueChanged
@@ -604,15 +582,28 @@ namespace FishLens_App
         }
 
         // **************************************************
+        // Function: PassesCameraFilter
+        // Description: Checks if a location value passes the current camera/location filter
+        private bool PassesCameraFilter(string location)
+        {
+            return _filterCamera == "All" || location.Equals(_filterCamera, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // **************************************************
         // Function: PassesConfidenceFilter
         // Description: Checks if a confidence value passes the minimum confidence threshold
-        private bool PassesConfidenceFilter(string[] columns)
+        private bool PassesConfidenceFilter(double? avgConfidence)
         {
-            if (columns.Length > 3 && double.TryParse(columns[3], out double confidence))
+            // If no threshold set, allow all
+            if (_filterMinConfidence <= 0.0) return true;
+
+            if (!avgConfidence.HasValue)
             {
-                return confidence >= _filterMinConfidence;
+                // If we have no data for confidence, don't include when a positive filter is set
+                return false;
             }
-            return true;
+
+            return avgConfidence.Value >= _filterMinConfidence;
         }
 
         // **************************************************
@@ -646,6 +637,14 @@ namespace FishLens_App
                 string content = selectedItem.Content.ToString();
                 _filterDirection = content.Contains("All") ? "All" : content;
             }
+
+            // Update camera/location filter
+            if (cameraFilter?.SelectedItem != null)
+            {
+                var selectedItem = (ComboBoxItem)cameraFilter.SelectedItem;
+                string content = selectedItem.Content.ToString();
+                _filterCamera = content.Contains("All") ? "All" : content;
+            }
         }
 
         // **************************************************
@@ -658,20 +657,61 @@ namespace FishLens_App
             foreach (string line in csvLines)
             {
                 string[] columns = line.Split(',');
+                if (columns.Length == 0) continue;
 
-                if (columns.Length < 8)
+                // video name
+                string videoName = columns.Length > 0 ? columns[0].Trim() : string.Empty;
+
+                // species: prefer column 9, fallback to likely_class at 3
+                string species = columns.Length > 9 ? columns[9].Trim() : (columns.Length > 3 ? columns[3].Trim() : string.Empty);
+
+                // direction: prefer column 8, fallback to 7
+                string direction = columns.Length > 8 ? columns[8].Trim() : (columns.Length > 7 ? columns[7].Trim() : string.Empty);
+
+                // avg confidence: column 7
+                double? avgConf = null;
+                if (columns.Length > 7)
+                {
+                    var raw = columns[7].Trim().TrimEnd('%');
+                    if (double.TryParse(raw, out var d))
+                    {
+                        if (d > 1) d = d / 100.0;
+                        avgConf = d;
+                    }
+                }
+
+                // timestamp: columns 11 (date) and 12 (time)
+                DateTime? timestamp = null;
+                if (columns.Length > 11)
+                {
+                    var datePart = columns[11].Trim();
+                    var timePart = columns.Length > 12 ? columns[12].Trim() : string.Empty;
+                    if (!string.IsNullOrEmpty(timePart))
+                    {
+                        if (DateTime.TryParse($"{datePart} {timePart}", out DateTime ts)) timestamp = ts;
+                    }
+                    else
+                    {
+                        if (DateTime.TryParse(datePart, out DateTime ts2)) timestamp = ts2;
+                    }
+                }
+
+                // location derived from video name
+                string location = ExtractLocationFromVideo(videoName);
+
+                if (!PassesSpeciesFilter(species))
                     continue;
 
-                if (!PassesSpeciesFilter(columns[2]))
+                if (!PassesDirectionFilter(direction))
                     continue;
 
-                if (!PassesDirectionFilter(columns[7]))
+                if (!PassesConfidenceFilter(avgConf))
                     continue;
 
-                if (!PassesConfidenceFilter(columns))
+                if (!PassesDateFilter(timestamp))
                     continue;
 
-                if (!PassesDateFilter(columns))
+                if (!PassesCameraFilter(location))
                     continue;
 
                 filtered.Add(line);
@@ -683,21 +723,22 @@ namespace FishLens_App
         // **************************************************
         // Function: PassesDateFilter
         // Description: Checks if a detection date falls within the selected date range
-        private bool PassesDateFilter(string[] columns)
+        private bool PassesDateFilter(DateTime? detectionTimestamp)
         {
             // If no date filters set, pass everything
             if (!_filterStartDate.HasValue && !_filterEndDate.HasValue)
                 return true;
 
-            // Try to parse date from column 1 (adjust index based on your CSV structure)
-            if (columns.Length > 1 && DateTime.TryParse(columns[1], out DateTime detectionDate))
-            {
-                if (_filterStartDate.HasValue && detectionDate.Date < _filterStartDate.Value.Date)
-                    return false;
+            // If there's no timestamp available for the row, exclude it when a date filter is active
+            if (!detectionTimestamp.HasValue)
+                return false;
 
-                if (_filterEndDate.HasValue && detectionDate.Date > _filterEndDate.Value.Date)
-                    return false;
-            }
+            var detectionDate = detectionTimestamp.Value.Date;
+            if (_filterStartDate.HasValue && detectionDate < _filterStartDate.Value.Date)
+                return false;
+
+            if (_filterEndDate.HasValue && detectionDate > _filterEndDate.Value.Date)
+                return false;
 
             return true;
         }
@@ -1255,7 +1296,7 @@ namespace FishLens_App
         // Description: Creates a new report file and returns its path
         private string CreateReportFile()
         {
-            string csvPath = _pathResolver.ResolveCsvScriptDirectory();
+            string csvPath = _pathResolver.ResolveCsvScriptPath();
             string reportsDir = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(csvPath), "Reports");
             Directory.CreateDirectory(reportsDir);
 

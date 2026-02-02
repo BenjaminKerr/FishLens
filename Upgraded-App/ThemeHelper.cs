@@ -24,19 +24,15 @@ namespace FishLens_App
             {
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    try
-                    {
-                        SwapThemeDictionary(enabled ? "HighContrastTheme.xaml" : "NormalTheme.xaml");
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"Theme swap failed: {ex.Message}");
-                    }
+                    string themeFileName = enabled ? "HighContrastTheme.xaml" : "NormalTheme.xaml";
+                    SwapThemeDictionary(themeFileName);
                 });
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to apply high contrast mode: {ex.Message}");
+                MessageBox.Show("Failed to load theme. Please restart the application.",
+                                    "Theme Error", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 
@@ -51,25 +47,25 @@ namespace FishLens_App
             var appResources = Application.Current.Resources;
             if (appResources == null) return;
 
-            var merged = appResources.MergedDictionaries;
+            var mergedDictionaries = appResources.MergedDictionaries;
 
             // Remove any previously loaded theme dictionaries located in Themes/ folder
-            for (int i = merged.Count - 1; i >= 0; i--)
+            for (int i = mergedDictionaries.Count - 1; i >= 0; i--)
             {
                 try
                 {
-                    var src = merged[i].Source?.OriginalString ?? string.Empty;
+                    var src = mergedDictionaries[i].Source?.OriginalString ?? string.Empty;
                     if (src.StartsWith("Themes/", StringComparison.OrdinalIgnoreCase) || src.Contains("/Themes/"))
                     {
-                        merged.RemoveAt(i);
+                        mergedDictionaries.RemoveAt(i);
                     }
                 }
                 catch { /* ignore malformed entries */ }
             }
 
             // Load and add the requested theme dictionary
-            var rd = new ResourceDictionary { Source = new Uri($"Themes/{themeFileName}", UriKind.Relative) };
-            merged.Add(rd);
+            var newTheme = new ResourceDictionary { Source = new Uri($"Themes/{themeFileName}", UriKind.Relative) };
+            mergedDictionaries.Add(newTheme);
         }
     }
 }
