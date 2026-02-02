@@ -1,10 +1,5 @@
 ﻿using FishLens_App.Models;
 using System;
-using System.Collections.Generic;
-using System.Configuration;
-using System.Data;
-using System.Linq;
-using System.Threading.Tasks;
 using System.Windows;
 
 namespace FishLens_App
@@ -14,11 +9,12 @@ namespace FishLens_App
     /// </summary>
     public partial class App : Application
     {
+        // Private sets so they aren't accidentally replaced with new instances
         public CheckBoxToggle CheckBoxes { get; private set; }
-        public AppConfiguration Configuration { get; set; }
+        public AppConfiguration Configuration { get; private set; }
         protected override void OnStartup(StartupEventArgs e)
         {
-            base.OnStartup(e);
+            base.OnStartup(e); // Call the regular startup logic first
             CheckBoxes = new CheckBoxToggle();
             Configuration = new AppConfiguration();
         }

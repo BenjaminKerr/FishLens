@@ -11,8 +11,6 @@ namespace FishLens.Tests
         {
             var cfg = new AppConfiguration();
             Assert.Equal(0.7, cfg.ConfidenceThreshold);
-            Assert.True(cfg.AutoPlayVideos);
-            Assert.Equal("Medium", cfg.VideoQuality);
             Assert.False(cfg.HighContrastMode);
             Assert.False(cfg.LargeText);
         }

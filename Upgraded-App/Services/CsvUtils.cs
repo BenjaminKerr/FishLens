@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using FishLens_App.Models;
 
 namespace FishLens_App.Services
 {
@@ -22,9 +23,9 @@ namespace FishLens_App.Services
 
             for (int i = 1; i < lines.Count; i++)
             {
-                var cols = lines[i].Split(',');
-                if (cols.Length == 0) continue;
-                if (!string.Equals(cols[0].Trim(), videoFileName, StringComparison.OrdinalIgnoreCase))
+                var columns = lines[i].Split(',');
+                if (columns.Length == 0) continue;
+                if (!string.Equals(columns[0].Trim(), videoFileName, StringComparison.OrdinalIgnoreCase))
                 {
                     remaining.Add(lines[i]);
                 }
@@ -37,9 +38,9 @@ namespace FishLens_App.Services
         // Function: ReadVideoFromCsv
         // Description: Reads a video's row from CSV and returns a Video object
         // **************************************************
-        public static Models.Video ReadVideoFromCsv(string csvPath, string videoFileName)
+        public static Video ReadVideoFromCsv(string csvPath, string videoFileName)
         {
-            var vid = new Models.Video();
+            var vid = new Video();
             if (!File.Exists(csvPath)) return vid;
 
             var lines = File.ReadAllLines(csvPath);
@@ -49,7 +50,7 @@ namespace FishLens_App.Services
                 if (cols.Length == 0) continue;
                 if (string.Equals(cols[0].Trim(), videoFileName, StringComparison.OrdinalIgnoreCase))
                 {
-                    return PopulateVideoFromColumns(cols);
+                    return ParseVideoFromColumns(cols);
                 }
             }
 
@@ -105,32 +106,62 @@ namespace FishLens_App.Services
             File.WriteAllLines(csvPath, lines);
         }
 
-        private static Models.Video PopulateVideoFromColumns(string[] columns)
+        // Parse row columns according to CSV layout:
+        // 0: video_file, 1: track_id, 2: image_path, 3: likely_class, 4: confidence,
+        // 5: start_time_sec, 6: end_time_sec, 7: avg_confidence, 8: direction,
+        // 9: species, 10: species_confidence
+        public static Video ParseVideoFromColumns(string[] columns)
         {
-            var v = new Models.Video();
-            v.name = columns.Length > 0 ? columns[0].Trim() : string.Empty;
-            v.trackId = columns.Length > 1 ? columns[1].Trim() : "-1";
-            v.likelyClass = columns.Length > 2 ? columns[2].Trim() : "N/A";
-            v.confidence = columns.Length > 3 ? columns[3].Trim() : "00.00%";
-            v.startTime = columns.Length > 4 ? columns[4].Trim() : "00.00";
-            v.endTime = columns.Length > 5 ? columns[5].Trim() : "00.00";
-            v.avgConfidence = columns.Length > 6 && double.TryParse(columns[6].Trim(), out var d) ? d : 0.0;
-            v.direction = columns.Length > 7 ? columns[7].Trim() : "Unknown";
-            return v;
+            var video = new Video();
+            video.Name = columns.Length > 0 ? columns[0].Trim() : string.Empty;
+            video.TrackId = columns.Length > 1 ? columns[1].Trim() : "-1";
+            video.LikelyClass = columns.Length > 3 ? columns[3].Trim() : "N/A";
+            video.Confidence = columns.Length > 4 ? columns[4].Trim() : "00.00%";
+            video.StartTime = columns.Length > 5 ? columns[5].Trim() : "00.00";
+            video.EndTime = columns.Length > 6 ? columns[6].Trim() : "00.00";
+
+            // avg_confidence may include a '%' suffix or be a decimal; try to parse robustly
+            video.AvgConfidence = 0.0;
+            if (columns.Length > 7)
+            {
+                var raw = columns[7].Trim().TrimEnd('%');
+                if (double.TryParse(raw, out var d))
+                {
+                    // If value looks like a percent (e.g., 81 or 81.0), normalize to 0-1 if >1
+                    if (d > 1) d = d / 100.0;
+                    video.AvgConfidence = d;
+                }
+            }
+
+            video.Direction = columns.Length > 8 ? columns[8].Trim() : "Unknown";
+            video.Species = columns.Length > 9 ? columns[9].Trim() : string.Empty;
+            video.SpeciesConfidence = columns.Length > 10 ? columns[10].Trim() : string.Empty;
+            video.Date = columns.Length > 11 ? columns[11].Trim() : string.Empty;
+            video.Time = columns.Length > 12 ? columns[12].Trim() : string.Empty;
+
+            // Try to parse combined date/time if available
+            if (!string.IsNullOrEmpty(video.Date) && !string.IsNullOrEmpty(video.Time))
+            {
+                if (DateTime.TryParse($"{video.Date} {video.Time}", out var ts))
+                    video.DetectionTimestamp = ts;
+            }
+            return video;
         }
 
-        private static Models.Video CreateDefaultVideo(string videoFileName)
+        private static Video CreateDefaultVideo(string videoFileName)
         {
-            return new Models.Video
+            return new Video
             {
-                name = videoFileName,
-                trackId = "-1",
-                likelyClass = "N/A",
-                confidence = "00.00%",
-                startTime = "00.00",
-                endTime = "00.00",
-                avgConfidence = 0.0,
-                direction = "Unknown"
+                Name = videoFileName,
+                TrackId = "-1",
+                LikelyClass = "N/A",
+                Confidence = "00.00%",
+                StartTime = "00.00",
+                EndTime = "00.00",
+                AvgConfidence = 0.0,
+                Direction = "Unknown",
+                Species = string.Empty,
+                SpeciesConfidence = string.Empty
             };
         }
     }

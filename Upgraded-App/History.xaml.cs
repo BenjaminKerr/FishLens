@@ -27,6 +27,7 @@ namespace FishLens_App
         private DateTime? _filterEndDate;
         private string _filterSpecies = "All";
         private string _filterDirection = "All";
+        private string _filterCamera = "All";
         private double _filterMinConfidence = 0.0;
         private string _currentGroupBy = "species"; // "species", "datetime", "location"
 
@@ -69,7 +70,7 @@ namespace FishLens_App
         {
             try
             {
-                string csvPath = _pathResolver.ResolveCsvScriptDirectory();
+                string csvPath = _pathResolver.ResolveCsvScriptPath();
 
                 if (!File.Exists(csvPath))
                 {
@@ -79,14 +80,18 @@ namespace FishLens_App
 
                 string[] allLines = File.ReadAllLines(csvPath);
 
-                if (allLines.Length == 0)
+                if (allLines.Length <= 1)
                 {
+                    // No data rows (only header or empty)
                     ShowNoDataMessage();
                     return;
                 }
 
-                // Apply filters
-                var filteredLines = ApplyFilters(allLines);
+                // Skip the header row (first line) which contains field names
+                var dataLines = allLines.Skip(1).ToArray();
+
+                // Apply filters to data rows only
+                var filteredLines = ApplyFilters(dataLines);
 
                 if (filteredLines.Length == 0)
                 {
@@ -133,30 +138,7 @@ namespace FishLens_App
         }
 
         // Additional button handlers and filter helpers moved into Button Event Handlers region
-        // **************************************************
-        // Function: GroupBy_SelectionChanged
-        // Description: Handles group by selection changes and regenerates report
-        public void GroupBy_SelectionChanged(object sender, RoutedEventArgs e)
-        {
-            if (groupByCombo == null || groupByCombo.SelectedItem == null)
-                return;
-
-            var selectedItem = (ComboBoxItem)groupByCombo.SelectedItem;
-            string content = selectedItem.Content.ToString().ToLower();
-
-            if (content.Contains("species"))
-                _currentGroupBy = "species";
-            else if (content.Contains("date"))
-                _currentGroupBy = "datetime";
-            else if (content.Contains("location"))
-                _currentGroupBy = "location";
-
-            // Regenerate report if one exists
-            if (!string.IsNullOrEmpty(_currentReportText))
-            {
-                GenerateReportClick(sender, e);
-            }
-        }
+        // GroupBy removed from UI; keep default grouping behavior (species)
 
         // **************************************************
         // Function: ConfidenceSlider_ValueChanged
@@ -284,19 +266,63 @@ namespace FishLens_App
                 if (columns.Length < 8)
                     continue;
 
-                string species = columns[2];
-                string direction = columns[7];
-                string videoName = columns[0];
+                // CSV layout (reference):
+                // 0: video_file, 1: track_id, 2: image_path, 3: likely_class, 4: confidence,
+                // 5: start_time_sec, 6: end_time_sec, 7: avg_confidence, 8: direction,
+                // 9: species, 10: species_confidence
+                string videoName = columns.Length > 0 ? columns[0] : string.Empty;
 
-                ProcessSpeciesData(stats, species);
+                // Capture both the species column (index 9) and the likely_class (index 3).
+                string species = string.Empty;
+                if (columns.Length > 9)
+                {
+                    species = columns[9].Trim();
+                }
+                else
+                {
+                    species = string.Empty;
+                }
+
+                string likelyClass = columns.Length > 3 ? columns[3].Trim() : string.Empty;
+
+                // Direction is expected at index 8 in the provided CSV layout; fall back
+                // to index 7 if needed.
+                string direction = string.Empty;
+                if (columns.Length > 8)
+                {
+                    direction = columns[8].Trim();
+                }
+                else if (columns.Length > 7)
+                {
+                    direction = columns[7].Trim();
+                }
+
+                ProcessSpeciesData(stats, species, likelyClass);
                 ProcessDirectionData(stats, direction);
                 ProcessVideoData(stats, videoName);
                 totalConfidence += ProcessConfidenceData(stats, columns);
 
-                // NEW: Process date/time data
-                if (columns.Length > 1 && DateTime.TryParse(columns[1], out DateTime timestamp))
+                // NEW: Process date/time data (columns: date at 11, time at 12)
+                DateTime? timestamp = null;
+                if (columns.Length > 11)
                 {
-                    DateTime dateOnly = timestamp.Date;
+                    var datePart = columns[11].Trim();
+                    var timePart = columns.Length > 12 ? columns[12].Trim() : string.Empty;
+                    if (!string.IsNullOrEmpty(timePart))
+                    {
+                        if (DateTime.TryParse($"{datePart} {timePart}", out DateTime ts))
+                            timestamp = ts;
+                    }
+                    else
+                    {
+                        if (DateTime.TryParse(datePart, out DateTime ts2))
+                            timestamp = ts2;
+                    }
+                }
+
+                if (timestamp.HasValue)
+                {
+                    DateTime dateOnly = timestamp.Value.Date;
                     uniqueDates.Add(dateOnly);
 
                     if (stats.DetectionsByDate.ContainsKey(dateOnly))
@@ -304,7 +330,17 @@ namespace FishLens_App
                     else
                         stats.DetectionsByDate[dateOnly] = 1;
 
-                    ProcessGroupedByDateTime(stats, timestamp, species);
+                    ProcessGroupedByDateTime(stats, timestamp.Value, species);
+
+                    // Track min/max detection timestamps
+                    if (!stats.MinDetectionTimestamp.HasValue || timestamp.Value < stats.MinDetectionTimestamp.Value)
+                        stats.MinDetectionTimestamp = timestamp.Value;
+                    if (!stats.MaxDetectionTimestamp.HasValue || timestamp.Value > stats.MaxDetectionTimestamp.Value)
+                        stats.MaxDetectionTimestamp = timestamp.Value;
+
+                    // Hourly counts
+                    int hr = timestamp.Value.Hour;
+                    if (stats.DetectionsByHour.ContainsKey(hr)) stats.DetectionsByHour[hr]++; else stats.DetectionsByHour[hr] = 1;
                 }
 
                 // NEW: Process location data (extract from video name or separate column)
@@ -386,16 +422,16 @@ namespace FishLens_App
         {
             var grid = CreateDashboardGrid();
 
-            var totalCard = CreateStatCard("Total Detections", stats.TotalDetections.ToString(), "#0D3640", "🎯");
+            var totalCard = CreateStatCard("Total Detections", stats.TotalDetections.ToString(), "#0D3640", "");
             Grid.SetColumn(totalCard, 0);
             Grid.SetRow(totalCard, 0);
             Grid.SetColumnSpan(totalCard, 2);
 
-            var confCard = CreateStatCard("Avg Confidence", $"{stats.AverageConfidence:F1}%", "#1E88E5", "⭐");
+            var confCard = CreateStatCard("Avg Confidence", $"{100 * stats.AverageConfidence:F1}%", "#1E88E5", "");
             Grid.SetColumn(confCard, 0);
             Grid.SetRow(confCard, 1);
 
-            var highConfCard = CreateStatCard("High Confidence", stats.HighConfidenceCount.ToString(), "#43A047", "✓");
+            var highConfCard = CreateStatCard("High Confidence", stats.HighConfidenceCount.ToString(), "#43A047", "");
             Grid.SetColumn(highConfCard, 1);
             Grid.SetRow(highConfCard, 1);
 
@@ -464,14 +500,16 @@ namespace FishLens_App
         // Description: Adds a 24-hour activity distribution chart
         private void AddTimeDistribution(ReportStatistics stats)
         {
-            int maxHourly = stats.DetectionsByHour.Values.Max();
-
+            // Build ordered hour points (0-23)
+            var points = new List<(string label, int value)>();
             for (int hour = 0; hour < 24; hour++)
             {
                 int count = stats.DetectionsByHour.ContainsKey(hour) ? stats.DetectionsByHour[hour] : 0;
-                string timeLabel = $"{hour:D2}:00";
-                AddBarChart(timeLabel, count, maxHourly, "#FF6F00", true);
+                points.Add(($"{hour:D2}:00", count));
             }
+
+            var chart = CreateLineChart(points, "#FF6F00", 140, reportPanel?.ActualWidth ?? 0);
+            reportPanel.Children.Add(chart);
         }
 
         // **************************************************
@@ -544,15 +582,28 @@ namespace FishLens_App
         }
 
         // **************************************************
+        // Function: PassesCameraFilter
+        // Description: Checks if a location value passes the current camera/location filter
+        private bool PassesCameraFilter(string location)
+        {
+            return _filterCamera == "All" || location.Equals(_filterCamera, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // **************************************************
         // Function: PassesConfidenceFilter
         // Description: Checks if a confidence value passes the minimum confidence threshold
-        private bool PassesConfidenceFilter(string[] columns)
+        private bool PassesConfidenceFilter(double? avgConfidence)
         {
-            if (columns.Length > 3 && double.TryParse(columns[3], out double confidence))
+            // If no threshold set, allow all
+            if (_filterMinConfidence <= 0.0) return true;
+
+            if (!avgConfidence.HasValue)
             {
-                return confidence >= _filterMinConfidence;
+                // If we have no data for confidence, don't include when a positive filter is set
+                return false;
             }
-            return true;
+
+            return avgConfidence.Value >= _filterMinConfidence;
         }
 
         // **************************************************
@@ -586,6 +637,14 @@ namespace FishLens_App
                 string content = selectedItem.Content.ToString();
                 _filterDirection = content.Contains("All") ? "All" : content;
             }
+
+            // Update camera/location filter
+            if (cameraFilter?.SelectedItem != null)
+            {
+                var selectedItem = (ComboBoxItem)cameraFilter.SelectedItem;
+                string content = selectedItem.Content.ToString();
+                _filterCamera = content.Contains("All") ? "All" : content;
+            }
         }
 
         // **************************************************
@@ -598,20 +657,61 @@ namespace FishLens_App
             foreach (string line in csvLines)
             {
                 string[] columns = line.Split(',');
+                if (columns.Length == 0) continue;
 
-                if (columns.Length < 8)
+                // video name
+                string videoName = columns.Length > 0 ? columns[0].Trim() : string.Empty;
+
+                // species: prefer column 9, fallback to likely_class at 3
+                string species = columns.Length > 9 ? columns[9].Trim() : (columns.Length > 3 ? columns[3].Trim() : string.Empty);
+
+                // direction: prefer column 8, fallback to 7
+                string direction = columns.Length > 8 ? columns[8].Trim() : (columns.Length > 7 ? columns[7].Trim() : string.Empty);
+
+                // avg confidence: column 7
+                double? avgConf = null;
+                if (columns.Length > 7)
+                {
+                    var raw = columns[7].Trim().TrimEnd('%');
+                    if (double.TryParse(raw, out var d))
+                    {
+                        if (d > 1) d = d / 100.0;
+                        avgConf = d;
+                    }
+                }
+
+                // timestamp: columns 11 (date) and 12 (time)
+                DateTime? timestamp = null;
+                if (columns.Length > 11)
+                {
+                    var datePart = columns[11].Trim();
+                    var timePart = columns.Length > 12 ? columns[12].Trim() : string.Empty;
+                    if (!string.IsNullOrEmpty(timePart))
+                    {
+                        if (DateTime.TryParse($"{datePart} {timePart}", out DateTime ts)) timestamp = ts;
+                    }
+                    else
+                    {
+                        if (DateTime.TryParse(datePart, out DateTime ts2)) timestamp = ts2;
+                    }
+                }
+
+                // location derived from video name
+                string location = ExtractLocationFromVideo(videoName);
+
+                if (!PassesSpeciesFilter(species))
                     continue;
 
-                if (!PassesSpeciesFilter(columns[2]))
+                if (!PassesDirectionFilter(direction))
                     continue;
 
-                if (!PassesDirectionFilter(columns[7]))
+                if (!PassesConfidenceFilter(avgConf))
                     continue;
 
-                if (!PassesConfidenceFilter(columns))
+                if (!PassesDateFilter(timestamp))
                     continue;
 
-                if (!PassesDateFilter(columns))
+                if (!PassesCameraFilter(location))
                     continue;
 
                 filtered.Add(line);
@@ -623,21 +723,22 @@ namespace FishLens_App
         // **************************************************
         // Function: PassesDateFilter
         // Description: Checks if a detection date falls within the selected date range
-        private bool PassesDateFilter(string[] columns)
+        private bool PassesDateFilter(DateTime? detectionTimestamp)
         {
             // If no date filters set, pass everything
             if (!_filterStartDate.HasValue && !_filterEndDate.HasValue)
                 return true;
 
-            // Try to parse date from column 1 (adjust index based on your CSV structure)
-            if (columns.Length > 1 && DateTime.TryParse(columns[1], out DateTime detectionDate))
-            {
-                if (_filterStartDate.HasValue && detectionDate.Date < _filterStartDate.Value.Date)
-                    return false;
+            // If there's no timestamp available for the row, exclude it when a date filter is active
+            if (!detectionTimestamp.HasValue)
+                return false;
 
-                if (_filterEndDate.HasValue && detectionDate.Date > _filterEndDate.Value.Date)
-                    return false;
-            }
+            var detectionDate = detectionTimestamp.Value.Date;
+            if (_filterStartDate.HasValue && detectionDate < _filterStartDate.Value.Date)
+                return false;
+
+            if (_filterEndDate.HasValue && detectionDate > _filterEndDate.Value.Date)
+                return false;
 
             return true;
         }
@@ -668,13 +769,26 @@ namespace FishLens_App
         // **************************************************
         // Function: ProcessSpeciesData
         // Description: Updates statistics with species information from a data row
-        private void ProcessSpeciesData(ReportStatistics stats, string species)
+        private void ProcessSpeciesData(ReportStatistics stats, string species, string likelyClass)
         {
-            if (species.Equals("fish", StringComparison.OrdinalIgnoreCase))
-                stats.FishCount++;
-            else if (species.Equals("bird", StringComparison.OrdinalIgnoreCase))
-                stats.BirdCount++;
+            // Use likelyClass for overall fish/bird counts (more reliable classification)
+            if (!string.IsNullOrEmpty(likelyClass))
+            {
+                if (likelyClass.Equals("fish", StringComparison.OrdinalIgnoreCase))
+                    stats.FishCount++;
+                else if (likelyClass.Equals("bird", StringComparison.OrdinalIgnoreCase))
+                    stats.BirdCount++;
+            }
+            else
+            {
+                // Fallback to species column if likelyClass isn't provided
+                if (species.Equals("fish", StringComparison.OrdinalIgnoreCase))
+                    stats.FishCount++;
+                else if (species.Equals("bird", StringComparison.OrdinalIgnoreCase))
+                    stats.BirdCount++;
+            }
 
+            // Track breakdown by species label (species column)
             if (stats.SpeciesBreakdown.ContainsKey(species))
                 stats.SpeciesBreakdown[species]++;
             else
@@ -708,12 +822,23 @@ namespace FishLens_App
         // Description: Updates confidence statistics and returns the confidence value
         private double ProcessConfidenceData(ReportStatistics stats, string[] columns)
         {
-            if (columns.Length > 3 && double.TryParse(columns[3], out double confidence))
+            // avg_confidence is expected at index 7 per CSV layout (0-based).
+            if (columns.Length > 7)
             {
-                if (confidence >= 0.8)
-                    stats.HighConfidenceCount++;
-                return confidence;
+                var raw = columns[7].Trim().TrimEnd('%');
+                if (double.TryParse(raw, out double confidence))
+                {
+                    // Normalize percent-like values (e.g., 81 or 81.0) to 0-1 range
+                    if (confidence > 1)
+                        confidence = confidence / 100.0;
+
+                    if (confidence >= 0.8)
+                        stats.HighConfidenceCount++;
+
+                    return confidence;
+                }
             }
+
             return 0;
         }
 
@@ -732,12 +857,16 @@ namespace FishLens_App
         // **************************************************
         // Function: AppendReportHeader
         // Description: Appends the report header section to the StringBuilder
-        private void AppendReportHeader(StringBuilder sb)
+        private void AppendReportHeader(StringBuilder sb, ReportStatistics stats)
         {
             sb.AppendLine("═══════════════════════════════════════════════════════");
             sb.AppendLine("              FISHLENS ANALYSIS REPORT");
             sb.AppendLine("═══════════════════════════════════════════════════════");
             sb.AppendLine($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            if (stats.MinDetectionTimestamp.HasValue && stats.MaxDetectionTimestamp.HasValue)
+            {
+                sb.AppendLine($"Data Range: {stats.MinDetectionTimestamp.Value:yyyy-MM-dd HH:mm:ss} to {stats.MaxDetectionTimestamp.Value:yyyy-MM-dd HH:mm:ss}");
+            }
             sb.AppendLine();
         }
 
@@ -805,7 +934,7 @@ namespace FishLens_App
         {
             return new TextBlock
             {
-                Text = "📊 Analysis Dashboard",
+                Text = "Analysis Dashboard",
                 FontSize = 24,
                 FontWeight = FontWeights.Bold,
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0D3640")),
@@ -963,6 +1092,161 @@ namespace FishLens_App
         }
 
         // **************************************************
+        // Function: CreateLineChart
+        // Description: Creates a simple line chart from ordered (label,value) points
+        private FrameworkElement CreateLineChart(List<(string label, int value)> points, string color, double height = 180, double availableWidth = 0)
+        {
+            int maxValue = points.Count > 0 ? Math.Max(1, points.Max(p => p.value)) : 1;
+            // Use provided availableWidth if valid, otherwise try to use the report panel width, else fallback
+            double totalWidth = (availableWidth > 200) ? availableWidth : (reportPanel?.ActualWidth > 200 ? reportPanel.ActualWidth : 720);
+
+            double leftMargin = 56; // space for y-axis labels
+            double rightMargin = 12;
+            double topMargin = 8;
+            double bottomMargin = 36; // space for x-axis labels
+
+            double chartWidth = totalWidth - leftMargin - rightMargin;
+            double chartHeight = height - topMargin - bottomMargin;
+
+            var container = new Grid { Margin = new Thickness(0, 6, 0, 12), Width = double.NaN, HorizontalAlignment = HorizontalAlignment.Stretch };
+            var canvas = new Canvas { Width = totalWidth, Height = height, Background = Brushes.Transparent };
+
+            // Draw horizontal grid lines and Y-axis tick labels
+            int yTicks = 4;
+            for (int t = 0; t <= yTicks; t++)
+            {
+                double frac = (double)t / yTicks;
+                double y = topMargin + frac * chartHeight;
+                // grid line
+                var line = new Line
+                {
+                    X1 = leftMargin,
+                    X2 = leftMargin + chartWidth,
+                    Y1 = y,
+                    Y2 = y,
+                    Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E6EDF2")),
+                    StrokeThickness = 1
+                };
+                canvas.Children.Add(line);
+
+                // label (invert frac because y increases downward)
+                int labelValue = (int)Math.Round((1 - frac) * maxValue);
+                var lbl = new TextBlock
+                {
+                    Text = labelValue.ToString(),
+                    FontSize = 11,
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#657786")),
+                    Width = leftMargin - 8,
+                    TextAlignment = TextAlignment.Right
+                };
+                Canvas.SetLeft(lbl, 0);
+                Canvas.SetTop(lbl, y - 8);
+                canvas.Children.Add(lbl);
+            }
+
+            // Baseline (x-axis)
+            double baseY = topMargin + chartHeight;
+            var xAxis = new Line
+            {
+                X1 = leftMargin,
+                X2 = leftMargin + chartWidth,
+                Y1 = baseY,
+                Y2 = baseY,
+                Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#CCDDE6")),
+                StrokeThickness = 1.5
+            };
+            canvas.Children.Add(xAxis);
+
+            // Polyline for data
+            var poly = new Polyline
+            {
+                Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)),
+                StrokeThickness = 2,
+                Fill = Brushes.Transparent
+            };
+
+            // Compute and draw points
+            for (int i = 0; i < points.Count; i++)
+            {
+                double x = leftMargin + (points.Count == 1 ? chartWidth / 2 : (i * (chartWidth / Math.Max(1, points.Count - 1))));
+                double v = points[i].value;
+                double y = topMargin + (1.0 - (double)v / maxValue) * chartHeight;
+                poly.Points.Add(new System.Windows.Point(x, y));
+
+                // Marker
+                var marker = new Ellipse
+                {
+                    Width = 6,
+                    Height = 6,
+                    Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)),
+                    Stroke = Brushes.White,
+                    StrokeThickness = 1
+                };
+                Canvas.SetLeft(marker, x - 3);
+                Canvas.SetTop(marker, y - 3);
+                canvas.Children.Add(marker);
+
+                // X-axis tick (small)
+                var tick = new Line
+                {
+                    X1 = x,
+                    X2 = x,
+                    Y1 = baseY,
+                    Y2 = baseY + 6,
+                    Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#CCDDE6")),
+                    StrokeThickness = 1
+                };
+                canvas.Children.Add(tick);
+
+                // X-axis label (sparse)
+                int labelEvery = Math.Max(1, points.Count / 8);
+                if (i % labelEvery == 0 || i == points.Count - 1)
+                {
+                    var xl = new TextBlock
+                    {
+                        Text = points[i].label,
+                        FontSize = 10,
+                        Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#657786"))
+                    };
+                    Canvas.SetLeft(xl, x - 20);
+                    Canvas.SetTop(xl, baseY + 8);
+                    canvas.Children.Add(xl);
+                }
+            }
+
+            canvas.Children.Add(poly);
+            container.Children.Add(canvas);
+            // If the panel resizes later, redraw to fit: attach to SizeChanged to update canvas width
+            if (reportPanel != null)
+            {
+                void ResizeHandler(object s, SizeChangedEventArgs e)
+                {
+                    double newW = e.NewSize.Width - leftMargin - rightMargin;
+                    if (newW > 100)
+                    {
+                        canvas.Width = e.NewSize.Width;
+                        // Recompute points positions by recreating the chart; easiest is to remove handler and re-add chart
+                        reportPanel.SizeChanged -= ResizeHandler;
+                        // Replace this container with a new one using the new width
+                        var parent = container.Parent as Panel;
+                        if (parent != null)
+                        {
+                            int idx = parent.Children.IndexOf(container);
+                            if (idx >= 0)
+                            {
+                                parent.Children.RemoveAt(idx);
+                                parent.Children.Insert(idx, CreateLineChart(points, color, height, e.NewSize.Width));
+                            }
+                        }
+                    }
+                }
+
+                reportPanel.SizeChanged += ResizeHandler;
+            }
+            return container;
+        }
+
+        // **************************************************
         // Function: CreateEmptyStatePanel
         // Description: Creates the panel displayed when no history data exists
         private StackPanel CreateEmptyStatePanel()
@@ -976,7 +1260,7 @@ namespace FishLens_App
 
             emptyPanel.Children.Add(new TextBlock
             {
-                Text = "📊",
+                Text = string.Empty,
                 FontSize = 64,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 0, 0, 20)
@@ -1012,7 +1296,7 @@ namespace FishLens_App
         // Description: Creates a new report file and returns its path
         private string CreateReportFile()
         {
-            string csvPath = _pathResolver.ResolveCsvScriptDirectory();
+            string csvPath = _pathResolver.ResolveCsvScriptPath();
             string reportsDir = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(csvPath), "Reports");
             Directory.CreateDirectory(reportsDir);
 
@@ -1187,10 +1471,9 @@ namespace FishLens_App
         // Description: Estimates total upstream count based on detection patterns
         private double CalculateEstimatedUpstreamCount(ReportStatistics stats)
         {
-            // Simple estimation: assume detected upstream fish represent 70% of actual count
-            // This is a placeholder formula - adjust based on actual research/calibration
-            double detectionRate = 0.70;
-            return stats.UpstreamCount / detectionRate;
+            // Estimate total upstream count for the report period as upstream minus downstream.
+            // Assumes every fish triggers the sensor and counts are for the same period.
+            return stats.UpstreamCount - stats.DownstreamCount;
         }
 
         // **************************************************
@@ -1206,41 +1489,41 @@ namespace FishLens_App
             AddMainCountSection(stats);
             AddSpacer(20);
 
+            AddSectionTitle("Detection Distribution");
+            AddDetectionCharts(stats);
+            AddSpacer(20);
+
             // Grouping section based on current selection
             AddGroupBySection(stats);
             AddSpacer(20);
 
-            AddSectionTitle("📊 Detection Distribution");
-            AddDetectionCharts(stats);
-            AddSpacer(20);
-
-            AddSectionTitle("🎯 Movement Patterns & Estimates");
+            AddSectionTitle("Movement Patterns & Estimates");
             AddMovementCharts(stats);
             AddUpstreamEstimation(stats);
             AddSpacer(20);
 
-            AddSectionTitle("🤖 AI Performance Metrics");
+            AddSectionTitle("AI Performance Metrics");
             AddAIPerformanceSection(stats);
             AddSpacer(20);
 
-            AddSectionTitle("📍 Location Analysis");
+            AddSectionTitle("Location Analysis");
             AddLocationBreakdown(stats);
             AddSpacer(20);
 
-            AddSectionTitle("📹 Video Analysis");
+            AddSectionTitle("Video Analysis");
             AddVideoBreakdown(stats);
 
             if (stats.DetectionsByHour.Count > 0)
             {
                 AddSpacer(20);
-                AddSectionTitle("⏰ Activity by Time of Day");
+                AddSectionTitle("Activity by Time of Day");
                 AddTimeDistribution(stats);
             }
 
             if (stats.DetectionsByDate.Count > 0)
             {
                 AddSpacer(20);
-                AddSectionTitle("📅 Daily Detection Trends");
+                AddSectionTitle("Daily Detection Trends");
                 AddDailyTrendGraph(stats);
             }
         }
@@ -1254,11 +1537,11 @@ namespace FishLens_App
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            var mainCountCard = CreateStatCard("Total Fish Detected", stats.FishCount.ToString(), "#1E88E5", "🐟");
+            var mainCountCard = CreateStatCard("Total Fish Detected", stats.FishCount.ToString(), "#1E88E5", "");
             Grid.SetColumn(mainCountCard, 0);
             grid.Children.Add(mainCountCard);
 
-            var fishPerDayCard = CreateStatCard("Fish Per Day", $"{stats.FishPerDay:F1}", "#43A047", "📈");
+            var fishPerDayCard = CreateStatCard("Fish Per Day", $"{stats.FishPerDay:F1}", "#43A047", "");
             Grid.SetColumn(fishPerDayCard, 1);
             grid.Children.Add(fishPerDayCard);
 
@@ -1342,7 +1625,7 @@ namespace FishLens_App
 
             var title = new TextBlock
             {
-                Text = "📊 Estimated Total Upstream Count",
+                Text = "Total upstream count for the report period:",
                 FontSize = 14,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F57C00")),
@@ -1362,22 +1645,11 @@ namespace FishLens_App
             };
             Grid.SetColumn(valueText, 0);
 
-            var explanation = new TextBlock
-            {
-                Text = "Based on detection rate estimation (70% capture rate)",
-                FontSize = 11,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8B6914")),
-                VerticalAlignment = VerticalAlignment.Bottom,
-                Margin = new Thickness(15, 0, 0, 0)
-            };
-            Grid.SetColumn(explanation, 1);
-
             valueGrid.Children.Add(valueText);
-            valueGrid.Children.Add(explanation);
 
             var detectedText = new TextBlock
             {
-                Text = $"Detected: {stats.UpstreamCount} upstream fish",
+                Text = $"Detected: {stats.UpstreamCount} upstream - {stats.DownstreamCount} downstream",
                 FontSize = 13,
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8B6914")),
                 Margin = new Thickness(0, 8, 0, 0)
@@ -1400,13 +1672,13 @@ namespace FishLens_App
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            var confCard = CreateStatCard("Avg Confidence", $"{stats.AverageConfidence:F1}%", "#1E88E5", "🎯");
+            var confCard = CreateStatCard("Avg Confidence", $"{100 * stats.AverageConfidence:F1}%", "#1E88E5", "");
             Grid.SetColumn(confCard, 0);
             grid.Children.Add(confCard);
 
             var correctCard = CreateStatCard("Avg Correctness",
                 stats.AverageCorrectness > 0 ? $"{stats.AverageCorrectness:F1}%" : "N/A",
-                "#43A047", "✓");
+                "#43A047", "");
             Grid.SetColumn(correctCard, 1);
             grid.Children.Add(correctCard);
 
@@ -1481,25 +1753,10 @@ namespace FishLens_App
             if (stats.DetectionsByDate.Count == 0) return;
 
             var sortedDates = stats.DetectionsByDate.OrderBy(x => x.Key).ToList();
-            int maxCount = sortedDates.Max(x => x.Value);
+            var points = sortedDates.Select(kvp => (kvp.Key.ToString("MMM dd"), kvp.Value)).ToList();
 
-            foreach (var kvp in sortedDates)
-            {
-                string dateLabel = kvp.Key.ToString("MMM dd");
-                AddBarChart(dateLabel, kvp.Value, maxCount, "#7E57C2", true);
-            }
-
-            // Add average line indicator
-            double avgPerDay = stats.FishPerDay;
-            var avgIndicator = new TextBlock
-            {
-                Text = $"Daily Average: {avgPerDay:F1} fish/day",
-                FontSize = 12,
-                FontStyle = FontStyles.Italic,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#657786")),
-                Margin = new Thickness(0, 10, 0, 0)
-            };
-            reportPanel.Children.Add(avgIndicator);
+            var chart = CreateLineChart(points, "#7E57C2", 160, reportPanel?.ActualWidth ?? 0);
+            reportPanel.Children.Add(chart);
         }
 
         // **************************************************
@@ -1509,7 +1766,7 @@ namespace FishLens_App
         {
             var sb = new StringBuilder();
 
-            AppendReportHeader(sb);
+            AppendReportHeader(sb, stats);
             AppendSummaryStatistics(sb, stats);
             AppendEnhancedMetrics(sb, stats);
             AppendMovementStatistics(sb, stats);

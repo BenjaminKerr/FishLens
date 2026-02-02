@@ -1,4 +1,3 @@
-using FishLens_App;
 using FishLens_App.Models;
 using Xunit;
 
@@ -11,20 +10,20 @@ namespace FishLens.Tests
         {
             var v = new Video
             {
-                name = "foo.mp4",
-                trackId = "1",
-                likelyClass = "fish",
-                confidence = "99.9%",
-                startTime = "0.0",
-                endTime = "10.0",
-                avgConfidence = 0.999,
-                direction = "upstream"
+                Name = "foo.mp4",
+                TrackId = "1",
+                LikelyClass = "fish",
+                Confidence = "99.9%",
+                StartTime = "0.0",
+                EndTime = "10.0",
+                AvgConfidence = 0.999,
+                Direction = "upstream"
             };
 
-            Assert.Equal("foo.mp4", v.name);
-            Assert.Equal("1", v.trackId);
-            Assert.Equal("fish", v.likelyClass);
-            Assert.Equal("99.9%", v.confidence);
+            Assert.Equal("foo.mp4", v.Name);
+            Assert.Equal("1", v.TrackId);
+            Assert.Equal("fish", v.LikelyClass);
+            Assert.Equal("99.9%", v.Confidence);
         }
     }
 }

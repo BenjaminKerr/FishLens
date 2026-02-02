@@ -15,30 +15,30 @@ namespace FishLens_App.Interfaces
         // Function: ResolveProjectRoot
         // Description: Resolves the project root directory.
         // **************************************************
-        public string ResolveProjectRoot();
+        string ResolveProjectRoot();
 
         // **************************************************
         // Function: ResolvePath
         // Description: Resolves a path relative to the project root.
         // **************************************************
-        public string ResolvePath(string subdirectory);
+        string ResolvePath(string subdirectory);
 
         // **************************************************
         // Function: ResolveYoloScriptPath
         // Description: Resolves the path to the YOLO script used for analysis.
         // **************************************************
-        public string ResolveYoloScriptPath();
+        string ResolveYoloScriptPath();
 
         // **************************************************
-        // Function: ResolveCsvScriptDirectory
+        // Function: ResolveCsvScriptPath
         // Description: Resolves the path to the CSV script/data file used by the application.
         // **************************************************
-        public string ResolveCsvScriptDirectory();
+        string ResolveCsvScriptPath();
 
         // **************************************************
         // Function: ResolveSourceFolder
         // Description: Prompts or determines the source folder containing videos for analysis.
         // **************************************************
-        public string ResolveSourceFolder();
+        string ResolveSourceFolder();
     }
 }

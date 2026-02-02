@@ -40,7 +40,7 @@
                     Padding="30,20">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <TextBlock Text="🔍 Filters" 
+                        <TextBlock Text="Filters" 
                                    FontSize="{DynamicResource LargeFontSize}"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource PrimaryColorBrush}"
@@ -175,24 +175,7 @@
                             <ComboBoxItem Content="Spencer Creek"/>
                         </ComboBox>
 
-                        <TextBlock Text="Group By" 
-                                   FontSize="{DynamicResource BaseFontSize}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource PrimaryTextBrush}"
-                                   Margin="0,0,0,8"/>
-
-                        <ComboBox x:Name="groupByCombo"
-                                  Background="{DynamicResource PageBackgroundBrush}"
-                                  BorderBrush="{DynamicResource BorderColorBrush}"
-                                  Padding="12,8"
-                                  FontSize="{DynamicResource BaseFontSize}"
-                                  Margin="0,0,0,20"
-                                  SelectedIndex="0"
-                                  SelectionChanged="GroupBy_SelectionChanged">
-                            <ComboBoxItem Content="🔤 Species"/>
-                            <ComboBoxItem Content="📅 Date &amp; Time"/>
-                            <ComboBoxItem Content="📍 Location"/>
-                        </ComboBox>
+                        <!-- Group By removed per user request -->
 
                         <TextBlock Text="Minimum Confidence" 
                                    FontSize="{DynamicResource BaseFontSize}"
@@ -394,7 +377,7 @@
                             Visibility="Collapsed">
                         <StackPanel Orientation="Horizontal" 
                                     HorizontalAlignment="Center">
-                            <Button Content="💾 Export Report" 
+                            <Button Content="Export Report" 
                                     Click="ExportReportClick"
                                     Background="{DynamicResource PrimaryColorBrush}"
                                     Foreground="{DynamicResource SecondaryTextBrush}"
@@ -427,7 +410,7 @@
                                 </Button.Style>
                             </Button>
 
-                            <Button Content="🖨️ Print Report" 
+                            <Button Content="Print Report" 
                                     Click="PrintReportClick"
                                     Background="{DynamicResource SecondaryBackgroundBrush}"
                                     Foreground="{DynamicResource PrimaryColorBrush}"
@@ -475,7 +458,7 @@
             <Grid>
                 <StackPanel Orientation="Horizontal" 
                             HorizontalAlignment="Right">
-                    <Button Content="📊 Generate Report" 
+                    <Button Content="Generate Report" 
                             Click="GenerateReportClick"
                             Background="{DynamicResource PrimaryColorBrush}"
                             Foreground="{DynamicResource SecondaryTextBrush}"

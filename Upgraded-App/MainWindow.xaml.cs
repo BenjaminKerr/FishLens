@@ -11,6 +11,7 @@ using FishLens_App.Interfaces;
 using FishLens_App.Models;
 using FishLens_App.Services;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
@@ -30,7 +31,10 @@ namespace FishLens_App
     {
         #region Constants
 
+        // Application settings
         private const double DEFAULT_CONFIDENCE_THRESHOLD = 0.7;
+
+        // UI constants - Video buttons
         private const int BUTTON_HEIGHT = 45;
         private const int BUTTON_FONT_SIZE = 13;
         private const int BUTTON_MARGIN = 5;
@@ -38,9 +42,14 @@ namespace FishLens_App
         private const int BUTTON_PADDING_VERTICAL = 8;
         private const int BUTTON_CORNER_RADIUS = 6;
         private const int CONTENT_PRESENTER_MARGIN = 8;
+
+        // Directory paths
         private const string SAVED_VIDEOS_FOLDER = "SavedVids";
         private const string SAMPLE_DATA_FOLDER = "sample_data";
-        private string folderName = "";
+        private const string TRASH_FOLDER = ".trash";
+
+        // State
+        private string _currentFolderName = string.Empty;
 
         #endregion
 
@@ -56,6 +65,8 @@ namespace FishLens_App
 
         #endregion
 
+        #region Nested Classes
+
         // **************************************************
         // Type: DeletionBatch
         // Description: Tracks moved files and CSV rows for undo
@@ -63,8 +74,10 @@ namespace FishLens_App
         private class DeletionBatch
         {
             public string TrashFolder { get; set; }
-            public List<(string originalPath, string trashPath, string csvRow, Video video, string folder)> Items { get; } = new List<(string, string, string, Video, string)>();
+            public List<(string originalPath, string trashPath, string csvRow, FishLens_App.Models.Video video, string folder)> Items { get; } = new List<(string, string, string, FishLens_App.Models.Video, string)>();
         }
+
+        #endregion
 
         #region Constructors
 
@@ -72,10 +85,10 @@ namespace FishLens_App
         // Function: Constructor (Parameterized)
         // Description: Initializes MainWindow with dependency injection
         // **************************************************
-        public MainWindow(IProjectPathResolver pathresolver, IFileSystemManager fileSystemManager, ILogger<MainWindow> logger)
+        public MainWindow(IProjectPathResolver pathResolver, IFileSystemManager fileSystemManager, ILogger<MainWindow> logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _pathResolver = pathresolver ?? throw new ArgumentNullException(nameof(pathresolver));
+            _pathResolver = pathResolver ?? throw new ArgumentNullException(nameof(pathResolver));
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
 
             InitializeComponent();
@@ -103,7 +116,7 @@ namespace FishLens_App
         public MainWindow() : this(
             GetDefaultProjectPathResolver(),
             GetDefaultFileSystemManager(),
-            GetDefaultLogger())
+            NullLogger<MainWindow>.Instance)
         {
         }
 
@@ -132,20 +145,6 @@ namespace FishLens_App
         }
 
         // **************************************************
-        // Function: GetDefaultLogger
-        // Description: Creates default ILogger<MainWindow> instance
-        // Notes: Used in parameterless constructor
-        // **************************************************
-        private static ILogger<MainWindow> GetDefaultLogger()
-        {
-            using var loggerFactory = LoggerFactory.Create(builder =>
-            {
-                builder.SetMinimumLevel(LogLevel.Information);
-            });
-            return loggerFactory.CreateLogger<MainWindow>();
-        }
-
-        // **************************************************
         // Function: GetCheckBoxToggleFromApplication
         // Description: Retrieves CheckBoxToggle instance from application
         // **************************************************
@@ -161,60 +160,6 @@ namespace FishLens_App
         private AppConfiguration GetConfigurationFromApplication()
         {
             return (Application.Current as App)?.Configuration;
-        }
-
-        #endregion
-
-        #region Path Resolution
-
-        // **************************************************
-        // Function: GetProjectRoot
-        // Description: Returns the project root directory path
-        // Notes: Implemented in DefaultProjectPathResolver.cs
-        // **************************************************
-        private string GetProjectRoot()
-        {
-            return _pathResolver.ResolveProjectRoot();
-        }
-
-        // **************************************************
-        // Function: GetYoloScriptDirectory
-        // Description: Returns the YOLO script file path
-        // Notes: Implemented in DefaultProjectPathResolver.cs
-        // **************************************************
-        private string GetYoloScriptDirectory()
-        {
-            return _pathResolver.ResolveYoloScriptPath();
-        }
-
-        // **************************************************
-        // Function: GetCsvScriptDirectory
-        // Description: Returns the CSV script file path
-        // Notes: Implemented in DefaultProjectPathResolver.cs
-        // **************************************************
-        private string GetCsvScriptDirectory()
-        {
-            return _pathResolver.ResolveCsvScriptDirectory();
-        }
-
-        // **************************************************
-        // Function: GetSourceFolderPath
-        // Description: Returns the user-selected source folder path
-        // Notes: Implemented in DefaultProjectPathResolver.cs
-        // **************************************************
-        private string GetSourceFolderPath()
-        {
-            return _pathResolver.ResolveSourceFolder();
-        }
-
-        // **************************************************
-        // Function: GetPath
-        // Description: Resolves path for specified subdirectory
-        // Notes: Implemented in DefaultProjectPathResolver.cs
-        // **************************************************
-        private string GetPath(string subdirectory)
-        {
-            return _pathResolver.ResolvePath(subdirectory);
         }
 
         #endregion
@@ -270,6 +215,7 @@ namespace FishLens_App
         // **************************************************
         private void HomeButtonClick(object sender, RoutedEventArgs e)
         {
+            ExpandSidebar();
             MainFrame.Visibility = Visibility.Collapsed;
         }
 
@@ -279,26 +225,8 @@ namespace FishLens_App
         // **************************************************
         private void HistoryButtonClick(object sender, RoutedEventArgs e)
         {
-            MainFrame.Visibility = Visibility.Visible;
-            _logger.LogInformation("History button clicked.");
-
-            try
-            {
-                MainFrame.Navigate(new History(_pathResolver, _fileSystemManager, _logger));
-
-                // Only apply theme if high contrast mode is enabled
-                if (_config?.HighContrastMode ?? false)
-                {
-                    MainFrame.Dispatcher.InvokeAsync(() =>
-                    {
-                        ThemeHelper.ApplyHighContrastMode(true);
-                    }, System.Windows.Threading.DispatcherPriority.Loaded);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Navigation Error: {ex.Message}");
-            }
+            CollapseSidebar();
+            NavigateToPage(new History(_pathResolver, _fileSystemManager, _logger), "History");
         }
 
         // **************************************************
@@ -307,37 +235,52 @@ namespace FishLens_App
         // **************************************************
         private void SettingsButtonClick(object sender, RoutedEventArgs e)
         {
+            CollapseSidebar();
+            NavigateToPage(new Settings(_pathResolver, _fileSystemManager, _logger), "Settings");
+        }
+
+        // **************************************************
+        // Function: NavigateToPage
+        // Description: Handles logic common to both navigation functions
+        // **************************************************
+        private void NavigateToPage(object page, string pageName)
+        {
             MainFrame.Visibility = Visibility.Visible;
-            _logger.LogInformation("Settings button clicked.");
+            _logger.LogInformation("Navigating to {PageName}", pageName);
 
             try
             {
-                MainFrame.Navigate(new Settings(_pathResolver, _fileSystemManager, _logger));
+                MainFrame.Navigate(page);
 
-                // Only apply theme if high contrast mode is enabled
+                // Apply high contrast theme if enabled
                 if (_config?.HighContrastMode ?? false)
                 {
-                    MainFrame.Dispatcher.InvokeAsync(() =>
-                    {
-                        ThemeHelper.ApplyHighContrastMode(true);
-                    }, System.Windows.Threading.DispatcherPriority.Loaded);
+                    MainFrame.Dispatcher.InvokeAsync(
+                        () => ThemeHelper.ApplyHighContrastMode(true),
+                        System.Windows.Threading.DispatcherPriority.Loaded);
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Navigation Error: {ex.Message}");
+                _logger.LogError(ex, "Failed to navigate to {PageName}", pageName);
+                MessageBox.Show(
+                    $"Navigation Error: {ex.Message}",
+                    "Navigation Failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
             }
         }
 
         #endregion
 
-        #region YOLO Processing
+            #region YOLO Processing
 
-        // **************************************************
-        // Function: RunYolo
-        // Description: Executes Python YOLO script for video analysis
-        // Notes: Original writing credit to Aden Ratliff, async update by Benjamin Kerr
-        // **************************************************
+            // **************************************************
+            // Function: RunYolo
+            // Description: Executes Python YOLO script for video analysis
+            // Notes: Original writing credit to Aden Ratliff, async update by Benjamin Kerr
+            //          Running async so that UI thread isn't blocked
+            // **************************************************
         private async Task RunYolo()
         {
             ProcessStartInfo start = CreateYoloProcessStartInfo();
@@ -381,8 +324,8 @@ namespace FishLens_App
         // **************************************************
         private ProcessStartInfo CreateYoloProcessStartInfo()
         {
-            string yoloScriptDirectory = GetYoloScriptDirectory();
-            string sampleDataPath = Path.Combine(GetProjectRoot(), SAMPLE_DATA_FOLDER);
+            string yoloScriptDirectory = _pathResolver.ResolveYoloScriptPath();
+            string sampleDataPath = Path.Combine(_pathResolver.ResolveProjectRoot(), SAMPLE_DATA_FOLDER);
 
             return new ProcessStartInfo
             {
@@ -458,12 +401,12 @@ namespace FishLens_App
         // **************************************************
         private void OpenFolderClick(object sender, RoutedEventArgs e)
         {
-            string sourceFolderPath = GetSourceFolderPath();
-            folderName = Path.GetFileName(sourceFolderPath);
+            string sourceFolderPath = _pathResolver.ResolveSourceFolder();
+            _currentFolderName = Path.GetFileName(sourceFolderPath);
             if (string.IsNullOrEmpty(sourceFolderPath))
                 return;
 
-            string saveDirectory = Path.Combine(GetProjectRoot(), SAVED_VIDEOS_FOLDER);
+            string saveDirectory = Path.Combine(_pathResolver.ResolveProjectRoot(), SAVED_VIDEOS_FOLDER);
             ProcessVideos(sourceFolderPath, saveDirectory);
 
             exportData.Visibility = Visibility.Visible;
@@ -480,7 +423,7 @@ namespace FishLens_App
             EnterDataInFile(inputFolder, outputDirectory);
             await RunYolo();
 
-            List<(FileInfo vid, Video data)> videoDataList = CreateSortedListOfVideos(outputDirectory);
+            List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList = CreateSortedListOfVideos(outputDirectory);
             CreateVideoButtonsList(videoDataList);
 
             // If configured, load (and auto-play) the first uploaded video
@@ -551,7 +494,7 @@ namespace FishLens_App
 
             if (!ConfirmDelete(selected.Count)) return;
 
-            string csvPath = GetCsvScriptDirectory();
+            string csvPath = _pathResolver.ResolveCsvScriptPath();
 
             DeleteFilesAndCsvEntries(selected.Select(x => x.path).ToList(), csvPath);
 
@@ -606,7 +549,7 @@ namespace FishLens_App
         private void DeleteFilesAndCsvEntries(List<string> paths, string csvPath)
         {
             // Create a trash folder to hold deleted files for potential undo
-            string trashRoot = Path.Combine(GetPath(SAVED_VIDEOS_FOLDER), ".trash");
+            string trashRoot = Path.Combine(_pathResolver.ResolvePath(SAVED_VIDEOS_FOLDER), ".trash");
             Directory.CreateDirectory(trashRoot);
             var batch = new DeletionBatch { TrashFolder = Path.Combine(trashRoot, Guid.NewGuid().ToString()) };
             Directory.CreateDirectory(batch.TrashFolder);
@@ -647,7 +590,7 @@ namespace FishLens_App
                         File.Move(fullPath, trashPath, overwrite: true);
                     }
 
-                    batch.Items.Add((fullPath, trashPath, csvRow, videoData, (GetFolderTagForPath(fullPath))));
+                    batch.Items.Add((fullPath, trashPath, csvRow, videoData, GetFolderTagForPath(fullPath)));
 
                     // remove CSV entry
                     if (File.Exists(csvPath) && csvRow != null)
@@ -751,7 +694,7 @@ namespace FishLens_App
                 {
                     if (File.Exists(item.trashPath))
                     {
-                        Directory.CreateDirectory(Path.GetDirectoryName(item.originalPath) ?? GetPath(SAVED_VIDEOS_FOLDER));
+                        Directory.CreateDirectory(Path.GetDirectoryName(item.originalPath) ?? _pathResolver.ResolvePath(SAVED_VIDEOS_FOLDER));
                         File.Move(item.trashPath, item.originalPath, overwrite: true);
                     }
                     restoredFiles.Add(item.originalPath);
@@ -768,7 +711,7 @@ namespace FishLens_App
             {
                 if (rowsToRestore.Count > 0)
                 {
-                    FishLens_App.Services.CsvUtils.AppendRows(GetCsvScriptDirectory(), rowsToRestore);
+                    FishLens_App.Services.CsvUtils.AppendRows(_pathResolver.ResolveCsvScriptPath(), rowsToRestore);
                 }
             }
             catch (Exception ex)
@@ -806,10 +749,10 @@ namespace FishLens_App
                 if (!headerExists)
                 {
                     // temporarily set folderName so CreateFolderHeader uses it
-                    var prev = folderName;
-                    folderName = item.folder;
+                    var prev = _currentFolderName;
+                    _currentFolderName = item.folder;
                     CreateFolderHeader();
-                    folderName = prev;
+                    _currentFolderName = prev;
                 }
 
                 // create video grid and add
@@ -839,23 +782,23 @@ namespace FishLens_App
         // Function: CreateSortedListOfVideos
         // Description: Creates list of videos sorted by confidence rating
         // **************************************************
-        private List<(FileInfo vid, Video data)> CreateSortedListOfVideos(string directory)
+        private List<(FileInfo vid, FishLens_App.Models.Video data)> CreateSortedListOfVideos(string directory)
         {
             DirectoryInfo vidsInfo = new DirectoryInfo(directory);
             FileInfo[] fileInfos = vidsInfo.GetFiles("*");
 
-            List<(FileInfo vid, Video data)> videoDataList = new List<(FileInfo, Video)>();
+            List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList = new List<(FileInfo, FishLens_App.Models.Video)>();
 
             foreach (FileInfo vid in fileInfos)
             {
                 if (IsVideoFile(vid))
                 {
-                    Video data = GetData(vid.Name);
+                    FishLens_App.Models.Video data = GetData(vid.Name);
                     videoDataList.Add((vid, data));
                 }
             }
 
-            return videoDataList.OrderBy(x => x.data.avgConfidence).ToList();
+            return videoDataList.OrderBy(x => x.data.AvgConfidence).ToList();
         }
 
         // **************************************************
@@ -872,10 +815,10 @@ namespace FishLens_App
         // Function: GetData
         // Description: Retrieves video analysis data from CSV file
         // **************************************************
-        private Video GetData(string videoFileName)
+        private FishLens_App.Models.Video GetData(string videoFileName)
         {
-            Video vid = new Video();
-            string csvPath = GetCsvScriptDirectory();
+            FishLens_App.Models.Video vid = new FishLens_App.Models.Video();
+            string csvPath = _pathResolver.ResolveCsvScriptPath();
 
             if (!File.Exists(csvPath))
             {
@@ -909,7 +852,7 @@ namespace FishLens_App
         {
             try
             {
-                string csvPath = GetCsvScriptDirectory();
+                string csvPath = _pathResolver.ResolveCsvScriptPath();
 
                 if (!File.Exists(csvPath))
                 {
@@ -1044,7 +987,7 @@ namespace FishLens_App
                     return;
                 }
 
-                string csvPath = GetCsvScriptDirectory();
+                string csvPath = _pathResolver.ResolveCsvScriptPath();
 
                 if (!File.Exists(csvPath))
                 {
@@ -1160,6 +1103,70 @@ namespace FishLens_App
 
         #region UI Display
 
+        private void CollapseSidebar()
+        {
+            var animation = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                To = 106,
+                Duration = TimeSpan.FromMilliseconds(250),
+                EasingFunction = new System.Windows.Media.Animation.CubicEase()
+            };
+
+            SideBar.BeginAnimation(Border.WidthProperty, animation);
+
+            videoList.Visibility = Visibility.Collapsed;
+            deleteSelectedVideos.Visibility = Visibility.Collapsed;
+            undoLastDelete.Visibility = Visibility.Collapsed;
+            sidebarSeperator.Visibility = Visibility.Collapsed;
+            videoLibraryTitle.Visibility = Visibility.Collapsed;
+
+            ButtonGrid.RowDefinitions.Clear();
+            ButtonGrid.ColumnDefinitions.Clear();
+            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            Grid.SetRow(Home, 0);
+            Grid.SetColumn(Home, 0);
+            Grid.SetRow(History, 1);
+            Grid.SetColumn(History, 0);
+            Grid.SetRow(Settings, 2);
+            Grid.SetColumn(Settings, 0);
+        }
+
+        private void ExpandSidebar()
+        {
+            var animation = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                To = 320,
+                Duration = TimeSpan.FromMilliseconds(250),
+                EasingFunction = new System.Windows.Media.Animation.CubicEase()
+            };
+
+            SideBar.BeginAnimation(Border.WidthProperty, animation);
+
+            // Show video list
+            videoList.Visibility = Visibility.Visible;
+            deleteSelectedVideos.Visibility = Visibility.Visible;
+            undoLastDelete.Visibility = Visibility.Visible;
+            sidebarSeperator.Visibility = Visibility.Visible;
+            videoLibraryTitle.Visibility = Visibility.Visible;
+
+            // Restore horizontal button layout
+            ButtonGrid.RowDefinitions.Clear();
+            ButtonGrid.ColumnDefinitions.Clear();
+            ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            Grid.SetRow(Home, 0);
+            Grid.SetColumn(Home, 0);
+            Grid.SetRow(History, 0);
+            Grid.SetColumn(History, 1);
+            Grid.SetRow(Settings, 0);
+            Grid.SetColumn(Settings, 2);
+        }
+
         // **************************************************
         // Function: VideoButtonClick
         // Description: Displays selected video and its data
@@ -1182,11 +1189,7 @@ namespace FishLens_App
         private void LoadVideoInPlayer(string videoPath)
         {
             videoPlayer.Source = new Uri(videoPath);
-
-            if (_config?.AutoPlayVideos ?? true)
-            {
-                videoPlayer.Play();
-            }
+            videoPlayer.Play();
         }
 
         // **************************************************
@@ -1195,13 +1198,13 @@ namespace FishLens_App
         // **************************************************
         private void DisplayDataInUi(string videoFileName)
         {
-            Video vid = GetData(videoFileName);
+            FishLens_App.Models.Video vid = GetData(videoFileName);
 
-            videoName.Text = vid.name;
-            videoDateTime.Text = $"Duration: {vid.startTime}s - {vid.endTime}s";
-            fishPresentStatus.Text = vid.likelyClass == "fish" ? "Present" : "Not Present";
-            fishPresentConfidence.Text = vid.avgConfidence.ToString();
-            travelDirection.Text = CapitalizeFirstLetter(vid.direction);
+            videoName.Text = vid.Name;
+            videoDateTime.Text = $"Duration: {vid.StartTime}s - {vid.EndTime}s";
+            fishPresentStatus.Text = vid.LikelyClass == "fish" ? "Present" : "Not Present";
+            fishPresentConfidence.Text = vid.AvgConfidence.ToString();
+            travelDirection.Text = CapitalizeFirstLetter(vid.Direction);
         }
 
         // **************************************************
@@ -1220,7 +1223,7 @@ namespace FishLens_App
         // Function: CreateVideoButtonsList
         // Description: Creates and adds buttons for all videos to sidebar
         // **************************************************
-        private void CreateVideoButtonsList(List<(FileInfo videoFile, Video videoData)> videoDataList)
+        private void CreateVideoButtonsList(List<(FileInfo videoFile, FishLens_App.Models.Video videoData)> videoDataList)
         {
             CreateFolderHeader();
             CreateVideoButtons(videoDataList);
@@ -1239,7 +1242,7 @@ namespace FishLens_App
 
             // Folder name
             TextBox textBox = new TextBox();
-            textBox.Text = folderName;
+            textBox.Text = _currentFolderName;
             textBox.Foreground = new SolidColorBrush(Colors.White);
             textBox.Background = Brushes.Transparent;
             textBox.BorderThickness = new Thickness(0);
@@ -1251,7 +1254,7 @@ namespace FishLens_App
             folderCheckBox.VerticalAlignment = VerticalAlignment.Center;
 
             // capture folder name at time of header creation so handlers affect only this folder's videos
-            string thisFolder = folderName;
+            string thisFolder = _currentFolderName;
             folderNameGrid.Tag = $"header:{thisFolder}";
 
             // When folder checkbox toggled, check/uncheck all video checkboxes belonging to this folder
@@ -1305,13 +1308,13 @@ namespace FishLens_App
         // Function: CreateVideoButtons
         // Description: Creates individual video buttons with checkboxes
         // **************************************************
-        private void CreateVideoButtons(List<(FileInfo videoFile, Video videoData)> videoDataList)
+        private void CreateVideoButtons(List<(FileInfo videoFile, FishLens_App.Models.Video videoData)> videoDataList)
         {
             foreach (var (videoFile, videoData) in videoDataList)
             {
                 Grid grid = new Grid();
                 // tag this grid with the current folder name so folder header can target it
-                grid.Tag = folderName;
+                grid.Tag = _currentFolderName;
                 grid.HorizontalAlignment = HorizontalAlignment.Stretch;
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -1338,9 +1341,9 @@ namespace FishLens_App
         // Description: Creates styled button for a single video
         // Notes: Helper function for CreateVideoButtonsList
         // **************************************************
-        private Button CreateSingleVideoButton(FileInfo videoFile, Video videoData)
+        private Button CreateSingleVideoButton(FileInfo videoFile, FishLens_App.Models.Video videoData)
         {
-            bool isLowConfidence = IsLowConfidence(videoData.avgConfidence);
+            bool isLowConfidence = IsLowConfidence(videoData.AvgConfidence);
 
             return new Button
             {

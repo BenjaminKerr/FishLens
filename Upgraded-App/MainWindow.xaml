@@ -12,12 +12,12 @@
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="320"/>
+            <ColumnDefinition x:Name ="SidebarColumn" Width="Auto"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         <Frame x:Name="MainFrame" NavigationUIVisibility="Visible" Grid.Column="1" Panel.ZIndex="1"/>
         <!--Sidebar: Media Selector-->
-        <Border x:Name="SideBar" Grid.Column="0" Background="{DynamicResource AccentBrush}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource HeaderBackground}">
+        <Border x:Name="SideBar" Width="320" Grid.Column="0" Background="{DynamicResource AccentBrush}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource HeaderBackground}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -27,7 +27,7 @@
 
                 <!-- Sidebar Header -->
                 <StackPanel Grid.Row="0" Margin="20,30,20,20">
-                    <Grid Margin="0" ShowGridLines="False">
+                    <Grid x:Name="ButtonGrid" Margin="0" ShowGridLines="False">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
@@ -75,8 +75,9 @@ Height="70">
                             </Viewbox>
                         </Button>
                     </Grid>
-                    <Rectangle Height="2" Fill="{DynamicResource HoverBackgroundBrush}" Margin="0,10,0,10"/>
+                    <Rectangle x:Name="sidebarSeperator" Height="2" Fill="{DynamicResource HoverBackgroundBrush}" Margin="0,10,0,10"/>
                     <TextBlock Text="Video Library" 
+                               x:Name="videoLibraryTitle"
                        FontSize="{DynamicResource HeaderFontSize}"
                        FontWeight="SemiBold" 
                        Foreground="{DynamicResource OnAccentForeground}"
