@@ -4,10 +4,10 @@ import torch
 from torchvision.ops import nms
 
 class DeepSortTracker:
-    MIN_BOX_AREA = 100
-    MIN_CONFIDENCE = 0.5
-    MIN_MOVE_THRESHOLD = 5
-    MAX_TRACK_HISTORY = 50
+    MIN_BOX_AREA = 100      # minimum area of bounding box to consider
+    MIN_CONFIDENCE = 0.5    # minimum confidence for detections
+    MIN_MOVE_THRESHOLD = 5  # minimum pixels to consider as movement
+    MAX_TRACK_HISTORY = 50  # maximum history length for each track
     # ****************************************************************
     # Function: __init__
     # Description: Initialize the DeepSort tracker with configuration parameters
@@ -47,9 +47,12 @@ class DeepSortTracker:
         if not detections:
             return []
 
-        boxes = torch.tensor([d[:4] for d in detections], dtype=torch.float32)
+        #bounding boxes
+        boxes = torch.tensor([d[:4] for d in detections], dtype=torch.float32) 
+        #confidence scores
         scores = torch.tensor([d[4] for d in detections], dtype=torch.float32)
 
+        #keep boxes that don't have too much overlap
         keep_idxs = nms(boxes, scores, iou_thresh)
         return [detections[i] for i in keep_idxs]
 
@@ -63,6 +66,7 @@ class DeepSortTracker:
         Compute horizontal direction using first and last position
         Returns 'upstream' (left) or 'downstream' (right)
         """
+        #store centroid history
         positions = self.track_positions.get(track_id, [])
         positions.append(centroid)
         self.track_positions[track_id] = positions
@@ -70,6 +74,7 @@ class DeepSortTracker:
         if len(positions) < 2:
             return "unknown"
 
+        #measure horizontal displacement
         dx = positions[-1][0] - positions[0][0]  # horizontal movement
         if abs(dx) < 5:  # minimal movement threshold
             return "stationary"
@@ -91,6 +96,7 @@ class DeepSortTracker:
         # Filter tiny boxes and low-confidence detections
         detections = [d for d in detections if (d[2]-d[0])*(d[3]-d[1]) > self.MIN_BOX_AREA and d[4] > self.MIN_CONFIDENCE]
 
+        #DeepSORT expects format (bbox, conf, cls)
         formatted = [
             ([x1, y1, x2, y2], conf, cls)
             for x1, y1, x2, y2, conf, cls in detections
@@ -100,36 +106,34 @@ class DeepSortTracker:
         results = []
 
         for t in tracks:
-            if not t.is_confirmed():
-                continue
+            if t.is_confirmed():
+                track_id = t.track_id
+                x1, y1, x2, y2 = map(int, t.to_ltrb())
+                centroid = ((x1 + x2) // 2, (y1 + y2) // 2)
 
-            track_id = t.track_id
-            x1, y1, x2, y2 = map(int, t.to_ltrb())
-            centroid = ((x1 + x2) // 2, (y1 + y2) // 2)
+                direction = self._get_direction(track_id, centroid)
 
-            direction = self._get_direction(track_id, centroid)
+                # Log detections
+                if track_id not in self.detection_history:
+                    self.detection_history[track_id] = []
 
-            # Log detections
-            if track_id not in self.detection_history:
-                self.detection_history[track_id] = []
+                det_conf = t.get_det_conf()
+                det_conf = float(det_conf) if det_conf is not None else 0.0
 
-            det_conf = t.get_det_conf()
-            det_conf = float(det_conf) if det_conf is not None else 0.0
+                self.detection_history[track_id].append({
+                    "confidence": det_conf,
+                    "class_id": t.det_class,
+                    "centroid": centroid
+                })
 
-            self.detection_history[track_id].append({
-                "confidence": det_conf,
-                "class_id": t.det_class,
-                "centroid": centroid
-            })
-
-            results.append({
-                "track_id": track_id,
-                "bbox": (x1, y1, x2, y2),
-                "centroid": centroid,
-                "direction": direction,
-                "confidence": det_conf,
-                "class_id": t.det_class
-            })
+                results.append({
+                    "track_id": track_id,
+                    "bbox": (x1, y1, x2, y2),
+                    "centroid": centroid,
+                    "direction": direction,
+                    "confidence": det_conf,
+                    "class_id": t.det_class
+                })
 
         return results
 
