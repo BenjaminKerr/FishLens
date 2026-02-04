@@ -20,7 +20,8 @@ namespace FishLens_App
         History,
         UserSettings,
         CreateRole,
-        CreateUser
+        CreateUser,
+        Reports
     }
 
     class Role

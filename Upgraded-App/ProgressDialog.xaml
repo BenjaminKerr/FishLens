@@ -1,0 +1,22 @@
+﻿<Window x:Class="FishLens_App.ProgressDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Processing" 
+        Height="150" 
+        Width="400"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        WindowStyle="SingleBorderWindow">
+    <Grid Margin="20">
+        <StackPanel>
+            <TextBlock x:Name="messageText" 
+                       Text="Processing videos, please wait..." 
+                       FontSize="{DynamicResource BaseFontSize}"
+                       Margin="0,0,0,20"
+                       TextWrapping="Wrap"/>
+            <ProgressBar x:Name="progressBar" 
+                         Height="20" 
+                         IsIndeterminate="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

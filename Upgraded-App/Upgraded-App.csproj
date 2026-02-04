@@ -5,11 +5,28 @@
 		<UseWPF>true</UseWPF>
 		<RootNamespace>FishLens_App</RootNamespace>
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+		<ApplicationManifest></ApplicationManifest>
 	</PropertyGroup>
+	<ItemGroup>
+	  <Compile Remove="SavedVids\**" />
+	  <EmbeddedResource Remove="SavedVids\**" />
+	  <None Remove="SavedVids\**" />
+	  <Page Remove="SavedVids\**" />
+	</ItemGroup>
 	<ItemGroup>
 		<PackageReference Include="ClosedXML" Version="0.105.0" />
 		<PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-		<PackageReference Include="Microsoft.Identity.Client" Version="4.79.2" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.1" />
+		<PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.1" />
+		<PackageReference Include="Microsoft.Identity.Client" Version="4.81.0" />
 		<PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
+		<PackageReference Include="xunit.abstractions" Version="2.0.3" />
+		<PackageReference Include="xunit.assert" Version="2.9.3" />
+		<PackageReference Include="xunit.extensibility.core" Version="2.9.3" />
+	</ItemGroup>
+	<ItemGroup>
+	  <None Update="appsettings.json">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
 	</ItemGroup>
 </Project>

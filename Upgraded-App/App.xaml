@@ -2,8 +2,42 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:FishLens_App"
+             xmlns:system="clr-namespace:System;assembly=mscorlib"
              StartupUri="SigninPage.xaml">
     <Application.Resources>
-         
+        <ResourceDictionary>
+            <!-- Merge the default theme so all XAML can resolve theme resources -->
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/NormalTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Base font sizes -->
+            <system:Double x:Key="BaseFontSize">14</system:Double>
+            <system:Double x:Key="LargeFontSize">18</system:Double>
+            <system:Double x:Key="HeaderFontSize">24</system:Double>
+            <system:Double x:Key="LargeHeaderFontSize">32</system:Double>
+            <system:Double x:Key="TitleFontSize">56</system:Double>
+            <system:Double x:Key="LargeTitleFontSize">72</system:Double>
+
+            <!-- Default TextBlock Style -->
+            <Style TargetType="TextBlock">
+                <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}"/>
+            </Style>
+
+            <!-- Default Button Style -->
+            <Style TargetType="Button">
+                <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}"/>
+            </Style>
+
+            <!-- Default ComboBox Style -->
+            <Style TargetType="ComboBox">
+                <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}"/>
+            </Style>
+
+            <!-- Default TextBox Style -->
+            <Style TargetType="TextBox">
+                <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}"/>
+            </Style>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>
