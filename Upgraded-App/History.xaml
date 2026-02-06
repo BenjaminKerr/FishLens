@@ -313,22 +313,6 @@
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource PrimaryColorBrush}"
                                        VerticalAlignment="Center"/>
-
-                            <StackPanel Orientation="Horizontal" 
-                                        HorizontalAlignment="Right">
-                                <ComboBox x:Name="reportTypeCombo"
-                                          FontSize="{DynamicResource BaseFontSize}"
-                                          Padding="10,5"
-                                          Background="{DynamicResource SecondaryBackgroundBrush}"
-                                          BorderBrush="{DynamicResource BorderColorBrush}"
-                                          SelectedIndex="0"
-                                          SelectionChanged="ReportType_SelectionChanged">
-                                    <ComboBoxItem Content="Standard Report"/>
-                                    <ComboBoxItem Content="Detailed Analysis"/>
-                                    <ComboBoxItem Content="Summary Only"/>
-                                    <ComboBoxItem Content="Data Table View"/>
-                                </ComboBox>
-                            </StackPanel>
                         </Grid>
                     </Border>
 
@@ -393,41 +377,6 @@
                                             <Setter.Value>
                                                 <ControlTemplate TargetType="Button">
                                                     <Border Background="{TemplateBinding Background}"
-                                                            CornerRadius="6"
-                                                            Padding="{TemplateBinding Padding}">
-                                                        <ContentPresenter HorizontalAlignment="Center"
-                                                                          VerticalAlignment="Center"/>
-                                                    </Border>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                        <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
-                                            </Trigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
-
-                            <Button Content="Print Report" 
-                                    Click="PrintReportClick"
-                                    Background="{DynamicResource SecondaryBackgroundBrush}"
-                                    Foreground="{DynamicResource PrimaryColorBrush}"
-                                    BorderBrush="{DynamicResource BorderColorBrush}"
-                                    BorderThickness="1"
-                                    FontSize="{DynamicResource BaseFontSize}"
-                                    FontWeight="SemiBold"
-                                    Padding="20,10"
-                                    Cursor="Hand">
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border Background="{TemplateBinding Background}"
-                                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                                            BorderThickness="{TemplateBinding BorderThickness}"
                                                             CornerRadius="6"
                                                             Padding="{TemplateBinding Padding}">
                                                         <ContentPresenter HorizontalAlignment="Center"

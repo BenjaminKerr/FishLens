@@ -34,7 +34,7 @@ namespace FishLens_App
         // Application settings
         private const double DEFAULT_CONFIDENCE_THRESHOLD = 0.7;
 
-        // UI constants - Video buttons
+        // UI constants
         private const int BUTTON_HEIGHT = 45;
         private const int BUTTON_FONT_SIZE = 13;
         private const int BUTTON_MARGIN = 5;
@@ -42,6 +42,7 @@ namespace FishLens_App
         private const int BUTTON_PADDING_VERTICAL = 8;
         private const int BUTTON_CORNER_RADIUS = 6;
         private const int CONTENT_PRESENTER_MARGIN = 8;
+        private const int SIDEBAR_WIDTH = 320;
 
         // Directory paths
         private const string SAVED_VIDEOS_FOLDER = "SavedVids";
@@ -60,8 +61,7 @@ namespace FishLens_App
         private readonly ILogger<MainWindow> _logger;
         private readonly AppConfiguration _config;
         private readonly CheckBoxToggle _checkBoxes;
-        // Stack of deletion batches for undo support
-        private readonly Stack<DeletionBatch> _deletionHistory = new Stack<DeletionBatch>();
+        private readonly Stack<DeletionBatch> _deletionHistory = new Stack<DeletionBatch>();        // Stack of deletion batches so you can undo last deletion(s)
 
         #endregion
 
@@ -273,39 +273,44 @@ namespace FishLens_App
 
         #endregion
 
-            #region YOLO Processing
+        #region YOLO Processing
 
-            // **************************************************
-            // Function: RunYolo
-            // Description: Executes Python YOLO script for video analysis
-            // Notes: Original writing credit to Aden Ratliff, async update by Benjamin Kerr
-            //          Running async so that UI thread isn't blocked
-            // **************************************************
+        // **************************************************
+        // Function: RunYolo
+        // Description: Executes Python YOLO script for video analysis
+        // Notes: Original writing credit to Aden Ratliff, async update by Benjamin Kerr
+        //          Running async so that UI thread isn't blocked
+        // **************************************************
         private async Task RunYolo()
         {
-            ProcessStartInfo start = CreateYoloProcessStartInfo();
+            ProcessStartInfo processStartInfo = CreateYoloProcessStartInfo();
 
+            // TODO: Avoid using multiple Parent.Parent chains to find project root.
+            //       Use IProjectPathResolver or a robust helper instead.
             string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
             var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
             string scriptDirectory = System.IO.Path.Combine(projectRoot, "main.py");
 
-            string pythonExe = System.IO.Path.Combine(
+            string pythonExe = System.IO.Path.Combine( // Get the path to the python executable
                 projectRoot,
                 "Python",
                 "venv",
                 "Scripts",
-                "python.exe"
+                "python.exe" // resulting path should be something like C:\path\to\project\Python\venv\Scripts\python.exe
             );
+            // TODO: Ask Aden whether pythonExe is necessary, since it isn't used in the ProcessStartInfo
 
-            start.FileName = System.IO.Path.Combine(projectRoot, "venv", "scripts", "python.exe");
+            // TODO: Ensure casing ("scripts" vs "Scripts") is consistent across platforms (case-sensitive filesystems).
+            processStartInfo.FileName = System.IO.Path.Combine(projectRoot, "venv", "scripts", "python.exe");
+            string sampleDataPath = System.IO.Path.Combine(projectRoot, "sample_data");
+            processStartInfo.Arguments = $"\"{scriptDirectory}\" \"{sampleDataPath}\"";
+            processStartInfo.UseShellExecute = false;
 
-            string sampleDataPatch = System.IO.Path.Combine(projectRoot, "sample_data");
-            start.Arguments = $"\"{scriptDirectory}\" \"{sampleDataPatch}\"";
-
-            start.UseShellExecute = false;
             try
             {
-                Process process = Process.Start(start);
+                // TODO: Check RedirectStandardOutput/Error before calling ReadToEnd (CreateYoloProcessStartInfo sets these based on _checkBoxes).
+                // TODO: Handle Process.Start returning null and add a timeout to WaitForExit to avoid hangs.
+                Process process = Process.Start(processStartInfo);
                 string output = process.StandardOutput.ReadToEnd();
                 string error = process.StandardError.ReadToEnd();
                 process.WaitForExit();
@@ -314,6 +319,7 @@ namespace FishLens_App
 
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Failed to run YOLO process");
                 MessageBox.Show(ex.Message, "Could not process videos.", MessageBoxButton.OK);
             }
         }
@@ -327,9 +333,10 @@ namespace FishLens_App
             string yoloScriptDirectory = _pathResolver.ResolveYoloScriptPath();
             string sampleDataPath = Path.Combine(_pathResolver.ResolveProjectRoot(), SAMPLE_DATA_FOLDER);
 
+            // TODO: Ensure this method's choices (FileName = "python") are consistent with RunYolo which attempts to set an explicit python exe path.
             return new ProcessStartInfo
             {
-                FileName = "python",
+                FileName = "python", // Lowercase 'p' for cross-platform compatibility
                 Arguments = $"\"{yoloScriptDirectory}\" \"{sampleDataPath}\"",
                 RedirectStandardError = _checkBoxes.ErrorBox,
                 RedirectStandardOutput = _checkBoxes.OutputBox,
@@ -340,9 +347,13 @@ namespace FishLens_App
         // **************************************************
         // Function: ExecuteYoloProcess
         // Description: Runs YOLO process and handles output
+        // TODO: This function isn't being used right now.
+        //       We should consider its significance and reintegrate
+        //       or delete it as needed.
         // **************************************************
         private async Task ExecuteYoloProcess(ProcessStartInfo processInfo, ProgressDialog progressDialog)
         {
+            // TODO: Consider moving process execution and reading logic into a shared helper to avoid duplication with RunYolo.
             await Task.Run(() =>
             {
                 using (Process process = Process.Start(processInfo))
@@ -418,8 +429,9 @@ namespace FishLens_App
         // **************************************************
         private async void ProcessVideos(string inputFolder, string outputDirectory)
         {
+            // TODO: This method does many things (create dirs, UI updates, copying files, YOLO run, UI list creation).
+            //       Consider splitting into smaller methods for testability and clarity.
             MakeDirectoryIfNotExists(outputDirectory);
-            DisplayDataInUi(outputDirectory);
             EnterDataInFile(inputFolder, outputDirectory);
             await RunYolo();
 
@@ -432,11 +444,15 @@ namespace FishLens_App
                 if (videoDataList != null && videoDataList.Count > 0)
                 {
                     var firstVideoPath = videoDataList[0].vid.FullName;
+                    DisplayDataInUi(firstVideoPath);
                     // Load the video into the player. LoadVideoInPlayer will respect _config.AutoPlayVideos
                     Dispatcher.Invoke(() => LoadVideoInPlayer(firstVideoPath));
                 }
             }
-            catch { }
+            catch
+            {
+                // TODO: Don't swallow exceptions silently; at least log them.
+            }
         }
 
         // **************************************************
@@ -445,6 +461,7 @@ namespace FishLens_App
         // **************************************************
         private void EnterDataInFile(string inputFolder, string outputDirectory)
         {
+            // TODO: Consider filtering files by supported extensions (use IsVideoFile) and handle large folder sizes.
             DirectoryInfo dirInfo = new DirectoryInfo(inputFolder);
             FileInfo[] files = dirInfo.GetFiles("*");
 
@@ -457,9 +474,13 @@ namespace FishLens_App
         // **************************************************
         // Function: CopyFileToDestination
         // Description: Copies single file to destination with error handling
+        // Note 1: At the moment we're copying videos to a folder in root,
+        //       but in the future we may want to avoid that to save space.
+        // TODO: We should use IFileSystemManager here.
         // **************************************************
         private void CopyFileToDestination(FileInfo file, string outputDirectory)
         {
+            // TODO: Rename local variables to be more descriptive (e.g., sourceFile, destinationPath).
             string fileName = Path.GetFileName(file.FullName);
             string destinationPath = Path.Combine(outputDirectory, fileName);
 
@@ -483,24 +504,40 @@ namespace FishLens_App
 
         #region Video Data Management
 
+
+        // **************************************************
+        // Function: DisplayDataInUi
+        // Description: Updates UI elements with video analysis data
+        // **************************************************
+        private void DisplayDataInUi(string videoFileName)
+        {
+            FishLens_App.Models.Video vid = GetData(videoFileName);
+
+            videoName.Text = vid.Name;
+            videoDateTime.Text = $"Duration: {vid.StartTime}s - {vid.EndTime}s";
+            fishPresentStatus.Text = vid.LikelyClass == "fish" ? "Present" : "Not Present";
+            fishPresentConfidence.Text = vid.AvgConfidence.ToString();
+            travelDirection.Text = CapitalizeFirstLetter(vid.Direction);
+        }
+
+        // **************************************************
+        // Function: DeleteSelectedVideosClick
+        // Description: Deletes selected videos and their analysis data
+        // **************************************************
         public void DeleteSelectedVideosClick(object sender, EventArgs e)
         {
             var selected = GetSelectedVideoGrids();
-            if (selected.Count == 0)
+
+            if (selected.Count != 0 && ConfirmDelete(selected.Count))
             {
-                MessageBox.Show("No videos selected for deletion.", "Delete Videos", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
+                string csvPath = _pathResolver.ResolveCsvScriptPath();
+
+                DeleteFilesAndCsvEntries(selected.Select(x => x.path).ToList(), csvPath);
+
+                RemoveUiGrids(selected.Select(x => x.grid).ToList());
+
+                MessageBox.Show($"Deleted {selected.Count} video(s).", "Delete Complete", MessageBoxButton.OK, MessageBoxImage.Information);
             }
-
-            if (!ConfirmDelete(selected.Count)) return;
-
-            string csvPath = _pathResolver.ResolveCsvScriptPath();
-
-            DeleteFilesAndCsvEntries(selected.Select(x => x.path).ToList(), csvPath);
-
-            RemoveUiGrids(selected.Select(x => x.grid).ToList());
-
-            MessageBox.Show($"Deleted {selected.Count} video(s).", "Delete Complete", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         // **************************************************
@@ -512,19 +549,21 @@ namespace FishLens_App
             var result = new List<(Grid, string)>();
             foreach (var child in videoList.Children)
             {
-                if (child is Grid g)
+                if (child is Grid grid)
                 {
-                    CheckBox cb = null;
-                    Button btn = null;
-                    foreach (var elem in g.Children)
+                    CheckBox checkBox = null;
+                    Button button = null;
+                    foreach (var element in grid.Children)
                     {
-                        if (elem is CheckBox c) cb = c;
-                        if (elem is Button b) btn = b;
+                        if (element is CheckBox testingCheckBox)
+                            checkBox = testingCheckBox;
+                        if (element is Button testingButton)
+                            button = testingButton;
                     }
 
-                    if (cb != null && cb.IsChecked == true && btn != null && btn.Tag is string path)
+                    if (checkBox != null && checkBox.IsChecked == true && button != null && button.Tag is string path)
                     {
-                        result.Add((g, path));
+                        result.Add((grid, path));
                     }
                 }
             }
@@ -538,7 +577,7 @@ namespace FishLens_App
         // **************************************************
         private bool ConfirmDelete(int count)
         {
-            var result = MessageBox.Show($"Delete {count} selected video(s) and remove their analysis?","Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            var result = MessageBox.Show($"Delete {count} selected video(s) and remove their analysis?", "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             return result == MessageBoxResult.Yes;
         }
 
@@ -548,6 +587,7 @@ namespace FishLens_App
         // **************************************************
         private void DeleteFilesAndCsvEntries(List<string> paths, string csvPath)
         {
+            // TODO: Use TRASH_FOLDER constant instead of hardcoded ".trash".
             // Create a trash folder to hold deleted files for potential undo
             string trashRoot = Path.Combine(_pathResolver.ResolvePath(SAVED_VIDEOS_FOLDER), ".trash");
             Directory.CreateDirectory(trashRoot);
@@ -557,49 +597,38 @@ namespace FishLens_App
             for (int i = 0; i < paths.Count; i++)
             {
                 string fullPath = paths[i];
+                string fileName = Path.GetFileName(fullPath);
+
+                // Capture video data and CSV row before removal (safe operations)
+                // TODO: Consider guarding against csvPath null/empty.
+                string csvRow = FindCsvRowForFile(csvPath, fileName);
+                var videoData = FishLens_App.Services.CsvUtils.ReadVideoFromCsv(csvPath, fileName);
+
+                // Stop video player if needed (safe operation)
+                StopVideoPlayerIfPlayingFile(fullPath);
+
+                // Prepare paths
+                string trashPath = Path.Combine(batch.TrashFolder, fileName);
+                string folderTag = GetFolderTagForPath(fullPath);
+
                 try
                 {
-                    // capture video data and CSV row before removal
-                    string fileName = Path.GetFileName(fullPath);
-                    string csvRow = null;
-                    if (File.Exists(csvPath))
-                    {
-                        var all = File.ReadAllLines(csvPath);
-                        for (int r = 1; r < all.Length; r++)
-                        {
-                            var cols = all[r].Split(',');
-                            if (cols.Length > 0 && string.Equals(cols[0].Trim(), fileName, StringComparison.OrdinalIgnoreCase))
-                            {
-                                csvRow = all[r];
-                                break;
-                            }
-                        }
-                    }
-
-                    var videoData = FishLens_App.Services.CsvUtils.ReadVideoFromCsv(csvPath, fileName);
-
-                    if (videoPlayer.Source != null && string.Equals(videoPlayer.Source.LocalPath, fullPath, StringComparison.OrdinalIgnoreCase))
-                    {
-                        videoPlayer.Stop();
-                        videoPlayer.Source = null;
-                    }
-
-                    string trashPath = Path.Combine(batch.TrashFolder, Path.GetFileName(fullPath));
+                    // Only the actual file system operations in the try block
                     if (File.Exists(fullPath))
                     {
                         File.Move(fullPath, trashPath, overwrite: true);
                     }
 
-                    batch.Items.Add((fullPath, trashPath, csvRow, videoData, GetFolderTagForPath(fullPath)));
+                    batch.Items.Add((fullPath, trashPath, csvRow, videoData, folderTag));
 
-                    // remove CSV entry
-                    if (File.Exists(csvPath) && csvRow != null)
+                    if (csvRow != null)
                     {
                         FishLens_App.Services.CsvUtils.RemoveVideoFromCsv(csvPath, fileName);
                     }
                 }
                 catch (Exception ex)
                 {
+                    // TODO: Consider finer-grained error handling and user feedback for partial failures.
                     _logger.LogWarning(ex, "Failed to delete/move file {path}", fullPath);
                 }
             }
@@ -608,6 +637,42 @@ namespace FishLens_App
             if (batch.Items.Count > 0)
             {
                 _deletionHistory.Push(batch);
+            }
+        }
+
+        // **************************************************
+        // Function: FindCsvRowForFile
+        // Description: Finds the CSV row corresponding to a given video file
+        // **************************************************
+        private string FindCsvRowForFile(string csvPath, string fileName)
+        {
+            if (!File.Exists(csvPath))
+                return null;
+
+            // TODO: Consider using a CSV parser utility to handle commas in fields and trimming reliably.
+            var all = File.ReadAllLines(csvPath);
+            for (int r = 1; r < all.Length; r++)
+            {
+                var cols = all[r].Split(',');
+                if (cols.Length > 0 && string.Equals(cols[0].Trim(), fileName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return all[r];
+                }
+            }
+            return null;
+        }
+
+        // **************************************************
+        // Function: StopVideoPlayerIfPlayingFile
+        // Description: Stops the video player if it's currently playing the specified file
+        // **************************************************
+        private void StopVideoPlayerIfPlayingFile(string fullPath)
+        {
+            if (videoPlayer.Source != null &&
+                string.Equals(videoPlayer.Source.LocalPath, fullPath, StringComparison.OrdinalIgnoreCase))
+            {
+                videoPlayer.Stop();
+                videoPlayer.Source = null;
             }
         }
 
@@ -668,7 +733,11 @@ namespace FishLens_App
                 if (string.IsNullOrEmpty(dir)) return string.Empty;
                 return Path.GetFileName(dir);
             }
-            catch { return string.Empty; }
+            catch
+            {
+                // TODO: Do not swallow exceptions silently; log unexpected errors for troubleshooting.
+                return string.Empty;
+            }
         }
 
         // **************************************************
@@ -702,6 +771,7 @@ namespace FishLens_App
                 }
                 catch (Exception ex)
                 {
+                    // TODO: Consider showing the user which files failed to restore; currently only logged.
                     _logger.LogWarning(ex, "Failed to restore file {path}", item.originalPath);
                 }
             }
@@ -716,6 +786,7 @@ namespace FishLens_App
             }
             catch (Exception ex)
             {
+                // TODO: Consider notifying user about CSV restore failures and possibly retrying.
                 _logger.LogWarning(ex, "Failed to restore CSV rows");
             }
 
@@ -723,7 +794,11 @@ namespace FishLens_App
             RestoreUiForFiles(restoredFiles, batch);
 
             // cleanup trash folder
-            try { if (Directory.Exists(batch.TrashFolder)) Directory.Delete(batch.TrashFolder, recursive: true); } catch { }
+            try { if (Directory.Exists(batch.TrashFolder)) Directory.Delete(batch.TrashFolder, recursive: true); }
+            catch
+            {
+                // TODO: Log this cleanup failure; don't silently ignore.
+            }
 
             MessageBox.Show($"Restored {restoredFiles.Count} file(s).", "Undo Complete", MessageBoxButton.OK, MessageBoxImage.Information);
         }
@@ -734,6 +809,7 @@ namespace FishLens_App
         // **************************************************
         private void RestoreUiForFiles(List<string> restoredFiles, DeletionBatch batch)
         {
+            // TODO: This method mixes UI mutation and state logic; split into smaller helpers (ensure header, create grid/button, add to list).
             foreach (var filePath in restoredFiles)
             {
                 // find corresponding item in batch
@@ -793,11 +869,13 @@ namespace FishLens_App
             {
                 if (IsVideoFile(vid))
                 {
+                    // TODO: Consider whether to pass vid.Name or vid.FullName into GetData to avoid confusion.
                     FishLens_App.Models.Video data = GetData(vid.Name);
                     videoDataList.Add((vid, data));
                 }
             }
 
+            // TODO: Verify intended sort order (ascending vs descending).
             return videoDataList.OrderBy(x => x.data.AvgConfidence).ToList();
         }
 
@@ -829,6 +907,7 @@ namespace FishLens_App
 
             try
             {
+                // TODO: Ensure ReadVideoFromCsv is tolerant to unexpected input; consider returning null and handling upstream.
                 return FishLens_App.Services.CsvUtils.ReadVideoFromCsv(csvPath, videoFileName);
             }
             catch (Exception ex)
@@ -838,7 +917,7 @@ namespace FishLens_App
                 return vid;
             }
         }
-        
+
 
         #endregion
 
@@ -1107,7 +1186,7 @@ namespace FishLens_App
         {
             var animation = new System.Windows.Media.Animation.DoubleAnimation
             {
-                To = 106,
+                To = (SIDEBAR_WIDTH / 3),
                 Duration = TimeSpan.FromMilliseconds(250),
                 EasingFunction = new System.Windows.Media.Animation.CubicEase()
             };
@@ -1122,6 +1201,8 @@ namespace FishLens_App
 
             ButtonGrid.RowDefinitions.Clear();
             ButtonGrid.ColumnDefinitions.Clear();
+
+            // Reformat nav buttons to vertical layout
             ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -1138,7 +1219,7 @@ namespace FishLens_App
         {
             var animation = new System.Windows.Media.Animation.DoubleAnimation
             {
-                To = 320,
+                To = SIDEBAR_WIDTH,
                 Duration = TimeSpan.FromMilliseconds(250),
                 EasingFunction = new System.Windows.Media.Animation.CubicEase()
             };
@@ -1177,6 +1258,7 @@ namespace FishLens_App
             string videoPath = clickedButton.Tag.ToString();
 
             LoadVideoInPlayer(videoPath);
+            DisplayDataInUi(videoPath);
 
             string videoFileName = Path.GetFileName(videoPath);
             GetData(videoFileName);
@@ -1190,21 +1272,6 @@ namespace FishLens_App
         {
             videoPlayer.Source = new Uri(videoPath);
             videoPlayer.Play();
-        }
-
-        // **************************************************
-        // Function: DisplayDataInUi
-        // Description: Updates UI elements with video analysis data
-        // **************************************************
-        private void DisplayDataInUi(string videoFileName)
-        {
-            FishLens_App.Models.Video vid = GetData(videoFileName);
-
-            videoName.Text = vid.Name;
-            videoDateTime.Text = $"Duration: {vid.StartTime}s - {vid.EndTime}s";
-            fishPresentStatus.Text = vid.LikelyClass == "fish" ? "Present" : "Not Present";
-            fishPresentConfidence.Text = vid.AvgConfidence.ToString();
-            travelDirection.Text = CapitalizeFirstLetter(vid.Direction);
         }
 
         // **************************************************
@@ -1253,7 +1320,7 @@ namespace FishLens_App
             folderCheckBox.Padding = new Thickness(5);
             folderCheckBox.VerticalAlignment = VerticalAlignment.Center;
 
-            // capture folder name at time of header creation so handlers affect only this folder's videos
+            // Capture folder name at time of header creation so handlers affect only this folder's videos
             string thisFolder = _currentFolderName;
             folderNameGrid.Tag = $"header:{thisFolder}";
 
@@ -1262,34 +1329,13 @@ namespace FishLens_App
             {
                 foreach (var child in videoList.Children)
                 {
-                    if (child is Grid g && g.Tag is string t && t == thisFolder)
-                    {
-                        foreach (var elem in g.Children)
-                        {
-                            if (elem is CheckBox cb)
-                            {
-                                cb.IsChecked = true;
-                            }
-                        }
-                    }
+                    ToggleFolderCheckboxes(thisFolder, true);
                 }
             };
 
             folderCheckBox.Unchecked += (s, e) =>
             {
-                foreach (var child in videoList.Children)
-                {
-                    if (child is Grid g && g.Tag is string t && t == thisFolder)
-                    {
-                        foreach (var elem in g.Children)
-                        {
-                            if (elem is CheckBox cb)
-                            {
-                                cb.IsChecked = false;
-                            }
-                        }
-                    }
-                }
+                ToggleFolderCheckboxes(thisFolder, false);
             };
 
             // Add elements
@@ -1302,6 +1348,27 @@ namespace FishLens_App
             Separator separator = new Separator();
             separator.Margin = new Thickness(0, 5, 0, 5);
             videoList.Children.Add(separator);
+        }
+
+        // **************************************************
+        // Function: ToggleFolderCheckboxes
+        // Description: Sets all video checkboxes for a folder to checked or unchecked
+        // **************************************************
+        private void ToggleFolderCheckboxes(string folderName, bool isChecked)
+        {
+            foreach (var child in videoList.Children)
+            {
+                if (child is Grid g && g.Tag is string t && t == folderName)
+                {
+                    foreach (var elem in g.Children)
+                    {
+                        if (elem is CheckBox cb)
+                        {
+                            cb.IsChecked = isChecked;
+                        }
+                    }
+                }
+            }
         }
 
         // **************************************************

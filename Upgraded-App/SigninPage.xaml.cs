@@ -46,7 +46,7 @@ namespace FishLens_App
         {
             bool SigninSuccessful = true;
           //Temp logic below until create database for logins
-            if (username.Length== 0 || password.Length == 0)
+            if (username.Length == 0 || password.Length == 0)
             {
                 SigninSuccessful = false;
             }

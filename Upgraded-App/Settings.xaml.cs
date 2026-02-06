@@ -19,9 +19,6 @@ using System.Windows.Shapes;
 
 namespace FishLens_App
 {
-    /// <summary>
-    /// Interaction logic for Settings.xaml
-    /// </summary>
     public partial class Settings : Page
     {
         #region Fields

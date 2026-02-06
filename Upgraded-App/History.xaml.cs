@@ -13,7 +13,7 @@ using FishLens_App.Models;
 
 namespace FishLens_App
 {
-    public partial class History : Page
+    public partial class History : Page // TODO: Rename to Reports.xaml.cs
     {
         #region Fields
 
@@ -51,17 +51,6 @@ namespace FishLens_App
         #endregion
 
         #region Button Event Handlers
-
-        // **************************************************
-        // Function: SaveButtonClick
-        // Description: Handles save button click event
-        public void SaveButtonClick(object sender, RoutedEventArgs e)
-        {
-            MessageBox.Show("Changes saved successfully!",
-                           "Success",
-                           MessageBoxButton.OK,
-                           MessageBoxImage.Information);
-        }
 
         // **************************************************
         // Function: GenerateReportClick
@@ -227,22 +216,6 @@ namespace FishLens_App
                             MessageBoxImage.Information);
         }
 
-        // **************************************************
-        // Function: ReportType_SelectionChanged
-        // Description: 
-        public void ReportType_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-
-        }
-
-        // **************************************************
-        // Function: PrintReportClick
-        // Description: 
-        public void PrintReportClick(object sender, RoutedEventArgs e)
-        {
-
-        }
-
         #endregion
 
         #region Statistics Calculations
@@ -269,7 +242,7 @@ namespace FishLens_App
                 // CSV layout (reference):
                 // 0: video_file, 1: track_id, 2: image_path, 3: likely_class, 4: confidence,
                 // 5: start_time_sec, 6: end_time_sec, 7: avg_confidence, 8: direction,
-                // 9: species, 10: species_confidence
+                // 9: species, 10: species_confidence 11: date, 12: time
                 string videoName = columns.Length > 0 ? columns[0] : string.Empty;
 
                 // Capture both the species column (index 9) and the likely_class (index 3).
@@ -302,7 +275,7 @@ namespace FishLens_App
                 ProcessVideoData(stats, videoName);
                 totalConfidence += ProcessConfidenceData(stats, columns);
 
-                // NEW: Process date/time data (columns: date at 11, time at 12)
+                // Date and Time data
                 DateTime? timestamp = null;
                 if (columns.Length > 11)
                 {
@@ -342,12 +315,10 @@ namespace FishLens_App
                     int hr = timestamp.Value.Hour;
                     if (stats.DetectionsByHour.ContainsKey(hr)) stats.DetectionsByHour[hr]++; else stats.DetectionsByHour[hr] = 1;
                 }
-
-                // NEW: Process location data (extract from video name or separate column)
+                
                 string location = ExtractLocationFromVideo(videoName);
                 ProcessLocationData(stats, location, species);
 
-                // NEW: Process correctness/accuracy data (if available in columns)
                 if (columns.Length > 8 && double.TryParse(columns[8], out double correctness))
                 {
                     totalCorrectness += correctness;
