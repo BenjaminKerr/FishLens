@@ -12,6 +12,7 @@ using FishLens_App.Models;
 using FishLens_App.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.VisualBasic.FileIO;
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
@@ -451,7 +452,7 @@ namespace FishLens_App
             }
             catch
             {
-                // TODO: Don't swallow exceptions silently; at least log them.
+                _logger.LogWarning("Failed to auto-load first video after processing. This may be expected if no videos were processed or if there was an issue with the first video.");
             }
         }
 
@@ -461,12 +462,15 @@ namespace FishLens_App
         // **************************************************
         private void EnterDataInFile(string inputFolder, string outputDirectory)
         {
-            // TODO: Consider filtering files by supported extensions (use IsVideoFile) and handle large folder sizes.
             DirectoryInfo dirInfo = new DirectoryInfo(inputFolder);
             FileInfo[] files = dirInfo.GetFiles("*");
-
             foreach (FileInfo file in files)
             {
+                if (!IsVideoFile(file))
+                {
+                    _logger.LogInformation("Skipping non-video file: {FileName}", file.FullName);
+                    continue;
+                }
                 CopyFileToDestination(file, outputDirectory);
             }
         }
@@ -480,7 +484,6 @@ namespace FishLens_App
         // **************************************************
         private void CopyFileToDestination(FileInfo file, string outputDirectory)
         {
-            // TODO: Rename local variables to be more descriptive (e.g., sourceFile, destinationPath).
             string fileName = Path.GetFileName(file.FullName);
             string destinationPath = Path.Combine(outputDirectory, fileName);
 
@@ -587,9 +590,8 @@ namespace FishLens_App
         // **************************************************
         private void DeleteFilesAndCsvEntries(List<string> paths, string csvPath)
         {
-            // TODO: Use TRASH_FOLDER constant instead of hardcoded ".trash".
             // Create a trash folder to hold deleted files for potential undo
-            string trashRoot = Path.Combine(_pathResolver.ResolvePath(SAVED_VIDEOS_FOLDER), ".trash");
+            string trashRoot = Path.Combine(_pathResolver.ResolvePath(SAVED_VIDEOS_FOLDER), TRASH_FOLDER);
             Directory.CreateDirectory(trashRoot);
             var batch = new DeletionBatch { TrashFolder = Path.Combine(trashRoot, Guid.NewGuid().ToString()) };
             Directory.CreateDirectory(batch.TrashFolder);
@@ -599,10 +601,19 @@ namespace FishLens_App
                 string fullPath = paths[i];
                 string fileName = Path.GetFileName(fullPath);
 
+                string csvRow = null;
+                var videoData = new FishLens_App.Models.Video();
+
                 // Capture video data and CSV row before removal (safe operations)
-                // TODO: Consider guarding against csvPath null/empty.
-                string csvRow = FindCsvRowForFile(csvPath, fileName);
-                var videoData = FishLens_App.Services.CsvUtils.ReadVideoFromCsv(csvPath, fileName);
+                try
+                {
+                    csvRow = FindCsvRowForFile(csvPath, fileName);
+                    videoData = FishLens_App.Services.CsvUtils.ReadVideoFromCsv(csvPath, fileName);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to read CSV data for file {path} during deletion. This may affect undo functionality for this file.", fullPath);
+                }
 
                 // Stop video player if needed (safe operation)
                 StopVideoPlayerIfPlayingFile(fullPath);
@@ -628,7 +639,6 @@ namespace FishLens_App
                 }
                 catch (Exception ex)
                 {
-                    // TODO: Consider finer-grained error handling and user feedback for partial failures.
                     _logger.LogWarning(ex, "Failed to delete/move file {path}", fullPath);
                 }
             }
@@ -649,14 +659,20 @@ namespace FishLens_App
             if (!File.Exists(csvPath))
                 return null;
 
-            // TODO: Consider using a CSV parser utility to handle commas in fields and trimming reliably.
-            var all = File.ReadAllLines(csvPath);
-            for (int r = 1; r < all.Length; r++)
+            using (TextFieldParser parser = new TextFieldParser(csvPath))
             {
-                var cols = all[r].Split(',');
-                if (cols.Length > 0 && string.Equals(cols[0].Trim(), fileName, StringComparison.OrdinalIgnoreCase))
+                parser.TextFieldType = FieldType.Delimited;
+                parser.SetDelimiters(",");
+                // Skip header
+                if (!parser.EndOfData)
+                    parser.ReadLine();
+                while (!parser.EndOfData)
                 {
-                    return all[r];
+                    string[] fields = parser.ReadFields();
+                    if (fields.Length > 0 && string.Equals(fields[0].Trim(), fileName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return string.Join(",", fields);
+                    }
                 }
             }
             return null;
@@ -735,9 +751,9 @@ namespace FishLens_App
             }
             catch
             {
-                // TODO: Do not swallow exceptions silently; log unexpected errors for troubleshooting.
-                return string.Empty;
+                _logger.LogWarning("Failed to get folder tag for path {path}", path);
             }
+            return null;
         }
 
         // **************************************************
@@ -786,18 +802,22 @@ namespace FishLens_App
             }
             catch (Exception ex)
             {
-                // TODO: Consider notifying user about CSV restore failures and possibly retrying.
                 _logger.LogWarning(ex, "Failed to restore CSV rows");
+                MessageBox.Show("Failed to restore CSV data for some videos. Their analysis data may be missing from the UI.", "CSV Restore Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
 
             // restore UI
             RestoreUiForFiles(restoredFiles, batch);
 
             // cleanup trash folder
-            try { if (Directory.Exists(batch.TrashFolder)) Directory.Delete(batch.TrashFolder, recursive: true); }
-            catch
+            try 
+            { 
+                if (Directory.Exists(batch.TrashFolder)) 
+                    Directory.Delete(batch.TrashFolder, recursive: true); 
+            }
+            catch (Exception ex)
             {
-                // TODO: Log this cleanup failure; don't silently ignore.
+                _logger.LogWarning(ex, "Trash folder could not be deleted.");
             }
 
             MessageBox.Show($"Restored {restoredFiles.Count} file(s).", "Undo Complete", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -869,7 +889,6 @@ namespace FishLens_App
             {
                 if (IsVideoFile(vid))
                 {
-                    // TODO: Consider whether to pass vid.Name or vid.FullName into GetData to avoid confusion.
                     FishLens_App.Models.Video data = GetData(vid.Name);
                     videoDataList.Add((vid, data));
                 }
