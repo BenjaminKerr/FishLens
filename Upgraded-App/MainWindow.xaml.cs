@@ -62,6 +62,7 @@ namespace FishLens_App
         private readonly ILogger<MainWindow> _logger;
         private readonly AppConfiguration _config;
         private readonly CheckBoxToggle _checkBoxes;
+        private readonly IUiDialogService _uiDialogService;
         private readonly Stack<DeletionBatch> _deletionHistory = new Stack<DeletionBatch>();        // Stack of deletion batches so you can undo last deletion(s)
 
         #endregion
@@ -86,11 +87,12 @@ namespace FishLens_App
         // Function: Constructor (Parameterized)
         // Description: Initializes MainWindow with dependency injection
         // **************************************************
-        public MainWindow(IProjectPathResolver pathResolver, IFileSystemManager fileSystemManager, ILogger<MainWindow> logger)
+        public MainWindow(IProjectPathResolver pathResolver, IFileSystemManager fileSystemManager, ILogger<MainWindow> logger, IUiDialogService uiDialogService = null)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _pathResolver = pathResolver ?? throw new ArgumentNullException(nameof(pathResolver));
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
+            _uiDialogService = uiDialogService ?? new UiDialogService();
 
             InitializeComponent();
 
@@ -198,12 +200,7 @@ namespace FishLens_App
         // **************************************************
         private void HandleDirectoryCreationError(string errorMessage)
         {
-            MessageBox.Show(
-                $"Cannot create directory: {errorMessage}",
-                "Directory Creation Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error
-            );
+            _uiDialogService.ShowMessage($"Cannot create directory: {errorMessage}", "Directory Creation Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
 
         #endregion
@@ -264,11 +261,7 @@ namespace FishLens_App
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to navigate to {PageName}", pageName);
-                MessageBox.Show(
-                    $"Navigation Error: {ex.Message}",
-                    "Navigation Failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                _uiDialogService.ShowMessage($"Navigation Error: {ex.Message}", "Navigation Failed", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -315,13 +308,13 @@ namespace FishLens_App
                 string output = process.StandardOutput.ReadToEnd();
                 string error = process.StandardError.ReadToEnd();
                 process.WaitForExit();
-                MessageBox.Show($"Output:\n{output}\n\nErrors:\n{error}");
+                _uiDialogService.ShowMessage($"Output:\n{output}\n\nErrors:\n{error}", "YOLO Output", MessageBoxButton.OK, MessageBoxImage.Information);
             }
 
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to run YOLO process");
-                MessageBox.Show(ex.Message, "Could not process videos.", MessageBoxButton.OK);
+                _uiDialogService.ShowMessage(ex.Message, "Could not process videos.", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -364,9 +357,9 @@ namespace FishLens_App
 
                     process.WaitForExit();
 
-                    Dispatcher.Invoke(() => progressDialog.Close());
+                        Dispatcher.Invoke(() => progressDialog.Close());
 
-                    DisplayProcessOutputIfNeeded(output, error);
+                        DisplayProcessOutputIfNeeded(output, error);
                 }
             });
         }
@@ -398,7 +391,7 @@ namespace FishLens_App
             if (!string.IsNullOrEmpty(error) || !string.IsNullOrEmpty(output))
             {
                 Dispatcher.Invoke(() =>
-                    MessageBox.Show($"Output:\n{output}\n\nErrors:\n{error}")
+                    _uiDialogService.ShowMessage($"Output:\n{output}\n\nErrors:\n{error}", "Process Output", MessageBoxButton.OK, MessageBoxImage.Information)
                 );
             }
         }
@@ -430,13 +423,19 @@ namespace FishLens_App
         // **************************************************
         private async void ProcessVideos(string inputFolder, string outputDirectory)
         {
-            // TODO: This method does many things (create dirs, UI updates, copying files, YOLO run, UI list creation).
-            //       Consider splitting into smaller methods for testability and clarity.
             MakeDirectoryIfNotExists(outputDirectory);
             EnterDataInFile(inputFolder, outputDirectory);
             await RunYolo();
+            ShowVideosInUi(outputDirectory);
+        }
 
-            List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList = CreateSortedListOfVideos(outputDirectory);
+        // **************************************************
+        // Function: ShowVideosInUi
+        // Description: Loads processed videos and their data into the UI
+        // **************************************************
+        private void ShowVideosInUi(string videoDirectory)
+        {
+            List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList = CreateSortedListOfVideos(videoDirectory);
             CreateVideoButtonsList(videoDataList);
 
             // If configured, load (and auto-play) the first uploaded video
@@ -471,35 +470,7 @@ namespace FishLens_App
                     _logger.LogInformation("Skipping non-video file: {FileName}", file.FullName);
                     continue;
                 }
-                CopyFileToDestination(file, outputDirectory);
-            }
-        }
-
-        // **************************************************
-        // Function: CopyFileToDestination
-        // Description: Copies single file to destination with error handling
-        // Note 1: At the moment we're copying videos to a folder in root,
-        //       but in the future we may want to avoid that to save space.
-        // TODO: We should use IFileSystemManager here.
-        // **************************************************
-        private void CopyFileToDestination(FileInfo file, string outputDirectory)
-        {
-            string fileName = Path.GetFileName(file.FullName);
-            string destinationPath = Path.Combine(outputDirectory, fileName);
-
-            try
-            {
-                File.Copy(file.FullName, destinationPath, overwrite: true);
-            }
-            catch (IOException ex)
-            {
-                MessageBox.Show($"Error Saving File: {ex.Message}", "Save Error",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            catch (SecurityException)
-            {
-                MessageBox.Show("Insufficient permissions to copy the file.", "Permission Error",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
+                _fileSystemManager.CopyFile(file.FullName, Path.Combine(outputDirectory, file.Name));
             }
         }
 
@@ -538,8 +509,7 @@ namespace FishLens_App
                 DeleteFilesAndCsvEntries(selected.Select(x => x.path).ToList(), csvPath);
 
                 RemoveUiGrids(selected.Select(x => x.grid).ToList());
-
-                MessageBox.Show($"Deleted {selected.Count} video(s).", "Delete Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                _uiDialogService.ShowMessage($"Deleted {selected.Count} video(s).", "Delete Complete", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
 
@@ -580,8 +550,7 @@ namespace FishLens_App
         // **************************************************
         private bool ConfirmDelete(int count)
         {
-            var result = MessageBox.Show($"Delete {count} selected video(s) and remove their analysis?", "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-            return result == MessageBoxResult.Yes;
+            return _uiDialogService.Confirm($"Delete {count} selected video(s) and remove their analysis?", "Confirm Delete");
         }
 
         // **************************************************
@@ -764,7 +733,7 @@ namespace FishLens_App
         {
             if (_deletionHistory.Count == 0)
             {
-                MessageBox.Show("Nothing to undo.", "Undo", MessageBoxButton.OK, MessageBoxImage.Information);
+                _uiDialogService.ShowMessage("Nothing to undo.", "Undo", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
@@ -787,7 +756,7 @@ namespace FishLens_App
                 }
                 catch (Exception ex)
                 {
-                    // TODO: Consider showing the user which files failed to restore; currently only logged.
+                    _uiDialogService.ShowMessage($"Failed to restore file: {item.originalPath}\nError: {ex.Message}", "Restore Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
                     _logger.LogWarning(ex, "Failed to restore file {path}", item.originalPath);
                 }
             }
@@ -803,7 +772,7 @@ namespace FishLens_App
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to restore CSV rows");
-                MessageBox.Show("Failed to restore CSV data for some videos. Their analysis data may be missing from the UI.", "CSV Restore Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
+                _uiDialogService.ShowMessage("Failed to restore CSV data for some videos. Their analysis data may be missing from the UI.", "CSV Restore Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
 
             // restore UI
@@ -820,58 +789,80 @@ namespace FishLens_App
                 _logger.LogWarning(ex, "Trash folder could not be deleted.");
             }
 
-            MessageBox.Show($"Restored {restoredFiles.Count} file(s).", "Undo Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            _uiDialogService.ShowMessage($"Restored {restoredFiles.Count} file(s).", "Undo Complete", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         // **************************************************
         // Function: RestoreUiForFiles
         // Description: Recreates UI entries for restored files using saved video data
+        // Refactor: split into small helpers for clarity and testability
         // **************************************************
         private void RestoreUiForFiles(List<string> restoredFiles, DeletionBatch batch)
         {
-            // TODO: This method mixes UI mutation and state logic; split into smaller helpers (ensure header, create grid/button, add to list).
             foreach (var filePath in restoredFiles)
             {
                 // find corresponding item in batch
-                var item = batch.Items.Find(x => x.originalPath == filePath);
-                if (item.originalPath == null) continue;
+                var item = batch.Items.Find(x => string.Equals(x.originalPath, filePath, StringComparison.OrdinalIgnoreCase));
+                if (string.IsNullOrEmpty(item.originalPath))
+                    continue;
 
-                // ensure folder header exists
-                bool headerExists = false;
-                foreach (var child in videoList.Children)
-                {
-                    if (child is Grid g && g.Tag is string t && t == $"header:{item.folder}") { headerExists = true; break; }
-                }
-                if (!headerExists)
-                {
-                    // temporarily set folderName so CreateFolderHeader uses it
-                    var prev = _currentFolderName;
-                    _currentFolderName = item.folder;
-                    CreateFolderHeader();
-                    _currentFolderName = prev;
-                }
+                EnsureFolderHeaderExists(item.folder);
 
-                // create video grid and add
-                Grid grid = new Grid();
-                grid.Tag = item.folder;
-                grid.HorizontalAlignment = HorizontalAlignment.Stretch;
-                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-                FileInfo fi = new FileInfo(filePath);
-                Button button = CreateSingleVideoButton(fi, item.video);
-                button.Click += VideoButtonClick;
-                Grid.SetColumn(button, 0);
-
-                CheckBox checkBox = new CheckBox();
-                checkBox.Padding = new Thickness(5);
-                checkBox.VerticalAlignment = VerticalAlignment.Center;
-                Grid.SetColumn(checkBox, 1);
-
-                grid.Children.Add(button);
-                grid.Children.Add(checkBox);
+                Grid grid = CreateGridForRestoredFile(item.originalPath, item.video, item.folder);
                 videoList.Children.Add(grid);
             }
+        }
+
+        // **************************************************
+        // Function: EnsureFolderHeaderExists
+        // Description: Adds a folder header for the given folder if one is not already present
+        // **************************************************
+        private void EnsureFolderHeaderExists(string folder)
+        {
+            foreach (var child in videoList.Children)
+            {
+                if (child is Grid g && g.Tag is string t && t == $"header:{folder}")
+                    return; // header already present
+            }
+
+            // temporarily set _currentFolderName so CreateFolderHeader produces the correct header
+            var previousFolder = _currentFolderName;
+            _currentFolderName = folder;
+            CreateFolderHeader();
+            _currentFolderName = previousFolder;
+        }
+
+        // **************************************************
+        // Function: CreateGridForRestoredFile
+        // Description: Builds the Grid containing the restored video's Button and CheckBox
+        // **************************************************
+        private Grid CreateGridForRestoredFile(string filePath, FishLens_App.Models.Video videoData, string folder)
+        {
+            var grid = new Grid
+            {
+                Tag = folder,
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            FileInfo fi = new FileInfo(filePath);
+            Button button = CreateSingleVideoButton(fi, videoData);
+            button.Click += VideoButtonClick;
+            Grid.SetColumn(button, 0);
+
+            var checkBox = new CheckBox
+            {
+                Padding = new Thickness(5),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(checkBox, 1);
+
+            grid.Children.Add(button);
+            grid.Children.Add(checkBox);
+
+            return grid;
         }
 
         // **************************************************
@@ -894,7 +885,6 @@ namespace FishLens_App
                 }
             }
 
-            // TODO: Verify intended sort order (ascending vs descending).
             return videoDataList.OrderBy(x => x.data.AvgConfidence).ToList();
         }
 
@@ -919,7 +909,7 @@ namespace FishLens_App
 
             if (!File.Exists(csvPath))
             {
-                MessageBox.Show("Analysis data file not found.", "Error",
+                _uiDialogService.ShowMessage("Analysis data file not found.", "Error",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return vid;
             }
@@ -931,7 +921,7 @@ namespace FishLens_App
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error reading analysis data: {ex.Message}", "Error",
+                _uiDialogService.ShowMessage($"Error reading analysis data: {ex.Message}", "Error",
                     MessageBoxButton.OK, MessageBoxImage.Error);
                 return vid;
             }
@@ -954,21 +944,21 @@ namespace FishLens_App
 
                 if (!File.Exists(csvPath))
                 {
-                    MessageBox.Show("No analysis data found to export.", "Export Error",
+                    _uiDialogService.ShowMessage("No analysis data found to export.", "Export Error",
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
-                SaveFileDialog saveFileDialog = CreateExportSaveDialog();
-
-                if (saveFileDialog.ShowDialog() == true)
+                string defaultName = $"FishLens_Analysis_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}";
+                string selectedPath = _uiDialogService.ShowSaveFileDialog("Excel Files (*.xlsx)|*.xlsx", ".xlsx", defaultName);
+                if (!string.IsNullOrEmpty(selectedPath))
                 {
-                    MakeExcelSheetAndInsertData(saveFileDialog, csvPath);
+                    MakeExcelSheetAndInsertData(selectedPath, csvPath);
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error exporting data: {ex.Message}", "Export Error",
+                _uiDialogService.ShowMessage($"Error exporting data: {ex.Message}", "Export Error",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -977,24 +967,15 @@ namespace FishLens_App
         // Function: CreateExportSaveDialog
         // Description: Creates configured SaveFileDialog for Excel export
         // **************************************************
-        private SaveFileDialog CreateExportSaveDialog()
-        {
-            return new SaveFileDialog
-            {
-                Filter = "Excel Files (*.xlsx)|*.xlsx",
-                DefaultExt = ".xlsx",
-                FileName = $"FishLens_Analysis_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"
-            };
-        }
+        // Export dialog is provided by IUiDialogService.ShowSaveFileDialog; keep helper removed.
 
         // **************************************************
         // Function: MakeExcelSheetAndInsertData
         // Description: Creates Excel workbook and populates with CSV data
         // Notes: Helper function for ExportDataClick
         // **************************************************
-        private void MakeExcelSheetAndInsertData(SaveFileDialog saveFileDialog, string csvPath)
+        private void MakeExcelSheetAndInsertData(string excelPath, string csvPath)
         {
-            string excelPath = saveFileDialog.FileName;
             string[] allLines = File.ReadAllLines(csvPath);
 
             using (var workbook = new ClosedXML.Excel.XLWorkbook())
@@ -1049,7 +1030,7 @@ namespace FishLens_App
         // **************************************************
         private void ShowExportSuccessMessage(string excelPath)
         {
-            MessageBox.Show($"Data exported successfully to:\n{excelPath}", "Export Successful",
+            _uiDialogService.ShowMessage($"Data exported successfully to:\n{excelPath}", "Export Successful",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
@@ -1059,12 +1040,9 @@ namespace FishLens_App
         // **************************************************
         private void PromptToOpenExportedFile(string excelPath)
         {
-            var result = MessageBox.Show("Would you like to open the exported file?", "Open File",
-                MessageBoxButton.YesNo, MessageBoxImage.Question);
-
-            if (result == MessageBoxResult.Yes)
+            if (_uiDialogService.Confirm("Would you like to open the exported file?", "Open File"))
             {
-                Process.Start(new ProcessStartInfo(excelPath) { UseShellExecute = true });
+                _uiDialogService.OpenFile(excelPath);
             }
         }
 
@@ -1080,7 +1058,7 @@ namespace FishLens_App
 
                 if (string.IsNullOrEmpty(currentVideoName) || currentVideoName == "--")
                 {
-                    MessageBox.Show("No video selected to save changes for.", "Save Error",
+                    _uiDialogService.ShowMessage("No video selected to save changes for.", "Save Error",
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
@@ -1089,20 +1067,20 @@ namespace FishLens_App
 
                 if (!File.Exists(csvPath))
                 {
-                    MessageBox.Show("CSV file not found.", "Save Error",
+                    _uiDialogService.ShowMessage("CSV file not found.", "Save Error",
                         MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
                 UpdateCsvFile(csvPath, currentVideoName);
 
-                MessageBox.Show("Changes saved successfully!", "Save Successful",
+                _uiDialogService.ShowMessage("Changes saved successfully!", "Save Successful",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error saving changes to CSV");
-                MessageBox.Show($"Error saving changes: {ex.Message}", "Save Error",
+                _uiDialogService.ShowMessage($"Error saving changes: {ex.Message}", "Save Error",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -1431,7 +1409,7 @@ namespace FishLens_App
         {
             bool isLowConfidence = IsLowConfidence(videoData.AvgConfidence);
 
-            return new Button
+            var button = new Button
             {
                 Content = videoFile.Name,
                 Margin = new Thickness(BUTTON_MARGIN),
@@ -1442,9 +1420,25 @@ namespace FishLens_App
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 FontSize = BUTTON_FONT_SIZE,
                 BorderThickness = new Thickness(0),
-                Cursor = Cursors.Hand,
-                Style = CreateButtonStyle(isLowConfidence)
+                Cursor = Cursors.Hand
             };
+
+            // Prefer resource-defined styles; fall back to programmatic style for safety.
+            try
+            {
+                var resourceKey = isLowConfidence ? "VideoButtonLowConfidenceStyle" : "VideoButtonNormalStyle";
+                var style = TryFindResource(resourceKey) as Style;
+                if (style != null)
+                    button.Style = style;
+                else
+                    button.Style = CreateButtonStyle(isLowConfidence);
+            }
+            catch
+            {
+                button.Style = CreateButtonStyle(isLowConfidence);
+            }
+
+            return button;
         }
 
         // **************************************************

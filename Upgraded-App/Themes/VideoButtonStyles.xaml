@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Normal video button style -->
+    <Style x:Key="VideoButtonNormalStyle" TargetType="Button">
+        <Setter Property="Background" Value="#F9FAFB" /> <!-- rgb(249,250,251) -->
+        <Setter Property="Foreground" Value="#374151" /> <!-- rgb(55,65,81) -->
+        <Setter Property="BorderBrush" Value="#E5E7EB" /> <!-- rgb(229,231,235) -->
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6">
+                        <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center" Margin="8,0"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="#F3F4F6"/> <!-- rgb(243,244,246) -->
+                            <Setter Property="Foreground" Value="#111827"/> <!-- rgb(17,24,39) -->
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="#E5E7EB"/> <!-- rgb(229,231,235) -->
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Low-confidence video button style -->
+    <Style x:Key="VideoButtonLowConfidenceStyle" TargetType="Button" BasedOn="{StaticResource VideoButtonNormalStyle}">
+        <Setter Property="Background" Value="#FEF2F2" /> <!-- rgb(254,242,242) -->
+        <Setter Property="Foreground" Value="#B91818" /> <!-- rgb(185,28,28) -->
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6">
+                        <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center" Margin="8,0"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="#EF4444"/> <!-- rgb(239,68,68) -->
+                            <Setter Property="Foreground" Value="#FFFFFF"/> <!-- white -->
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="#DC2626"/> <!-- rgb(220,38,38) -->
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

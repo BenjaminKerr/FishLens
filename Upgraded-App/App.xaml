@@ -6,9 +6,10 @@
              StartupUri="SigninPage.xaml">
     <Application.Resources>
         <ResourceDictionary>
-            <!-- Merge the default theme so all XAML can resolve theme resources -->
+            <!-- Merge the default theme and video button styles so XAML can resolve theme resources -->
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/NormalTheme.xaml"/>
+                <ResourceDictionary Source="Themes/VideoButtonStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
 
             <!-- Base font sizes -->
