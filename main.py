@@ -26,7 +26,7 @@ warnings.filterwarnings(
 )
 
 # Create and initialize video folder
-model = YOLO("fish_detector.pt")
+model = YOLO("fish_detector.pt") # fish_dectector.pt is a custom YOLOv8 model trained to detect fish (class name "fish" in the model)
 project_root = os.path.dirname(os.path.abspath(__file__))
 VIDEO_FOLDER = sys.argv[1] if len(sys.argv) > 1 else os.path.join(project_root, "sample_data")
 os.makedirs(VIDEO_FOLDER, exist_ok=True)
