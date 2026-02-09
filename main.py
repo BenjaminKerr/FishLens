@@ -26,7 +26,7 @@ warnings.filterwarnings(
 )
 
 # Create and initialize video folder
-model = YOLO("yolov8n.pt")
+model = YOLO("fish_detector.pt")
 project_root = os.path.dirname(os.path.abspath(__file__))
 VIDEO_FOLDER = sys.argv[1] if len(sys.argv) > 1 else os.path.join(project_root, "sample_data")
 os.makedirs(VIDEO_FOLDER, exist_ok=True)
@@ -280,7 +280,7 @@ def run_video_tracker(video_path):
             # Classify the image first to determine species folder
             temp_image_name = f"{os.path.splitext(filename)[0]}_track_{track['track_id']}.jpg"
             temp_image_path = os.path.join(FISH_IMAGE_DIR, temp_image_name)
-            cv2.imwrite(temp_image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            cv2.imwrite(temp_image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95]) 
             
             # Classify the saved image
             species_data = classify_image(temp_image_path)
