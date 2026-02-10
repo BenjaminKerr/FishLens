@@ -1,5 +1,5 @@
 video_file,track_id,image_path,likely_class,confidence,start_time_sec,end_time_sec,avg_confidence,direction,species,species_confidence
-FishTest1.mp4,3,fish_images\Trout\FishTest1_track_3.jpg,fish,32.27%,2.433333333333333,6.533333333333333,0.19%,downstream,Trout,90.12%
+FishTest1.mp4,3,fish_images\Trout\FishTest1_track_3.jpg,fish,32.27%,2.433333333333333,6.533333333333333,0.19%,upstream,Trout,90.12%
 FishTest1.mp4,6,fish_images\Trout\FishTest1_track_6.jpg,fish,30.20%,4.533333333333333,7.166666666666667,0.29%,upstream,Trout,98.60%
 FishTest2.mp4,1,fish_images\Salmon\FishTest2_track_1.jpg,1,0.00%,9.433333333333334,11.533333333333333,0.17%,downstream,Salmon,99.82%
 FishTest3.mp4,1,fish_images\Trout\FishTest3_track_1.jpg,fish,33.57%,10.433333333333334,18.166666666666668,0.72%,upstream,Trout,99.94%

@@ -262,6 +262,21 @@ def build_track_summary(track_id, track_data, frame_index, video_fps, most_commo
     confidences = [c for c in track_data["confidences"] if c is not None]
     avg_conf_DS = sum(confidences) / len(confidences) if confidences else 0.0
     species_data = classify_image(image_path) if image_path else ("No image", 0.0)
+    
+    # Calculate overall direction from all positions in track (more accurate than last frame)
+    directions = track_data["directions"]
+    # Count upstream vs downstream to determine overall movement direction
+    overall_direction = "unknown"
+    if directions:
+        upstream_count = directions.count("upstream")
+        downstream_count = directions.count("downstream")
+        if upstream_count > downstream_count:
+            overall_direction = "upstream"
+        elif downstream_count > upstream_count:
+            overall_direction = "downstream"
+        else:
+            overall_direction = directions[-1]  # fallback to last if tied
+    
     return {
         "track_id": track_id,
         "likely_class": most_common_class,
@@ -269,7 +284,7 @@ def build_track_summary(track_id, track_data, frame_index, video_fps, most_commo
         "avg_confidence": f"{avg_conf_DS:.2f}%",
         "start_time_sec": track_data["start_frame"] / video_fps,
         "end_time_sec": frame_index / video_fps,
-        "direction": track_data["directions"][-1] if track_data["directions"] else "unknown",
+        "direction": overall_direction,
         "best_crop": track_data.get("best_crop"),
         "species": species_data[0] if species_data else "No data",
         "species_confidence": f"{species_data[1]:.2f}%" if species_data else "No data"
