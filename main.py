@@ -67,7 +67,7 @@ FISH_IMAGE_DIR = "fish_images"
 CLASSIFIER_MODEL_PATH = os.path.join(PROJECT_ROOT, "fish_classifier_model.h5")
 CLASSIFIER_MODEL = load_model(CLASSIFIER_MODEL_PATH)
 CLASSIFIER_TARGET_FOLDER = "images"
-CLASS_NAMES = ["Salmon", "Trout"] 
+CLASS_NAMES = ["Omykiss", "Chinook"] 
 IMAGE_SIZE = (150, 150)
 IMAGE_EXTS = {'.jpg', '.jpeg', '.png'}
 
@@ -138,6 +138,10 @@ def run_video_tracker(video_path):
     finished_tracks = []
     found_fish = False
     filename = os.path.basename(video_path)
+    last_detected_class = None
+    last_detected_confidence = 0.0
+    most_common_class = None
+    avg_confidence_YL = 0.0
 
     # create a fresh tracker for each video to avoid ID/history leakage
     tracker = DeepSortTracker()
@@ -159,6 +163,15 @@ def run_video_tracker(video_path):
         
         # YOLO Post-Processing
         most_common_class, avg_confidence_YL = process_yolo_results(detections, MODEL)
+        if most_common_class is not None:
+            last_detected_class = most_common_class
+            last_detected_confidence = avg_confidence_YL
+        elif last_detected_class is not None:
+            most_common_class = last_detected_class
+            avg_confidence_YL = last_detected_confidence
+        else:
+            most_common_class = "fish"
+            avg_confidence_YL = 0.0
 
         # DeepSort Tracking
         active_tracks, current_track_ids = deepsort_analysis(detections, tracker, frame, active_tracks, frame_index)
@@ -170,6 +183,13 @@ def run_video_tracker(video_path):
         ret, frame = cap.read()
 
     # Finalize remaining active tracks
+    if most_common_class is None:
+        if last_detected_class is not None:
+            most_common_class = last_detected_class
+            avg_confidence_YL = last_detected_confidence
+        else:
+            most_common_class = "fish"
+            avg_confidence_YL = 0.0
     finalize_tracks(active_tracks, finished_tracks, frame_index, video_fps, most_common_class, current_track_ids, avg_confidence_YL, termination_reason="forced")
 
     cap.release()
@@ -181,7 +201,7 @@ def run_video_tracker(video_path):
 
     if MAX_EXPORT_PER_VIDEO and len(finished_tracks) > MAX_EXPORT_PER_VIDEO:
         finished_tracks.sort(
-            key=lambda x: float(x["avg_confidence"].replace("%", "")),
+            key=lambda x: float(x["confidence"].replace("%", "")),
             reverse=True
         )
 
@@ -232,7 +252,7 @@ def analyze_yolo_detections(frame, model, detections):
 # Notes: N/A
 def process_yolo_results(detections, model):
     
-    most_common_class = 1
+    most_common_class = None
     avg_confidence_YL = 0.0
     # Begin YOLO extrapolation for video-level stats
     if detections:
@@ -261,6 +281,8 @@ def build_track_summary(track_id, track_data, frame_index, video_fps, most_commo
         return None
     confidences = [c for c in track_data["confidences"] if c is not None]
     avg_conf_DS = sum(confidences) / len(confidences) if confidences else 0.0
+    best_conf = track_data.get("best_conf", 0.0)
+    best_conf_pct = best_conf * 100 if best_conf <= 1.0 else best_conf
     species_data = classify_image(image_path) if image_path else ("No image", 0.0)
     
     # Calculate overall direction from all positions in track (more accurate than last frame)
@@ -280,8 +302,8 @@ def build_track_summary(track_id, track_data, frame_index, video_fps, most_commo
     return {
         "track_id": track_id,
         "likely_class": most_common_class,
-        "confidence": f"{avg_confidence_YL:.2f}%",
-        "avg_confidence": f"{avg_conf_DS:.2f}%",
+        "confidence": f"{best_conf_pct:.2f}%" if best_conf_pct > 0 else f"{avg_confidence_YL:.2f}%",
+        "avg_confidence": f"{best_conf_pct:.2f}%" if best_conf_pct > 0 else f"{avg_conf_DS:.2f}%",
         "start_time_sec": track_data["start_frame"] / video_fps,
         "end_time_sec": frame_index / video_fps,
         "direction": overall_direction,
