@@ -67,7 +67,7 @@ FISH_IMAGE_DIR = "fish_images"
 CLASSIFIER_MODEL_PATH = os.path.join(PROJECT_ROOT, "fish_classifier_model.h5")
 CLASSIFIER_MODEL = load_model(CLASSIFIER_MODEL_PATH)
 CLASSIFIER_TARGET_FOLDER = "images"
-CLASS_NAMES = ["Omykiss", "Chinook"] 
+CLASS_NAMES = ["Omykiss", "Chinook"] #trout, salmon
 IMAGE_SIZE = (150, 150)
 IMAGE_EXTS = {'.jpg', '.jpeg', '.png'}
 
@@ -163,14 +163,15 @@ def run_video_tracker(video_path):
         
         # YOLO Post-Processing
         most_common_class, avg_confidence_YL = process_yolo_results(detections, MODEL)
-        if most_common_class is not None:
-            last_detected_class = most_common_class
-            last_detected_confidence = avg_confidence_YL
-        elif last_detected_class is not None:
+        if most_common_class is not None: #if YOLO detected something in this frame, update the last detected class 
+            last_detected_class = most_common_class #update last detected class only if YOLO detected something in this frame
+            last_detected_confidence = avg_confidence_YL #update last detected confidence only if YOLO detected something in this frame
+        elif last_detected_class is not None: #if YOLO failed to detect anything in this frame but we have a last detected class 
+            #from previous frames, use that as the most common class for this frame
             most_common_class = last_detected_class
             avg_confidence_YL = last_detected_confidence
-        else:
-            most_common_class = "fish"
+        else: #if YOLO failed to detect anything at all
+            most_common_class = "fish" 
             avg_confidence_YL = 0.0
 
         # DeepSort Tracking
@@ -201,7 +202,8 @@ def run_video_tracker(video_path):
 
     if MAX_EXPORT_PER_VIDEO and len(finished_tracks) > MAX_EXPORT_PER_VIDEO:
         finished_tracks.sort(
-            key=lambda x: float(x["confidence"].replace("%", "")),
+            #sort by confidence percentage (removing % sign and converting to float)
+            key=lambda x: float(x["confidence"].replace("%", "")), 
             reverse=True
         )
 
@@ -280,6 +282,7 @@ def build_track_summary(track_id, track_data, frame_index, video_fps, most_commo
     if duration_sec < 1.0:
         return None
     confidences = [c for c in track_data["confidences"] if c is not None]
+    #average confidence from DeepSort for this track
     avg_conf_DS = sum(confidences) / len(confidences) if confidences else 0.0
     best_conf = track_data.get("best_conf", 0.0)
     best_conf_pct = best_conf * 100 if best_conf <= 1.0 else best_conf
@@ -318,12 +321,12 @@ def build_track_summary(track_id, track_data, frame_index, video_fps, most_commo
 # Notes: N/A
 def deepsort_analysis(detections, tracker, frame, active_tracks, frame_index):
     # Use the tracker's default iou threshold (tuned in the tracker)
-    detections = tracker.filter_overlaps(detections)
+    detections = tracker.filterOverlaps(detections)
     tracked_objects = tracker.update(detections, frame)
     current_track_ids = set()
 
     for obj in tracked_objects:
-        track_id = obj["track_id"]
+        track_id = obj["trackId"]
         current_track_ids.add(track_id)
 
         if track_id not in active_tracks:
