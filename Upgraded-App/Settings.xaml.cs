@@ -54,6 +54,7 @@ namespace FishLens_App
             try
             {
                 LoadSettings();
+                LoadRoles();
             }
             catch (Exception ex)
             {
@@ -70,15 +71,16 @@ namespace FishLens_App
         // Notes: Temporary message boxes for debug
         public void CreateUserClick(object sender, RoutedEventArgs e)
         {
-            if (RoleComboBox.SelectedValue == null)
-            {
-                MessageBox.Show("Please select a role.");
-                return;
-            }
-
+                if (RoleComboBox.SelectedItem is not Role selectedRole)
+                {
+                    MessageBox.Show("Please select a role.");
+                    
+                }
+        else
+            { 
             string username = NewUsername.Text;
             string password = NewPassword.Password;
-            int roleId = (int)RoleComboBox.SelectedValue;
+            int roleId = selectedRole.ID;
 
             bool status = SignUp(username, password, roleId);
 
@@ -94,6 +96,7 @@ namespace FishLens_App
             {
                 MessageBox.Show("Sign up unsuccessful, retry.");
             }
+        }
         }
 
         private void ConfidenceThreshold_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
