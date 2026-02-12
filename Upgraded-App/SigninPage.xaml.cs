@@ -51,17 +51,7 @@ namespace FishLens_App
         // Notes: Current sign in proccess unsalts with a stored procedure
         public bool Signin(string username, string password)
         {
-            bool Pass = true;
-            bool SigninSuccessful = false;
-
-            String query = "Kaharra.unsalt @puser = @Username, @pPassword = @Password";
-
-            if (query.Contains(';') || query.Contains(')'))
-            {
-                Pass = false;
-            }
-
-            Console.WriteLine(query);
+            bool signinSuccessful = false;
 
             try
             {
@@ -69,41 +59,33 @@ namespace FishLens_App
                 {
                     conn.Open();
 
-                    if (conn.State == System.Data.ConnectionState.Open)
+                    using (SqlCommand cmd = new SqlCommand("kaharra.Unsalt", conn))
                     {
-                        using (SqlCommand cmd = conn.CreateCommand())
-                        {
-                            cmd.CommandText = query;
+                        cmd.CommandType = System.Data.CommandType.StoredProcedure;
 
-                            cmd.Parameters.AddWithValue("@Username", username);
-                            cmd.Parameters.AddWithValue("@Password", password);
+                        cmd.Parameters.AddWithValue("@pUser", username);
+                        cmd.Parameters.AddWithValue("@pPassword", password);
 
-                            String newQuery = cmd.ToString();
-                            Console.WriteLine(newQuery);
+                        int result = Convert.ToInt32(cmd.ExecuteScalar());
 
-                            if (Pass == true)
-                            {
-                                // unsalt will return 1 if found user or 0 
-                                int result = Convert.ToInt32(cmd.ExecuteScalar());
-
-                                if (result == 1)
-                                {
-                                    SigninSuccessful = true;
-                                }
-                            }
-                        }
+                        signinSuccessful = (result == 1);
                     }
                 }
             }
-            catch (Exception eSql)
+            catch (SqlException ex)
             {
-                Debug.WriteLine("Exception: " + eSql.Message);
+                Debug.WriteLine("SQL Exception: " + ex.Message);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Exception: " + ex.Message);
             }
 
-            return SigninSuccessful;
+            return signinSuccessful;
         }
 
-        
+
+
         // ****************************************************************
         // Function: SigninButtonClick
         // Description: Handle signin button click, validate credentials, and

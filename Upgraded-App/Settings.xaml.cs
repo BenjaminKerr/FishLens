@@ -18,6 +18,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Data.SqlClient;
+using FishLens_App;
 
 namespace FishLens_App
 {
@@ -27,10 +28,11 @@ namespace FishLens_App
     public partial class Settings : Page
     {
         #region Fields
-        private string connectionString = "server=aura.cset.oit.edu,5433; " +
-   "database=kaharra; " +
-   "UID=kaharra; " +
-   "password=kaharra";
+        private string connectionString = 
+        "server=aura.cset.oit.edu,5433; " +
+        "database=kaharra; " +
+        "UID=kaharra; " +
+        "password=kaharra";
         private readonly IProjectPathResolver _pathResolver;
         private readonly IFileSystemManager _fileSystemManager;
         private readonly ILogger<MainWindow> _logger;
@@ -68,25 +70,32 @@ namespace FishLens_App
         // Notes: Temporary message boxes for debug
         public void CreateUserClick(object sender, RoutedEventArgs e)
         {
-            bool Status;
+            if (RoleComboBox.SelectedValue == null)
+            {
+                MessageBox.Show("Please select a role.");
+                return;
+            }
 
-            String username = NewUsername.Text;
+            string username = NewUsername.Text;
+            string password = NewPassword.Password;
+            int roleId = (int)RoleComboBox.SelectedValue;
 
-            String password = NewPassword.Password;
-            Status = SignUp(username, password);
-            if (Status == true)
+            bool status = SignUp(username, password, roleId);
+
+            if (status)
             {
                 NewUsername.Text = "";
                 NewPassword.Password = "";
-                MessageBox.Show("Sign up successful, Login saved");
-              
+                RoleComboBox.SelectedIndex = -1;
 
+                MessageBox.Show("User created successfully!");
             }
             else
             {
-                MessageBox.Show("Sign up unsuccessful, retry");
+                MessageBox.Show("Sign up unsuccessful, retry.");
             }
         }
+
         private void ConfidenceThreshold_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
         {
             if (confidenceValue == null) return;
@@ -181,68 +190,72 @@ namespace FishLens_App
         // Description: Creates username and password credentials for signin with salting
         //     
         // Notes: Temporarily stores into Kaharra SQL
-        private bool SignUp(string username, string password)
+        private bool SignUp(string username, string password, int roleId)
         {
             bool success = false;
-            bool Pass = true;
-            String query = "Kaharra.AddUser @puser = @Username , @pPassword = @Password";
 
-            if (query.Contains(';') || query.Contains(')'))
-            {
-                Pass = false;
-            }
-
-            Console.WriteLine(query);
             try
             {
                 using (SqlConnection conn = new SqlConnection(connectionString))
-
                 {
-
                     conn.Open();
 
-                    if (conn.State == System.Data.ConnectionState.Open)
-
+                    using (SqlCommand cmd = new SqlCommand("kaharra.AddUser", conn))
                     {
+                        cmd.CommandType = System.Data.CommandType.StoredProcedure;
 
-                        using (SqlCommand cmd = conn.CreateCommand())
+                        cmd.Parameters.AddWithValue("@pUser", username);
+                        cmd.Parameters.AddWithValue("@pPassword", password);
+                        cmd.Parameters.AddWithValue("@pRoleId", roleId);
 
-                        {
-
-                            cmd.CommandText = query;
-
-                            cmd.Parameters.AddWithValue("@Username", username);
-                            cmd.Parameters.AddWithValue("@Password", password);
-
-                            String newQuery = cmd.ToString();
-                            Console.WriteLine(newQuery);
-                            if (Pass == true)
-                            {
-                                cmd.ExecuteNonQuery();
-                                success = true;
-                            }
-
-
-                        }
-
+                        cmd.ExecuteNonQuery();
+                        success = true;
                     }
-
                 }
-
             }
-
-            catch (Exception eSql)
-
+            catch (SqlException ex)
             {
-
-                Debug.WriteLine("Exception: " + eSql.Message);
-
+                Debug.WriteLine("SQL Exception: " + ex.Message);
             }
-
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Exception: " + ex.Message);
+            }
 
             return success;
         }
+        private void LoadRoles()
+        {
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(connectionString))
+                {
+                    conn.Open();
 
+                    using (SqlCommand cmd = new SqlCommand("SELECT Id, Name FROM Roles", conn))
+                    using (SqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        var roles = new List<Role>();
+
+                        while (reader.Read())
+                        {
+                            roles.Add(new Role(
+                             reader.GetString(1),
+                             reader.GetInt32(0)
+                            ));
+                        }
+
+
+                        RoleComboBox.ItemsSource = roles;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("LoadRoles error: " + ex.Message);
+                MessageBox.Show("Failed to load roles.");
+            }
+        }
         private void LoadSettings()
         {
             // Set defaults from current runtime state
