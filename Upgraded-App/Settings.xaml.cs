@@ -1,8 +1,10 @@
-﻿using FishLens_App.Interfaces;
+﻿using FishLens_App;
+using FishLens_App.Interfaces;
 using FishLens_App.Models;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Data.SqlClient;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -17,8 +19,6 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
-using System.Data.SqlClient;
-using FishLens_App;
 
 namespace FishLens_App
 {
@@ -38,6 +38,10 @@ namespace FishLens_App
         private readonly ILogger<MainWindow> _logger;
         private CheckBoxToggle _checkBoxes;
         private AppConfiguration _config;
+        private List<Role> Roles { get; set; } = new List<Role>();
+        private List<User> _users = new List<User>();
+
+
         #endregion
 
         #region Constructors
@@ -47,6 +51,7 @@ namespace FishLens_App
             _pathResolver = pathresolver ?? throw new ArgumentNullException(nameof(pathresolver));
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
             InitializeComponent();
+            DataContext = this;
             _checkBoxes = (Application.Current as App).CheckBoxes;
             _config = (Application.Current as App).Configuration;
 
@@ -55,6 +60,7 @@ namespace FishLens_App
             {
                 LoadSettings();
                 LoadRoles();
+                LoadUsers();
             }
             catch (Exception ex)
             {
@@ -227,6 +233,109 @@ namespace FishLens_App
 
             return success;
         }
+        private void LoadUsers()
+        {
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(connectionString))
+                {
+                    conn.Open();
+
+                    string sql = @"
+                SELECT Id, Username, RoleId
+                FROM [kaharra].[kaharra].[FishLensUsers]
+                ORDER BY Username";
+
+                    using (SqlCommand cmd = new SqlCommand(sql, conn))
+                    using (SqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        var users = new List<User>();
+
+                        while (reader.Read())
+                        {
+                            int id = reader.GetInt32(0);
+                            string username = reader.GetString(1);
+                            int roleId = reader.GetInt32(2);
+
+                            // Find the matching Role object from Roles list
+                            Role matchedRole = Roles.FirstOrDefault(r => r.ID == roleId);
+
+                            users.Add(new User(id, username, matchedRole));
+
+
+                        }
+
+                        _users = users;
+                        UsersGrid.ItemsSource = _users;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("LoadUsers error: " + ex.Message);
+                MessageBox.Show("Failed to load users.");
+            }
+        }
+
+        private bool UpdateUser(int userId, string newUsername, int newRoleId)
+        {
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(connectionString))
+                {
+                    conn.Open();
+
+                    string sql = @"
+                UPDATE [kaharra].[kaharra].[FishLensUsers]
+                SET Username = @u, RoleId = @r
+                WHERE Id = @id";
+
+                    using (SqlCommand cmd = new SqlCommand(sql, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@u", newUsername);
+                        cmd.Parameters.AddWithValue("@r", newRoleId);
+                        cmd.Parameters.AddWithValue("@id", userId);
+
+                        cmd.ExecuteNonQuery();
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("UpdateUser error: " + ex.Message);
+                return false;
+            }
+        }
+
+        private void SaveUserChanges_Click(object sender, RoutedEventArgs e)
+        {
+            if (_users == null || _users.Count == 0)
+            {
+                MessageBox.Show("No users to save.");
+                return;
+            }
+
+            int updated = 0;
+
+            foreach (var u in _users)
+            {
+                if (string.IsNullOrWhiteSpace(u.Username) || u.role == null)
+                    continue;
+
+                if (UpdateUser(u.Id, u.Username.Trim(), u.role.ID))
+                    updated++;
+            }
+
+            MessageBox.Show($"Saved changes for {updated} user(s).");
+            LoadUsers();
+        }
+
+        private void RefreshUsers_Click(object sender, RoutedEventArgs e)
+        {
+            LoadUsers();
+        }
+
         private void LoadRoles()
         {
             try
@@ -243,13 +352,15 @@ namespace FishLens_App
                         while (reader.Read())
                         {
                             roles.Add(new Role(
-                             reader.GetString(1),
-                             reader.GetInt32(0)
+                                reader.GetString(1), // Name
+                                reader.GetInt32(0)   // Id
                             ));
                         }
 
+                        Roles = roles;                 
+                        RoleComboBox.ItemsSource = roles; 
 
-                        RoleComboBox.ItemsSource = roles;
+                     //   DataContext = this;           
                     }
                 }
             }
