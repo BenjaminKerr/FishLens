@@ -184,10 +184,14 @@
                      Padding="8"
                      FontSize="{DynamicResource BaseFontSize}"
                      Margin="0,5,0,20"/>
+                        <TextBlock Text="Role"  
+                        FontSize="{DynamicResource BaseFontSize}"
+                        Foreground="{DynamicResource SecondaryText}"/>
                         <ComboBox 
                 x:Name="RoleComboBox"
                 Width="200"
-                Margin="0,10,0,0"
+                
+                Margin="-300,10,0,0"
                 DisplayMemberPath="Name"
                 SelectedValuePath="Id"></ComboBox>
                         <Button Content="Create User"
@@ -208,6 +212,7 @@
                                             <ControlTemplate TargetType="Button">
                                                 <Border Background="{TemplateBinding Background}"
                                         CornerRadius="6"
+                                                        Margin= "0, 30 ,0, 0"
                                         Padding="{TemplateBinding Padding}">
                                                     <ContentPresenter HorizontalAlignment="Center"
                                                       VerticalAlignment="Center"/>

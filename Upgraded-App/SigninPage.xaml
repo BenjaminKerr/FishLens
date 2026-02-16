@@ -15,49 +15,119 @@
         Background="#0D3640">
 
     <Grid>
-        <!--Start of Title header-->
-            <Border Width="1000" Padding="30" Background="#E8F4F8" CornerRadius="12" HorizontalAlignment="Center" VerticalAlignment="Top">
-            <StackPanel>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
-            <TextBlock Name="Title" 
-             FontSize="56" 
-             FontFamily="Georgia" 
-             FontWeight="Bold"
-             Foreground="#0D3640" HorizontalAlignment="Center">
-      FishLens
-            </TextBlock>
-        </StackPanel>
-
-        </Border>
-        <!--End of Title header-->
-
-        <!--Sign in block Begins-->
-        <Border Width="300" Padding="30" Background="#E8F4F8" CornerRadius="12" HorizontalAlignment="Center" VerticalAlignment="Center">
-            <StackPanel>
-
-            <TextBlock Text="Sign in"
-                       FontSize="26"
+        <!-- Header -->
+        <Border Grid.Row="0"
+                Background="{DynamicResource HeaderBackground}"
+                Padding="30,20">
+            <TextBlock Text="FishLens"
+                       FontSize="{DynamicResource LargeHeaderFontSize}"
                        FontWeight="SemiBold"
-                       Foreground="Black"
-                       HorizontalAlignment="Center"/>
-            <TextBlock Text="Username" FontSize="12" Foreground="Gray"></TextBlock>
-                <TextBox x:Name="UserName" Height="38" Padding="10" FontSize="14" BorderBrush="Black" BorderThickness="1"></TextBox>
-
-                <TextBlock Text="Password" FontSize="12" Foreground="Gray"></TextBlock>
-                <PasswordBox x:Name="PassWord" Height="38" Padding="10" FontSize="14" BorderBrush="Black" BorderThickness="1"></PasswordBox>
-
-                <Button Content="Sign In"
-                    Width="120"
-                    Padding="8"
-                    Click="SigninButtonClick"
-                    Background="#2D7A8F"
-                    Foreground="White"
-                    Margin="10"
-                    BorderThickness="2"
-                    BorderBrush="Black"
-                    Cursor="Hand"/>
-            </StackPanel>
+                       Foreground="{DynamicResource OnAccentForeground}"/>
         </Border>
-        <!--Sign in block Ends-->
+
+        <!-- Content -->
+        <Grid Grid.Row="1">
+
+            <!-- Add spacing using Margin instead -->
+            <Border Background="{DynamicResource CardBackground}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="25"
+                    Margin="30"
+                    Width="400"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+
+                <StackPanel>
+
+                    <TextBlock Text="Sign in"
+                               FontSize="{DynamicResource LargeHeaderFontSize}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource PrimaryText}"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,20"/>
+
+                    <TextBlock Text="Username"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"/>
+
+                    <TextBox x:Name="UserName"
+                             Height="36"
+                             Padding="8"
+                             FontSize="{DynamicResource BaseFontSize}"
+                             Margin="0,5,0,15"/>
+
+                    <TextBlock Text="Password"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"/>
+
+                    <PasswordBox x:Name="PassWord"
+                                 Height="36"
+                                 Padding="8"
+                                 FontSize="{DynamicResource BaseFontSize}"
+                                 Margin="0,5,0,20"/>
+
+                    <!-- Sign In Button -->
+                    <Button Content="Sign In"
+                            Width="140"
+                            Padding="10,6"
+                            Background="{DynamicResource HeaderBackground}"
+                            Foreground="{DynamicResource OnAccentForeground}"
+                            FontSize="{DynamicResource BaseFontSize}"
+                            FontWeight="SemiBold"
+                            BorderThickness="0"
+                            HorizontalAlignment="Center"
+                            Cursor="Hand"
+                            Click="SigninButtonClick">
+
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="6"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Opacity" Value="0.85"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+
+                    </Button>
+
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Footer -->
+        <Border Grid.Row="2"
+                Background="{DynamicResource CardBackground}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,1,0,0"
+                Padding="30,20">
+
+            <TextBlock Text="© FishLens"
+                       FontSize="{DynamicResource BaseFontSize}"
+                       Foreground="{DynamicResource SecondaryText}"
+                       HorizontalAlignment="Right"/>
+        </Border>
+
     </Grid>
 </Window>
