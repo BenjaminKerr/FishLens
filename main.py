@@ -11,9 +11,11 @@ from fileinput import filename
 import os
 import csv
 import cv2
-import sys
-import shutil
+import numpy as np
 from ultralytics import YOLO
+import shutil
+import sys
+#from YOLO.detector import YoloDetector
 from tracking.deepsort_tracker import DeepSortTracker
 from collections import Counter
 from pathlib import Path
@@ -37,7 +39,7 @@ VIDEO_FOLDER = sys.argv[1] if len(sys.argv) > 1 else os.path.join(PROJECT_ROOT, 
 # Constants--General
 CSV_KEYS = [
     "video_file",
-    "track_id",
+    "trackId",
     "image_path",
     "likely_class",
     "confidence",
@@ -50,19 +52,19 @@ CSV_KEYS = [
 ]
 
 # Constants--YOLO
-MODEL = YOLO("yolov8n.pt")
+MODEL = YOLO("models/fish_detector.pt")
 NO_FISH = "no_fish"
 
 # Constants--DeepSort
 FPS_DEFAULT = 30 
-MAX_EXPORT_PER_VIDEO = 1  
+MAX_EXPORT_PER_VIDEO = 5  
 OUTPUT_CSV = "fish_summary.csv"
 FISH_IMAGE_DIR = "fish_images"
 
 # Constants--Classifier
 CLASSIFIER_MODEL_PATH = os.path.join(PROJECT_ROOT, "fish_classifier_model.h5")
 CLASSIFIER_TARGET_FOLDER = "images"
-CLASS_NAMES = ["Salmon", "Trout"] 
+CLASS_NAMES = ["Chinook", "Omykiss"] 
 IMAGE_SIZE = (150, 150)
 IMAGE_EXTS = {'.jpg', '.jpeg', '.png'}
 
@@ -234,12 +236,12 @@ def analyze_yolo_detections(frame, model, frameData, vidData):
             if (x2 - x1)*(y2 - y1) < 100:
                 continue
 
-            # Mark if YOLO detected a bird (fish) in frame. TODO: Change to fish when class developed. 
+            # Mark if YOLO detected a fish in frame.
             try:
                 cls_name = model.names[cls_id].lower()
             except Exception:
                 cls_name = str(cls_id)
-            if "bird" in cls_name:
+            if "fish" in cls_name:
                 frameData.f_found_fish = True
             frameData.f_detections.append([x1, y1, x2, y2, conf, cls_id])
     
@@ -279,15 +281,15 @@ def process_yolo_results(frameData, vidData, model):
 # Notes: N/A
 def deepsort_analysis(tracker, frame, frameData, vidData):
     # Use the tracker's default iou threshold (tuned in the tracker)
-    frameData.f_detections = tracker.filter_overlaps(frameData.f_detections)
+    frameData.f_detections = tracker.filterOverlaps(frameData.f_detections)
     tracked_objects = tracker.update(frameData.f_detections, frame)
 
     for obj in tracked_objects:
-        track_id = obj["track_id"]
-        vidData.v_current_track_ids.add(track_id)
+        trackId = obj["trackId"]
+        vidData.v_current_track_ids.add(trackId)
 
-        if track_id not in vidData.v_active_tracks:
-            vidData.v_active_tracks[track_id] = {
+        if trackId not in vidData.v_active_tracks:
+            vidData.v_active_tracks[trackId] = {
                 "start_frame": frameData.f_index,
                 "confidences": [],
                 "directions": [],
@@ -295,8 +297,8 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                 "best_crop": None
             }
 
-        vidData.v_active_tracks[track_id]["confidences"].append(obj["confidence"])
-        vidData.v_active_tracks[track_id]["directions"].append(obj["direction"])
+        vidData.v_active_tracks[trackId]["confidences"].append(obj["confidence"])
+        vidData.v_active_tracks[trackId]["directions"].append(obj["direction"])
 
         x1, y1, x2, y2 = obj["bbox"]
         # Add 30% margin around the bounding box for zoomed-out view
@@ -313,9 +315,9 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         conf = obj["confidence"]
 
         if crop is not None and crop.size > 0:
-            if conf > vidData.v_active_tracks[track_id]["best_conf"]:
-                vidData.v_active_tracks[track_id]["best_conf"] = conf
-                vidData.v_active_tracks[track_id]["best_crop"] = crop.copy()
+            if conf > vidData.v_active_tracks[trackId]["best_conf"]:
+                vidData.v_active_tracks[trackId]["best_conf"] = conf
+                vidData.v_active_tracks[trackId]["best_crop"] = crop.copy()
     
 
 # ****************************************************************
@@ -348,7 +350,7 @@ def finalize_tracks(frameData, vidData, termination_reason):
 # Function: build_track_summary
 # Description: Helper function for finalizing track data.
 # Notes: N/A
-def build_track_summary(track_id, track_data, frameData, vidData, image_path=None):
+def build_track_summary(trackId, track_data, frameData, vidData, image_path=None):
     duration_sec = (frameData.f_index - track_data["start_frame"]) / vidData.v_fps
     if duration_sec < 1.0:
         return None
@@ -356,7 +358,7 @@ def build_track_summary(track_id, track_data, frameData, vidData, image_path=Non
     avg_conf_DS = sum(confidences) / len(confidences) if confidences else 0.0
     species_data = classify_image(image_path) if image_path else ("No image", 0.0)
     return {
-        "track_id": track_id,
+        "trackId": trackId,
         "likely_class": vidData.v_most_common_class,
         "confidence": f"{vidData.v_avg_confidence_YL:.2f}%",
         "avg_confidence": f"{avg_conf_DS:.2f}%",
@@ -397,7 +399,7 @@ def save_best_image(finished_tracks, filename):
                 enhanced_crop = enhance_image(best_crop)
                 
                 # Classify the image first to determine species folder
-                temp_image_name = f"{os.path.splitext(filename)[0]}_track_{track['track_id']}.jpg"
+                temp_image_name = f"{os.path.splitext(filename)[0]}_track_{track['trackId']}.jpg"
                 temp_image_path = os.path.join(FISH_IMAGE_DIR, temp_image_name)
                 cv2.imwrite(temp_image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
                 
@@ -423,8 +425,8 @@ def save_best_image(finished_tracks, filename):
             else:
                 track["image_path"] = None
             
-        # Remove best_crop from track dict (no need to export it)
-        track.pop("best_crop", None)
+            # Remove best_crop from track dict (no need to export it)
+            track.pop("best_crop", None)
 
 
 # ****************************************************************
@@ -434,7 +436,7 @@ def save_best_image(finished_tracks, filename):
 def classify_image(image_path):
     # --- MODEL LOADING ---
     try:
-        print(f"Loading model from: {CLASSIFIER_MODEL_PATH}")
+        #print(f"Loading model from: {CLASSIFIER_MODEL_PATH}")
         model = load_model(CLASSIFIER_MODEL_PATH)
         print("Model loaded successfully.")
     except Exception as e:

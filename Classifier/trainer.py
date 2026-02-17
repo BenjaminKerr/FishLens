@@ -1,95 +1,78 @@
-# ****************************************************************
-# File: Trainer.py
-# Purpose: Train a CNN model for fish classification
-#   Currently using an extremely small dataset of fish images
-#   stored in Classifier/data/train with subfolders for each class.
-#   Needs to be rerun everytime there are changes to the dataset.
-#   Creates the fish_classifier_model.h5 file used by the classification.py script.
-# Notes:
-#   At time of writing, needs python version 3.12 as tensorflow does not support python 3.13+
-
-from tensorflow.keras.preprocessing.image import ImageDataGenerator # type : ignore
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from keras.models import Sequential
-from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, BatchNormalization
+from keras.optimizers import Adam
 import os
 
-# This is the folder where the script lives
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 PARENT_DIR = os.path.dirname(BASE_DIR)
-
 EXPORT_PATH = os.path.join(PARENT_DIR, 'fish_classifier_model.h5')
 
-# Model will be saved at the project root
+train_dir = os.path.join(BASE_DIR, 'data', 'train')
 
-train_dir = os.path.join(BASE_DIR, 'data', 'train')  
+IMAGE_SIZE = 150
+BATCH_SIZE = 32
+EPOCHS = 30
 
-train_datagen = ImageDataGenerator(
+datagen = ImageDataGenerator(
     rescale=1./255,
-    shear_range=0.2,
-    zoom_range=0.2,
+    rotation_range=15,
+    zoom_range=0.15,
+    width_shift_range=0.1,
+    height_shift_range=0.1,
     horizontal_flip=True,
-    validation_split=0.2  
+    validation_split=0.2
 )
 
-train_generator = train_datagen.flow_from_directory(
+train_generator = datagen.flow_from_directory(
     train_dir,
-    target_size=(150, 150),
-    batch_size=32,
+    target_size=(IMAGE_SIZE, IMAGE_SIZE),
+    batch_size=BATCH_SIZE,
+    class_mode='categorical',
+    subset='training'
+)
+
+validation_generator = datagen.flow_from_directory(
+    train_dir,
+    target_size=(IMAGE_SIZE, IMAGE_SIZE),
+    batch_size=BATCH_SIZE,
     class_mode='categorical',
     subset='validation'
 )
 
-# 3. Load Validation Data
-validation_generator = train_datagen.flow_from_directory(
-    train_dir,
-    target_size=(150, 150),
-    batch_size=32,
-    class_mode='categorical',
-    subset='validation'             # Specify this is the validation subset
-)
-
-# You can now access the class names in the generator
-print(train_generator.class_indices)
-
-# Get the number of output classes from the generator
 num_classes = train_generator.num_classes
-IMAGE_SIZE = 150
+print("Class indices:", train_generator.class_indices)
 
 model = Sequential([
-    # Input Layer (150x150, 3 channels)
-    Conv2D(32, (3, 3), activation='relu', input_shape=(IMAGE_SIZE, IMAGE_SIZE, 3)),
-    MaxPooling2D(2, 2),
-    
-    # Hidden Layers
-    Conv2D(64, (3, 3), activation='relu'),
-    MaxPooling2D(2, 2),
-    
-    # Classification Head
+    Conv2D(32, (3,3), activation='relu', input_shape=(IMAGE_SIZE, IMAGE_SIZE, 3)),
+    BatchNormalization(),
+    MaxPooling2D(2,2),
+
+    Conv2D(64, (3,3), activation='relu'),
+    BatchNormalization(),
+    MaxPooling2D(2,2),
+
+    Conv2D(128, (3,3), activation='relu'),
+    BatchNormalization(),
+    MaxPooling2D(2,2),
+
     Flatten(),
-    Dense(128, activation='relu'),
-    # Output layer uses 'softmax' for multi-class prediction
-    Dense(num_classes, activation='softmax') 
+    Dense(256, activation='relu'),
+    Dropout(0.5),
+    Dense(num_classes, activation='softmax')
 ])
 
-# Compile: Define the optimizer and loss function
 model.compile(
-    optimizer='adam',
-    loss='categorical_crossentropy', # Appropriate for multi-class labels
+    optimizer=Adam(learning_rate=1e-4),
+    loss='categorical_crossentropy',
     metrics=['accuracy']
 )
 
-# Train: Fit the model to the data generators
-# steps_per_epoch ensures you cycle through all training images once per epoch
 history = model.fit(
     train_generator,
-    steps_per_epoch=train_generator.samples // train_generator.batch_size,
-    epochs=50, # You can adjust this number, can backfire changing it though
-    validation_data=validation_generator,
-    validation_steps=validation_generator.samples // validation_generator.batch_size
+    epochs=EPOCHS,
+    validation_data=validation_generator
 )
 
-# Defines the saved model file for use
 model.save(EXPORT_PATH)
-# Only runs as a confirmation that the model was saved
 print("Model saved successfully as fish_classifier_model.h5")

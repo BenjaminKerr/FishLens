@@ -1,168 +1,215 @@
+# ******************************
+# File: DeepSortTracker.py
+# Description: DeepSort-based tracking system for analyzing video frames.
+#              Processes detections from YOLO model, filters them, and maintains 
+#              track histories to determine movement direction and confidence.
+# Author: Aleksen Thayer
+# Contributers: None
+# Notes: Last edited 2/11/2026
+# ******************************
+
+from typing import List, Dict, Tuple, Optional, Any
 import numpy as np
 from deep_sort_realtime.deepsort_tracker import DeepSort
 import torch
 from torchvision.ops import nms
 
 class DeepSortTracker:
-    MIN_BOX_AREA = 100      # minimum area of bounding box to consider
-    MIN_CONFIDENCE = 0.5    # minimum confidence for detections
-    MIN_MOVE_THRESHOLD = 5  # minimum pixels to consider as movement
-    MAX_TRACK_HISTORY = 50  # maximum history length for each track
-    # ****************************************************************
+    MIN_BOX_AREA = 100
+    MIN_CONFIDENCE = 0.5
+    MIN_MOVE_THRESHOLD = 5
+    MAX_TRACK_HISTORY = 50
+    MIN_FRAMES_FOR_SUMMARY = 10
+    DEFAULT_NMS_IOU_THRESHOLD = 0.7
+    MIN_POSITIONS_FOR_DIRECTION = 2
+    
+    # ******************************
     # Function: __init__
     # Description: Initialize the DeepSort tracker with configuration parameters
-    #     and tracking state containers.
-    # Notes: N/A
-    def __init__(self):
+    #              and tracking state containers.
+
+    def __init__(self) -> None:
         self.tracker = DeepSort(
-            max_age=50,          # tracks persist 50 frames after last detection before dying
-            n_init=10,            # require only 3 detections to confirm track (reduce fragmentation)
-            max_iou_distance=0.6,  # stricter spatial matching - prevents distant objects from merging
-            max_cosine_distance=0.4  # looser appearance matching - allows same object to have appearance variations
+            max_age=50,
+            n_init=10,
+            max_iou_distance=0.6,
+            max_cosine_distance=0.4
         )
 
-        # track_id → list of centroid tuples
-        self.track_positions = {}
-        # track_id → last known direction
-        self.previous_directions = {}
-        # track_id → list of detection dictionaries
-        self.detection_history = {}
+        # trackId: list of (x, y) centroids for direction analysis
+        # Example: {1: [(100, 200), (105, 205)], 2: [(300, 400)]}
+        self.trackPositions: Dict[int, List[Tuple[int, int]]] = {}
+        
+        # trackId: last known direction
+        # Example: {1: "downstream", 2: "upstream"}
+        self.previousDirections: Dict[int, str] = {}
+        
+        # trackId: list of detection metadata for history and summarization
+        # Example: {1: [{"confidence": 0.9, "classId": 0}]}
+        self.detectionHistory: Dict[int, List[Dict[str, Any]]] = {}
 
-    # ****************************************************************
-    # Function: filter_overlaps
+    # ******************************
+    # Function: filterOverlaps
     # Description: Remove overlapping boxes using NMS, keeping the highest
-    #     confidence detection for each region.
-    # Notes: N/A
-    def filter_overlaps(self, detections, iou_thresh=0.7):
-        """
-    Remove overlapping boxes, keeping the highest confidence.
-    detections = [[x1, y1, x2, y2, conf, cls_id], ...]
-        """
-        if not detections:
-            return []
+    #              confidence detection for each region.
 
+    def filterOverlaps(
+        self, 
+        detections: List[Tuple], 
+        iouThresh=DEFAULT_NMS_IOU_THRESHOLD
+    ) -> List[Tuple]:
+        
         # Ensure all detections are valid lists/tuples with at least 5 elements
-        detections = [d for d in detections if isinstance(d, (list, tuple)) and len(d) >= 5]
+        detections = [
+            d for d in (detections or []) 
+            if isinstance(d, (list, tuple)) and len(d) >= 5
+        ]
 
         if not detections:
             return []
 
-        #bounding boxes
-        boxes = torch.tensor([d[:4] for d in detections], dtype=torch.float32) 
-        #confidence scores
+        # Extract bounding boxes and convert to tensor format for NMS
+        boxes = torch.tensor([d[:4] for d in detections], dtype=torch.float32)
+        
+        # Extract confidence scores (fifth element) and convert to tensor
         scores = torch.tensor([d[4] for d in detections], dtype=torch.float32)
 
-        #keep boxes that don't have too much overlap
-        keep_idxs = nms(boxes, scores, iou_thresh)
-        return [detections[i] for i in keep_idxs]
+        # Keep boxes that don't have too much overlap
+        keepIdxs = nms(boxes, scores, iouThresh)
+        return [detections[i] for i in keepIdxs]
 
-    # ****************************************************************
-    # Function: _get_direction
+    # ******************************
+    # Function: getDirection
     # Description: Compute horizontal movement direction of a tracked object
-    #     by comparing first and last known positions.
-    # Notes: N/A
-    def _get_direction(self, track_id, centroid):
-        """
-        Compute horizontal direction using first and last position
-        Returns 'upstream' (left) or 'downstream' (right)
-        """
-        #store centroid history
-        positions = self.track_positions.get(track_id, [])
-        positions.append(centroid)
-        self.track_positions[track_id] = positions
+    #              by comparing first and last known positions.
 
-        if len(positions) < 2:
+    def getDirection(self, trackId: int, centroid: Tuple[int, int]) -> str:
+        # Store centroid history list for this track
+        positions = self.trackPositions.get(trackId, [])
+        positions.append(centroid)
+        self.trackPositions[trackId] = positions
+
+        # Need at least 2 positions to determine direction
+        if len(positions) < self.MIN_POSITIONS_FOR_DIRECTION:
             return "unknown"
 
-        #measure horizontal displacement
-        dx = positions[-1][0] - positions[0][0]  # horizontal movement
-        if abs(dx) < 5:  # minimal movement threshold
+        # Measure horizontal displacement from first position to current
+        dx = positions[-1][0] - positions[0][0]
+        
+        # If object moved less than threshold, considered stationary
+        if abs(dx) < self.MIN_MOVE_THRESHOLD:
             return "stationary"
 
         direction = "upstream" if dx < 0 else "downstream"
-        self.previous_directions[track_id] = direction
+        self.previousDirections[trackId] = direction
         return direction
 
-    # ****************************************************************
+    # ******************************
     # Function: update
     # Description: Update DeepSort tracker with new detections from a frame
-    #     and return confirmed tracked objects with metadata.
-    # Notes: N/A
-    def update(self, detections, frame):
-        """
-        Update DeepSort with new detections.
-        detections = [x1, y1, x2, y2, conf, cls]
-        """
-        # Filter tiny boxes and low-confidence detections
-        detections = [d for d in detections if (d[2]-d[0])*(d[3]-d[1]) > self.MIN_BOX_AREA and d[4] > self.MIN_CONFIDENCE]
+    #              and return confirmed tracked objects with metadata.
 
-        #DeepSORT expects format (bbox, conf, cls)
+    def update(
+        self, 
+        detections: List[Tuple], 
+        frame: np.ndarray
+    ) -> List[Dict[str, Any]]:
+        
+        # Filter tiny boxes and low-confidence detections
+        detections = [
+            d for d in detections 
+            if (d[2] - d[0]) * (d[3] - d[1]) > self.MIN_BOX_AREA 
+            and d[4] > self.MIN_CONFIDENCE
+        ]
+
+        # Convert to DeepSORT format (bbox, conf, cls)
         formatted = [
             ([x1, y1, x2, y2], conf, cls)
             for x1, y1, x2, y2, conf, cls in detections
         ]
 
+        # Let DeepSort process the detections
         tracks = self.tracker.update_tracks(formatted, frame=frame)
         results = []
 
         for t in tracks:
             if t.is_confirmed():
-                track_id = t.track_id
+                trackId = t.track_id
                 x1, y1, x2, y2 = map(int, t.to_ltrb())
                 centroid = ((x1 + x2) // 2, (y1 + y2) // 2)
 
-                direction = self._get_direction(track_id, centroid)
+                direction = self.getDirection(trackId, centroid)
 
-                # Log detections
-                if track_id not in self.detection_history:
-                    self.detection_history[track_id] = []
+                # Initialize history for new tracks
+                if trackId not in self.detectionHistory:
+                    self.detectionHistory[trackId] = []
 
-                det_conf = t.get_det_conf()
-                det_conf = float(det_conf) if det_conf is not None else 0.0
+                # Get detection confidence, handle None case
+                detConf = t.get_det_conf()
+                detConf = float(detConf) if detConf is not None else 0.0
 
-                self.detection_history[track_id].append({
-                    "confidence": det_conf,
-                    "class_id": t.det_class,
-                    "centroid": centroid
-                })
-
-                results.append({
-                    "track_id": track_id,
-                    "bbox": (x1, y1, x2, y2),
-                    "centroid": centroid,
-                    "direction": direction,
-                    "confidence": det_conf,
-                    "class_id": t.det_class
-                })
+                # Append detection info to history
+                self.detectionHistory[trackId].append(
+                    {
+                        "confidence": detConf,
+                        "classId": t.det_class,
+                        "centroid": centroid
+                    }
+                )
+                
+                # Package all track info into a dict
+                results.append(
+                    {
+                        "trackId": trackId,
+                        "bbox": (x1, y1, x2, y2),
+                        "centroid": centroid,
+                        "direction": direction,
+                        "confidence": detConf,
+                        "classId": t.det_class
+                    }
+                )
 
         return results
 
-    # ****************************************************************
-    # Function: get_track_summaries
+    # ******************************
+    # Function: getTrackSummaries
     # Description: Generate summaries of confirmed tracks that meet minimum
-    #     frame duration threshold for export.
-    # Notes: N/A
-    def get_track_summaries(self, min_frames=10):
-        """
-        Summarize confirmed tracks with minimal frames.
-        Only tracks lasting >= min_frames will be exported.
-        """
+    #              frame duration threshold for export.
+
+    def getTrackSummaries(self, minFrames=10) -> List[Dict[str, Any]]:
         summaries = []
 
-        for track_id, centroids in self.track_positions.items():
-            # skip short tracks without continue
-            if len(centroids) >= min_frames:
-                detection_list = self.detection_history.get(track_id, [])
-                confidences = [d["confidence"] for d in detection_list if d["confidence"] is not None]
-                avg_conf = float(np.mean(confidences)) if confidences else 0.0
-                class_id = detection_list[0]["class_id"] if detection_list else None
-                direction = self.previous_directions.get(track_id, "unknown")
+        # Loop through all tracks we've seen
+        for trackId, centroids in self.trackPositions.items():
+            
+            # Skip short tracks to filter out false positives
+            if len(centroids) >= minFrames:
+                detectionList = self.detectionHistory.get(trackId, [])
+                
+                # Extract all confidence scores, ignoring None values
+                confidences = [
+                    d["confidence"] for d in detectionList 
+                    if d["confidence"] is not None
+                ]
+                
+                # Calculate average confidence across all detections
+                avgConf = float(np.mean(confidences)) if confidences else 0.0
+                
+                # Get class ID from first detection
+                classId = detectionList[0]["classId"] if detectionList else None
+                
+                # Get final determined direction for this track
+                direction = self.previousDirections.get(trackId, "unknown")
 
-                summaries.append({
-                    "track_id": track_id,
-                    "direction": direction,
-                    "avg_confidence": avg_conf,
-                    "detections_count": len(detection_list),
-                    "class_id": class_id
-                })
+                # Create summary record for this track
+                summaries.append(
+                    {
+                        "trackId": trackId,
+                        "direction": direction,
+                        "avgConfidence": avgConf,
+                        "detectionCount": len(detectionList),
+                        "classId": classId
+                    }
+                )
+                
         return summaries
