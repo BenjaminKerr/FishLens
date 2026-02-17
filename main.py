@@ -354,17 +354,40 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     duration_sec = (frameData.f_index - track_data["start_frame"]) / vidData.v_fps
     if duration_sec < 1.0:
         return None
+    
+    # Calculate DeepSort average confidence
     confidences = [c for c in track_data["confidences"] if c is not None]
     avg_conf_DS = sum(confidences) / len(confidences) if confidences else 0.0
+    
+    # 🟢 GET BEST CONFIDENCE FROM TRACK (this was missing!)
+    best_conf = track_data.get("best_conf", 0.0)
+    best_conf_pct = best_conf * 100 if best_conf <= 1.0 else best_conf
+    
+    # Calculate overall direction (more accurate than just last frame)
+    directions = track_data["directions"]
+    overall_direction = "unknown"
+    if directions:
+        upstream_count = directions.count("upstream")
+        downstream_count = directions.count("downstream")
+        if upstream_count > downstream_count:
+            overall_direction = "upstream"
+        elif downstream_count > upstream_count:
+            overall_direction = "downstream"
+        else:
+            overall_direction = directions[-1]
+    
     species_data = classify_image(image_path) if image_path else ("No image", 0.0)
+    
     return {
         "trackId": trackId,
         "likely_class": vidData.v_most_common_class,
-        "confidence": f"{vidData.v_avg_confidence_YL:.2f}%",
-        "avg_confidence": f"{avg_conf_DS:.2f}%",
+        # 🟢 USE BEST CONFIDENCE IF AVAILABLE
+        "confidence": f"{best_conf_pct:.2f}%" if best_conf_pct > 0 else f"{vidData.v_avg_confidence_YL:.2f}%",
+        # 🟢 PREFER BEST OVER AVERAGE
+        "avg_confidence": f"{best_conf_pct:.2f}%" if best_conf_pct > 0 else f"{avg_conf_DS:.2f}%",
         "start_time_sec": track_data["start_frame"] / vidData.v_fps,
         "end_time_sec": frameData.f_index / vidData.v_fps,
-        "direction": track_data["directions"][-1] if track_data["directions"] else "unknown",
+        "direction": overall_direction,  # 🟢 More accurate direction
         "best_crop": track_data.get("best_crop"),
         "species": species_data[0] if species_data else "No data",
         "species_confidence": f"{species_data[1]:.2f}%" if species_data else "No data"
