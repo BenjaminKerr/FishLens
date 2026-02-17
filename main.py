@@ -63,6 +63,7 @@ FISH_IMAGE_DIR = "fish_images"
 
 # Constants--Classifier
 CLASSIFIER_MODEL_PATH = os.path.join(PROJECT_ROOT, "fish_classifier_model.h5")
+CLASSIFIER_MODEL = load_model(CLASSIFIER_MODEL_PATH)
 CLASSIFIER_TARGET_FOLDER = "images"
 CLASS_NAMES = ["Chinook", "Omykiss"] 
 IMAGE_SIZE = (150, 150)
@@ -93,6 +94,8 @@ class VideoData:
         self.v_active_tracks = {}
         self.v_finished_tracks = []
         self.v_current_track_ids = set()
+        self.v_confidence_sum = 0.0
+        self.v_confidence_count = 0 
 
 
 # ****************************************************************
@@ -257,23 +260,20 @@ def analyze_yolo_detections(frame, model, frameData, vidData):
 # Description: Process YOLO results to determine most common class and average confidence.
 # Notes: N/A
 def process_yolo_results(frameData, vidData, model):
-    
-    # Begin YOLO extrapolation for video-level stats
     if frameData.f_detections:
-
-        # Most common detected class determined by-frame
         ids = [d[5] for d in frameData.f_detections]
         id_counter = Counter(ids)
         most_common_id = id_counter.most_common(1)[0][0]
         vidData.v_most_common_class = model.names[most_common_id]
 
-        # Average confidence determined by freqneuency of most common object.
-        vidData.v_avg_confidence_YL = [d[4] for d in frameData.f_detections if d[5] == most_common_id]
-        if len(vidData.v_avg_confidence_YL) > 0:
-            vidData.v_avg_confidence_YL = (sum(vidData.v_avg_confidence_YL) / len(vidData.v_avg_confidence_YL)) * 100
-        else:
-            vidData.v_avg_confidence_YL = 0.0
-            
+        
+        confidences = [d[4] for d in frameData.f_detections if d[5] == most_common_id]
+        vidData.v_confidence_sum += sum(confidences)
+        vidData.v_confidence_count += len(confidences)
+        
+        # Calculate running average
+        if vidData.v_confidence_count > 0:
+            vidData.v_avg_confidence_YL = (vidData.v_confidence_sum / vidData.v_confidence_count) * 100
             
 # ***************************************************************
 # Function: deepsort_analysis
@@ -359,7 +359,7 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     confidences = [c for c in track_data["confidences"] if c is not None]
     avg_conf_DS = sum(confidences) / len(confidences) if confidences else 0.0
     
-    # 🟢 GET BEST CONFIDENCE FROM TRACK (this was missing!)
+    # GET BEST CONFIDENCE FROM TRACK (this was missing!)
     best_conf = track_data.get("best_conf", 0.0)
     best_conf_pct = best_conf * 100 if best_conf <= 1.0 else best_conf
     
@@ -457,48 +457,37 @@ def save_best_image(finished_tracks, filename):
 # Description: Loads, preprocesses, and classifies a single image file.
 # Notes: Accepts image_path parameter for the image to classify.
 def classify_image(image_path):
-    # --- MODEL LOADING ---
+   
+    # Use the global model (already loaded at startup)
+    model = CLASSIFIER_MODEL
+    
+    if model is None:
+        print("Model was not loaded at startup. Skipping classification.")
+        return ("No data", 0.0)
+    
     try:
-        #print(f"Loading model from: {CLASSIFIER_MODEL_PATH}")
-        model = load_model(CLASSIFIER_MODEL_PATH)
-        print("Model loaded successfully.")
+        # Load and preprocess image
+        img = load_img(image_path, target_size=IMAGE_SIZE)
+        img_array = img_to_array(img)
+        img_array = img_array / 255.0 
+        img_array = np.expand_dims(img_array, axis=0)
+
+        # ✅ Predict using pre-loaded model (no retracing after first call)
+        predictions = model.predict(img_array, verbose=0)
+        
+        # Get results
+        pred_index = np.argmax(predictions)
+        pred_label = CLASS_NAMES[pred_index]
+        confidence = predictions[0][pred_index] * 100
+        
+        return pred_label, confidence
+        
+    except FileNotFoundError:
+        print(f"File not found at {image_path}. Skipping.")
+        return ("No data", 0.0)
     except Exception as e:
-        print(f"FATAL ERROR: Could not load the model file '{CLASSIFIER_MODEL_PATH}'.")
-        print(f"Details: {e}")
-
-    if model:
-        try:
-            # 1. Load the image and resize it
-            img = load_img(image_path, target_size=IMAGE_SIZE)
-            
-            # 2. Convert to NumPy array and rescale
-            img_array = img_to_array(img)
-            img_array = img_array / 255.0 
-            img_array = np.expand_dims(img_array, axis=0) # Add batch dimension
-
-            # 3. Predict
-            predictions = model.predict(img_array, verbose=0)
-            
-            # Get the highest prediction score and index
-            pred_index = np.argmax(predictions)
-            pred_label = CLASS_NAMES[pred_index]
-            confidence = predictions[0][pred_index] * 100
-            
-            # 4. Return Results
-            return pred_label, confidence
-            
-            # NOTE: We probably want to uncomment this but I haven't yet because then it would remove the good looking test image
-            # 5. Clean up the file (Optional: uncomment if you want the file deleted after reading)
-            # os.remove(CLASSIFIER_TARGET_FOLDER)
-            # print(f"   -> File '{CROPPED_IMAGE_FILENAME}' deleted.")
-            
-        except FileNotFoundError:
-            # This can happen if YOLO deletes the file just as the classifier tries to read it
-            print(f"File not found at {image_path}. Skipping.")
-        except Exception as e:
-            print(f"ERROR during classification of {image_path}: {e}")
-    else:
-        print("Model was not found. Skipping classification.")
+        print(f"ERROR during classification of {image_path}: {e}")
+        return ("No data", 0.0)
 
 # ****************************************************************
 # Function: get_image_name
