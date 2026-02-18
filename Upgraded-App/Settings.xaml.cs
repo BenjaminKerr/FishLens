@@ -38,7 +38,7 @@ namespace FishLens_App
         private readonly ILogger<MainWindow> _logger;
         private CheckBoxToggle _checkBoxes;
         private AppConfiguration _config;
-        private List<Role> Roles { get; set; } = new List<Role>();
+        public List<Role> Roles { get; set; } = new List<Role>();
         private List<User> _users = new List<User>();
 
 
@@ -360,7 +360,7 @@ namespace FishLens_App
                         Roles = roles;                 
                         RoleComboBox.ItemsSource = roles; 
 
-                     //   DataContext = this;           
+                        DataContext = this;           
                     }
                 }
             }

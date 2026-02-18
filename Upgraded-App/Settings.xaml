@@ -281,10 +281,7 @@
 
                                     <DataGridTemplateColumn.CellEditingTemplate>
                                         <DataTemplate>
-                                            <ComboBox x:Name="UserRoleComboBox"
-                      DisplayMemberPath="Name"
-                      SelectedItem="{Binding role, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                      Width="200"/>
+                                            <ComboBox ItemsSource="{Binding DataContext.Roles, RelativeSource={RelativeSource AncestorType=Page}}" DisplayMemberPath="Name" SelectedItem="{Binding role, UpdateSourceTrigger=PropertyChanged}" />
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellEditingTemplate>
                                 </DataGridTemplateColumn>
