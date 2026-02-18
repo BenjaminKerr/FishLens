@@ -121,7 +121,7 @@ namespace FishLens_App
             bool Status;
 
             String username = UserName.Text;
-            
+
             String password = PassWord.Password;
             Status = Signin(username, password);
             if (Status == true)
@@ -136,7 +136,13 @@ namespace FishLens_App
             }
         }
 
-       
+        private void SignUp_Click(object sender, MouseButtonEventArgs e)
+        {
 
+           SignUpPage sign_up_page = new SignUpPage();
+            sign_up_page.Show();
+            this.Close();
+
+        }
     }
 }

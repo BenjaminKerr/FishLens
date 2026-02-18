@@ -81,33 +81,52 @@ namespace FishLens_App
         // Notes: Temporary message boxes for debug
         public void CreateUserClick(object sender, RoutedEventArgs e)
         {
-                if (RoleComboBox.SelectedItem is not Role selectedRole)
-                {
-                    MessageBox.Show("Please select a role.");
-                    
-                }
-        else
-            { 
-            string username = NewUsername.Text;
-            string password = NewPassword.Password;
-            int roleId = selectedRole.ID;
-
-            bool status = SignUp(username, password, roleId);
-
-            if (status)
+            if (RoleComboBox.SelectedItem is not Role selectedRole)
             {
-                NewUsername.Text = "";
-                NewPassword.Password = "";
-                RoleComboBox.SelectedIndex = -1;
-
-                MessageBox.Show("User created successfully!");
+                MessageBox.Show("Please select a role.");
             }
             else
             {
-                MessageBox.Show("Sign up unsuccessful, retry.");
+                string username = NewUsername.Text.Trim();
+                string password = NewPassword.Password;
+                string error = null;
+
+                if (string.IsNullOrWhiteSpace(username))
+                    error = "Please enter a username.";
+                else if (username.Length < 6)
+                    error = "Username must be at least 6 characters.";
+                else if (string.IsNullOrWhiteSpace(password))
+                    error = "Please enter a password.";
+                else if (password.Length < 6)
+                    error = "Password must be at least 6 characters.";
+
+                if (error != null)
+                {
+                    MessageBox.Show(error);
+                }
+                else
+                {
+                    int roleId = selectedRole.ID;
+                    bool status = SignUp(username, password, roleId);
+
+                    if (status)
+                    {
+                        NewUsername.Text = "";
+                        NewPassword.Password = "";
+                        RoleComboBox.SelectedIndex = -1;
+                        MessageBox.Show("User created successfully!");
+                        LoadUsers();
+                    }
+                    else
+                    {
+                        MessageBox.Show("Sign up unsuccessful, retry.");
+                    }
+                }
             }
         }
-        }
+
+
+
 
         private void ConfidenceThreshold_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
         {
