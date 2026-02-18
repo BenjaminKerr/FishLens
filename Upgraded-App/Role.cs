@@ -14,15 +14,6 @@ using System.Threading.Tasks;
 namespace FishLens_App
 {
    
-    public enum Permission
-    {
-        Settings,
-        History,
-        UserSettings,
-        CreateRole,
-        CreateUser,
-        Reports
-    }
 
     public class Role
     {
