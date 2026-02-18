@@ -220,6 +220,16 @@ namespace FishLens_App
         }
 
         // **************************************************
+        // Function: SignOutButtonClick
+        // Description: Navigates back to the signin page
+        // **************************************************
+        private void SignOutButtonClick(object sender, RoutedEventArgs e)
+        {
+            SigninPage signin = new SigninPage();
+            signin.Show();
+            this.Close();
+        }
+        // **************************************************
         // Function: HistoryButtonClick
         // Description: Navigates to the history page
         // **************************************************

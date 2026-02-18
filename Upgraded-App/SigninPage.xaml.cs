@@ -9,6 +9,9 @@ using DocumentFormat.OpenXml.Drawing.Charts;
 using Microsoft.Identity.Client;
 using System;
 using System.Collections.Generic;
+using System.Data;
+using System.Data.SqlClient;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -22,11 +25,16 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 
+
 namespace FishLens_App
 {
     public partial class SigninPage : Window
     {
-    
+        private string connectionString = "server=aura.cset.oit.edu,5433; " +
+   "database=kaharra; " +
+   "UID=kaharra; " +
+   "password=kaharra";
+
         // ****************************************************************
         // Function: SigninPage
         // Description: Initialize the signin page window.
@@ -40,19 +48,68 @@ namespace FishLens_App
         // Function: Signin
         // Description: Validate username and password credentials for signin
         //     authorization.
-        // Notes: Currently uses temporary logic that only checks if fields
-        //     contain text, not actual database validation.
+        // Notes: Current sign in proccess unsalts with a stored procedure
         public bool Signin(string username, string password)
         {
-            bool SigninSuccessful = true;
-          //Temp logic below until create database for logins
-            if (username.Length== 0 || password.Length == 0)
+            bool signinSuccessful = false;
+
+            try
             {
-                SigninSuccessful = false;
+                using (SqlConnection conn = new SqlConnection(connectionString))
+                {
+                    conn.Open();
+
+                    // First, authenticate with existing stored procedure
+                    using (SqlCommand cmd = new SqlCommand("kaharra.Unsalt", conn))
+                    {
+                        cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                        cmd.Parameters.AddWithValue("@pUser", username);
+                        cmd.Parameters.AddWithValue("@pPassword", password);
+                        int result = Convert.ToInt32(cmd.ExecuteScalar());
+                        signinSuccessful = (result == 1);
+                    }
+
+                    // If authenticated, grab user details
+                    if (signinSuccessful)
+                    {
+                        string sql = @"
+                    SELECT Id, Username, RoleId, OrganizationId
+                    FROM [kaharra].[FishLensUsers]
+                    WHERE Username = @user";
+
+                        using (SqlCommand cmd = new SqlCommand(sql, conn))
+                        {
+                            cmd.Parameters.AddWithValue("@user", username);
+
+                            using (SqlDataReader reader = cmd.ExecuteReader())
+                            {
+                                if (reader.Read())
+                                {
+                                    var app = Application.Current as App;
+                                    app.CurrentUserId = reader.GetInt32(0);
+                                    app.CurrentUsername = reader.GetString(1);
+                                    app.CurrentRoleId = reader.GetInt32(2);
+                                    app.CurrentOrganizationId = reader.IsDBNull(3) ? 0 : reader.GetInt32(3);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (SqlException ex)
+            {
+                Debug.WriteLine("SQL Exception: " + ex.Message);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Exception: " + ex.Message);
             }
 
-            return SigninSuccessful;
+            return signinSuccessful;
         }
+
+
+
 
         // ****************************************************************
         // Function: SigninButtonClick
@@ -64,7 +121,7 @@ namespace FishLens_App
             bool Status;
 
             String username = UserName.Text;
-            
+
             String password = PassWord.Password;
             Status = Signin(username, password);
             if (Status == true)
@@ -75,9 +132,17 @@ namespace FishLens_App
             }
             else
             {
-                MessageBox.Show("Sign in unsuccessful, retry *For testing purposes just fill out both text boxes with anything");
+                MessageBox.Show("Sign in unsuccessful, retry *For testing purposes username = Fishlens1 and Password = Testing1! case sensitive");
             }
         }
-    
+
+        private void SignUp_Click(object sender, MouseButtonEventArgs e)
+        {
+
+           SignUpPage sign_up_page = new SignUpPage();
+            sign_up_page.Show();
+            this.Close();
+
+        }
     }
 }

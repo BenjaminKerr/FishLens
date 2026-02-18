@@ -1,17 +1,11 @@
-﻿<!-- ***************************************************************************************************************************
-// File: SigninPage.xaml
-// Description: This is the xaml code for our signin page which contains the design of the page.
-// Notes: Currently the login functionality is temporary, it does not actually check login information only whether or not it 
-// contains text.
-// ***************************************************************************************************************************-->
-    <Window x:Class="FishLens_App.SigninPage"
+﻿<Window x:Class="FishLens_App.SignUpPage"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Sign in"
+        Title="Sign Up"
         Width="1000" Height="700"
-        WindowStartupLocation="CenterScreen"
-        ResizeMode="NoResize"
-        WindowState="Maximized"
+          WindowStartupLocation="CenterScreen"
+  ResizeMode="NoResize"
+  WindowState="Maximized"
         Background="#0D3640">
 
     <Grid>
@@ -33,51 +27,88 @@
 
         <!-- Content -->
         <Grid Grid.Row="1">
-
-            <!-- Add spacing using Margin instead -->
             <Border Background="{DynamicResource CardBackground}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1"
                     CornerRadius="8"
                     Padding="25"
                     Margin="30"
-                    Width="400"
+                    Width="420"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
 
                 <StackPanel>
 
-                    <TextBlock Text="Sign in"
+                    <TextBlock Text="Create your account"
                                FontSize="{DynamicResource LargeHeaderFontSize}"
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource PrimaryText}"
                                HorizontalAlignment="Center"
-                               Margin="0,0,0,20"/>
+                               Margin="0,0,0,5"/>
 
-                    <TextBlock Text="Username"
+                    <TextBlock Text="Set up your organization and admin account"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,25"/>
+
+                    <!-- Organization Name -->
+                    <TextBlock Text="Organization Name"
                                FontSize="{DynamicResource BaseFontSize}"
                                Foreground="{DynamicResource SecondaryText}"/>
 
-                    <TextBox x:Name="UserName"
+                    <TextBox x:Name="OrgName"
                              Height="36"
                              Padding="8"
                              FontSize="{DynamicResource BaseFontSize}"
                              Margin="0,5,0,15"/>
 
+                    <!-- Username -->
+                    <TextBlock Text="Username"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"/>
+
+                    <TextBox x:Name="NewUsername"
+                             Height="36"
+                             Padding="8"
+                             FontSize="{DynamicResource BaseFontSize}"
+                             Margin="0,5,0,15"/>
+
+                    <!-- Password -->
                     <TextBlock Text="Password"
                                FontSize="{DynamicResource BaseFontSize}"
                                Foreground="{DynamicResource SecondaryText}"/>
 
-                    <PasswordBox x:Name="PassWord"
+                    <PasswordBox x:Name="NewPassword"
                                  Height="36"
                                  Padding="8"
                                  FontSize="{DynamicResource BaseFontSize}"
-                                 Margin="0,5,0,20"/>
+                                 Margin="0,5,0,15"/>
 
-                    <!-- Sign In Button -->
-                    <Button Content="Sign In"
-                            Width="140"
-                            Padding="10,6"
+                    <!-- Confirm Password -->
+                    <TextBlock Text="Confirm Password"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"/>
+
+                    <PasswordBox x:Name="ConfirmPassword"
+                                 Height="36"
+                                 Padding="8"
+                                 FontSize="{DynamicResource BaseFontSize}"
+                                 Margin="0,5,0,5"/>
+
+                    <!-- Error message -->
+                    <TextBlock x:Name="ErrorMessage"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="#F44336"
+                               TextWrapping="Wrap"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,10"
+                               Visibility="Collapsed"/>
+
+                    <!-- Sign Up Button -->
+                    <Button Content="Create Account"
+                            Width="160"
+                            Padding="10,8"
                             Background="{DynamicResource HeaderBackground}"
                             Foreground="{DynamicResource OnAccentForeground}"
                             FontSize="{DynamicResource BaseFontSize}"
@@ -85,8 +116,8 @@
                             BorderThickness="0"
                             HorizontalAlignment="Center"
                             Cursor="Hand"
-                            Click="SigninButtonClick">
-
+                            Margin="0,10,0,0"
+                            Click="CreateAccount_Click">
                         <Button.Style>
                             <Style TargetType="Button">
                                 <Setter Property="Template">
@@ -101,7 +132,6 @@
                                         </ControlTemplate>
                                     </Setter.Value>
                                 </Setter>
-
                                 <Style.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
                                         <Setter Property="Opacity" Value="0.85"/>
@@ -109,7 +139,6 @@
                                 </Style.Triggers>
                             </Style>
                         </Button.Style>
-
                     </Button>
 
                 </StackPanel>
@@ -118,27 +147,27 @@
 
         <!-- Footer -->
         <Border Grid.Row="2"
-        Background="{DynamicResource CardBackground}"
-        BorderBrush="{DynamicResource BorderBrush}"
-        BorderThickness="0,1,0,0"
-        Padding="30,20">
+                Background="{DynamicResource CardBackground}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,1,0,0"
+                Padding="30,20">
 
             <StackPanel Orientation="Horizontal"
-                HorizontalAlignment="Center">
+                        HorizontalAlignment="Center">
 
-                <TextBlock Text="Don't have an account?"
-                   FontSize="{DynamicResource BaseFontSize}"
-                   Foreground="{DynamicResource SecondaryText}"
-                   VerticalAlignment="Center"
-                   Margin="0,0,8,0"/>
+                <TextBlock Text="Already have an account?"
+                           FontSize="{DynamicResource BaseFontSize}"
+                           Foreground="{DynamicResource SecondaryText}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,8,0"/>
 
-                <TextBlock Text="Sign Up"
-                   FontSize="{DynamicResource BaseFontSize}"
-                   FontWeight="SemiBold"
-                   Foreground="{DynamicResource PrimaryText}"
-                   VerticalAlignment="Center"
-                   Cursor="Hand"
-                   MouseLeftButtonUp="SignUp_Click">
+                <TextBlock Text="Sign In"
+                           FontSize="{DynamicResource BaseFontSize}"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource PrimaryTextBrush}"
+                           VerticalAlignment="Center"
+                           Cursor="Hand"
+                           MouseLeftButtonUp="SignIn_Click">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Style.Triggers>
@@ -152,8 +181,10 @@
 
             </StackPanel>
         </Border>
-
-
-
     </Grid>
 </Window>
+
+
+
+
+

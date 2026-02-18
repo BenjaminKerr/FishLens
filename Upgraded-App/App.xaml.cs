@@ -12,6 +12,11 @@ namespace FishLens_App
         // Private sets so they aren't accidentally replaced with new instances
         public CheckBoxToggle CheckBoxes { get; private set; }
         public AppConfiguration Configuration { get; private set; }
+        public int CurrentUserId { get; set; }
+        public string CurrentUsername { get; set; }
+        public int CurrentRoleId { get; set; }
+        public int CurrentOrganizationId { get; set; }
+
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e); // Call the regular startup logic first

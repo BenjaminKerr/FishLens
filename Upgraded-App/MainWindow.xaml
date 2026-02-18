@@ -134,6 +134,7 @@ Height="70">
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
@@ -221,6 +222,27 @@ Height="70">
                         </Style>
                     </Button.Resources>
                     📁 Choose Video Folder
+                </Button>
+                <Button Name="SignOutButton"
+        Grid.Column="3"
+        Click="SignOutButtonClick"
+        VerticalAlignment="Center"
+        Padding="30,12"
+        Margin="20,0,0,0"
+        Background="{DynamicResource HeaderBackground}"
+        Foreground="{DynamicResource OnAccentForeground}"
+        FontSize="{DynamicResource BaseFontSize}"
+        FontWeight="SemiBold"
+        BorderThickness="0"
+        Cursor="Hand">
+
+                    <Button.Effect>
+                        <DropShadowEffect BlurRadius="10"
+                          ShadowDepth="2"
+                          Opacity="0.35"/>
+                    </Button.Effect>
+
+                     Sign Out
                 </Button>
             </Grid>
 

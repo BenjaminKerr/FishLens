@@ -24,15 +24,19 @@ namespace FishLens_App
         Reports
     }
 
-    class Role
+    public class Role
     {
         public string Name { get; set; }
-        public List<Permission> Permissions { get; set; }
+        public int ID { get; set; }
 
-        public Role(string name, List<Permission> permissions)
+        public Role(string name, int id)
         {
             Name = name;
-            Permissions = permissions;
+            ID = id;
+        }
+        public override string ToString()
+        {
+            return Name;
         }
     }
 }

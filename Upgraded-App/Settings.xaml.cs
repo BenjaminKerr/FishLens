@@ -1,8 +1,11 @@
-﻿using FishLens_App.Interfaces;
+﻿using FishLens_App;
+using FishLens_App.Interfaces;
 using FishLens_App.Models;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Data.SqlClient;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -25,11 +28,23 @@ namespace FishLens_App
     public partial class Settings : Page
     {
         #region Fields
+        private string connectionString = 
+        "server=aura.cset.oit.edu,5433; " +
+        "database=kaharra; " +
+        "UID=kaharra; " +
+        "password=kaharra";
         private readonly IProjectPathResolver _pathResolver;
         private readonly IFileSystemManager _fileSystemManager;
         private readonly ILogger<MainWindow> _logger;
         private CheckBoxToggle _checkBoxes;
         private AppConfiguration _config;
+        private Dictionary<int, (string Username, int RoleId)> _originalUserData = new();
+
+        public List<Role> Roles { get; set; } = new List<Role>();
+        private List<User> _users = new List<User>();
+        private int CurrentOrgId => (Application.Current as App).CurrentOrganizationId;
+
+
         #endregion
 
         #region Constructors
@@ -39,13 +54,17 @@ namespace FishLens_App
             _pathResolver = pathresolver ?? throw new ArgumentNullException(nameof(pathresolver));
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
             InitializeComponent();
+            DataContext = this;
             _checkBoxes = (Application.Current as App).CheckBoxes;
             _config = (Application.Current as App).Configuration;
+
 
             // Initialize UI from current state / persisted settings
             try
             {
                 LoadSettings();
+                LoadRoles();
+                LoadUsers();
             }
             catch (Exception ex)
             {
@@ -55,6 +74,60 @@ namespace FishLens_App
         #endregion
 
         #region Event Handlers
+
+        // ****************************************************************
+        // Function: CreateUserClick
+        // Description: Handle create user button click and calls signup
+        // Notes: Temporary message boxes for debug
+        public void CreateUserClick(object sender, RoutedEventArgs e)
+        {
+            if (RoleComboBox.SelectedItem is not Role selectedRole)
+            {
+                MessageBox.Show("Please select a role.");
+            }
+            else
+            {
+                string username = NewUsername.Text.Trim();
+                string password = NewPassword.Password;
+                string error = null;
+
+                if (string.IsNullOrWhiteSpace(username))
+                    error = "Please enter a username.";
+                else if (username.Length < 6)
+                    error = "Username must be at least 6 characters.";
+                else if (string.IsNullOrWhiteSpace(password))
+                    error = "Please enter a password.";
+                else if (password.Length < 6)
+                    error = "Password must be at least 6 characters.";
+
+                if (error != null)
+                {
+                    MessageBox.Show(error);
+                }
+                else
+                {
+                    int roleId = selectedRole.ID;
+                    bool status = SignUp(username, password, roleId);
+
+                    if (status)
+                    {
+                        NewUsername.Text = "";
+                        NewPassword.Password = "";
+                        RoleComboBox.SelectedIndex = -1;
+                        MessageBox.Show("User created successfully!");
+                        LoadUsers();
+                    }
+                    else
+                    {
+                        MessageBox.Show("Sign up unsuccessful, retry.");
+                    }
+                }
+            }
+        }
+
+
+
+
         private void ConfidenceThreshold_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
         {
             if (confidenceValue == null) return;
@@ -143,6 +216,233 @@ namespace FishLens_App
         #endregion
 
         #region Private Methods
+
+        // ****************************************************************
+        // Function: Signup
+        // Description: Creates username and password credentials for signin with salting
+        //     
+        // Notes: Temporarily stores into Kaharra SQL
+        private bool SignUp(string username, string password, int roleId)
+        {
+            bool success = false;
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(connectionString))
+                {
+                    conn.Open();
+                    using (SqlCommand cmd = new SqlCommand("kaharra.AddUser", conn))
+                    {
+                        cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                        cmd.Parameters.AddWithValue("@pUser", username);
+                        cmd.Parameters.AddWithValue("@pPassword", password);
+                        cmd.Parameters.AddWithValue("@pRoleId", roleId);
+                        cmd.Parameters.AddWithValue("@pOrgId", CurrentOrgId);
+                        cmd.ExecuteNonQuery();
+                        success = true;
+                    }
+                }
+            }
+            catch (SqlException ex)
+            {
+                Debug.WriteLine("SQL Exception: " + ex.Message);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Exception: " + ex.Message);
+            }
+            return success;
+        }
+
+
+
+        private void LoadUsers()
+        {
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(connectionString))
+                {
+                    conn.Open();
+
+                    string sql = @"
+                SELECT Id, Username, RoleId
+                FROM [kaharra].[kaharra].[FishLensUsers]
+                WHERE OrganizationId = @orgId
+                ORDER BY Username";
+
+                    using (SqlCommand cmd = new SqlCommand(sql, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@orgId", CurrentOrgId);
+
+                        using (SqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            var users = new List<User>();
+
+                            while (reader.Read())
+                            {
+                                int id = reader.GetInt32(0);
+                                string username = reader.GetString(1);
+                                int roleId = reader.GetInt32(2);
+
+                                Role matchedRole = Roles.FirstOrDefault(r => r.ID == roleId);
+                                users.Add(new User(id, username, matchedRole));
+                            }
+
+                            _users = users;
+                            _originalUserData = users.ToDictionary(
+                                u => u.Id,
+                                u => (u.Username, u.role?.ID ?? -1)
+                            );
+                            UsersGrid.ItemsSource = _users;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("LoadUsers error: " + ex.Message);
+                MessageBox.Show("Failed to load users.");
+            }
+        }
+
+
+        private bool UpdateUser(int userId, string newUsername, int newRoleId)
+        {
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(connectionString))
+                {
+                    conn.Open();
+
+                    string sql = @"
+                UPDATE [kaharra].[kaharra].[FishLensUsers]
+                SET Username = @u, RoleId = @r
+                WHERE Id = @id";
+
+                    using (SqlCommand cmd = new SqlCommand(sql, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@u", newUsername);
+                        cmd.Parameters.AddWithValue("@r", newRoleId);
+                        cmd.Parameters.AddWithValue("@id", userId);
+
+                        cmd.ExecuteNonQuery();
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("UpdateUser error: " + ex.Message);
+                return false;
+            }
+        }
+
+        private void SaveUserChanges_Click(object sender, RoutedEventArgs e)
+        {
+            if (_users == null || _users.Count == 0)
+            {
+                MessageBox.Show("No users to save.");
+                return;
+            }
+
+            // Find only users that actually changed
+            var changedUsers = _users.Where(u =>
+            {
+                if (string.IsNullOrWhiteSpace(u.Username) || u.role == null)
+                    return false;
+
+                if (!_originalUserData.TryGetValue(u.Id, out var original))
+                    return false;
+
+                return u.Username.Trim() != original.Username || u.role.ID != original.RoleId;
+            }).ToList();
+
+            if (changedUsers.Count == 0)
+            {
+                MessageBox.Show(
+                    "No changes detected.",
+                    "Nothing to Save",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            int updated = 0;
+            var updatedNames = new List<string>();
+
+            foreach (var u in changedUsers)
+            {
+                if (UpdateUser(u.Id, u.Username.Trim(), u.role.ID))
+                {
+                    updated++;
+                    updatedNames.Add(u.Username.Trim());
+                }
+            }
+
+            if (updated > 0)
+            {
+                string names = string.Join(", ", updatedNames);
+                string message = updated == 1
+                    ? $"Successfully updated {names}."
+                    : $"Successfully updated {updated} users: {names}.";
+
+                MessageBox.Show(
+                    message,
+                    "Changes Saved ✓",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            else
+            {
+                MessageBox.Show(
+                    "Something went wrong — no changes were saved. Please try again.",
+                    "Save Failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+
+            LoadUsers();
+        }
+
+
+        private void RefreshUsers_Click(object sender, RoutedEventArgs e)
+        {
+            LoadUsers();
+        }
+
+        private void LoadRoles()
+        {
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(connectionString))
+                {
+                    conn.Open();
+
+                    using (SqlCommand cmd = new SqlCommand("SELECT Id, Name FROM Roles", conn))
+                    using (SqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        var roles = new List<Role>();
+
+                        while (reader.Read())
+                        {
+                            roles.Add(new Role(
+                                reader.GetString(1), // Name
+                                reader.GetInt32(0)   // Id
+                            ));
+                        }
+
+                        Roles = roles;                 
+                        RoleComboBox.ItemsSource = roles; 
+
+                        DataContext = this;           
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("LoadRoles error: " + ex.Message);
+                MessageBox.Show("Failed to load roles.");
+            }
+        }
         private void LoadSettings()
         {
             // Set defaults from current runtime state
@@ -232,6 +532,12 @@ namespace FishLens_App
             }
             catch { }
         }
+
         #endregion
+
+        private void UsersGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+
+        }
     }
 }
