@@ -38,8 +38,11 @@ namespace FishLens_App
         private readonly ILogger<MainWindow> _logger;
         private CheckBoxToggle _checkBoxes;
         private AppConfiguration _config;
+        private Dictionary<int, (string Username, int RoleId)> _originalUserData = new();
+
         public List<Role> Roles { get; set; } = new List<Role>();
         private List<User> _users = new List<User>();
+        private int CurrentOrgId => (Application.Current as App).CurrentOrganizationId;
 
 
         #endregion
@@ -54,6 +57,7 @@ namespace FishLens_App
             DataContext = this;
             _checkBoxes = (Application.Current as App).CheckBoxes;
             _config = (Application.Current as App).Configuration;
+
 
             // Initialize UI from current state / persisted settings
             try
@@ -202,21 +206,18 @@ namespace FishLens_App
         private bool SignUp(string username, string password, int roleId)
         {
             bool success = false;
-
             try
             {
                 using (SqlConnection conn = new SqlConnection(connectionString))
                 {
                     conn.Open();
-
                     using (SqlCommand cmd = new SqlCommand("kaharra.AddUser", conn))
                     {
                         cmd.CommandType = System.Data.CommandType.StoredProcedure;
-
                         cmd.Parameters.AddWithValue("@pUser", username);
                         cmd.Parameters.AddWithValue("@pPassword", password);
                         cmd.Parameters.AddWithValue("@pRoleId", roleId);
-
+                        cmd.Parameters.AddWithValue("@pOrgId", CurrentOrgId);
                         cmd.ExecuteNonQuery();
                         success = true;
                     }
@@ -230,9 +231,11 @@ namespace FishLens_App
             {
                 Debug.WriteLine("Exception: " + ex.Message);
             }
-
             return success;
         }
+
+
+
         private void LoadUsers()
         {
             try
@@ -244,29 +247,34 @@ namespace FishLens_App
                     string sql = @"
                 SELECT Id, Username, RoleId
                 FROM [kaharra].[kaharra].[FishLensUsers]
+                WHERE OrganizationId = @orgId
                 ORDER BY Username";
 
                     using (SqlCommand cmd = new SqlCommand(sql, conn))
-                    using (SqlDataReader reader = cmd.ExecuteReader())
                     {
-                        var users = new List<User>();
+                        cmd.Parameters.AddWithValue("@orgId", CurrentOrgId);
 
-                        while (reader.Read())
+                        using (SqlDataReader reader = cmd.ExecuteReader())
                         {
-                            int id = reader.GetInt32(0);
-                            string username = reader.GetString(1);
-                            int roleId = reader.GetInt32(2);
+                            var users = new List<User>();
 
-                            // Find the matching Role object from Roles list
-                            Role matchedRole = Roles.FirstOrDefault(r => r.ID == roleId);
+                            while (reader.Read())
+                            {
+                                int id = reader.GetInt32(0);
+                                string username = reader.GetString(1);
+                                int roleId = reader.GetInt32(2);
 
-                            users.Add(new User(id, username, matchedRole));
+                                Role matchedRole = Roles.FirstOrDefault(r => r.ID == roleId);
+                                users.Add(new User(id, username, matchedRole));
+                            }
 
-
+                            _users = users;
+                            _originalUserData = users.ToDictionary(
+                                u => u.Id,
+                                u => (u.Username, u.role?.ID ?? -1)
+                            );
+                            UsersGrid.ItemsSource = _users;
                         }
-
-                        _users = users;
-                        UsersGrid.ItemsSource = _users;
                     }
                 }
             }
@@ -276,6 +284,7 @@ namespace FishLens_App
                 MessageBox.Show("Failed to load users.");
             }
         }
+
 
         private bool UpdateUser(int userId, string newUsername, int newRoleId)
         {
@@ -316,20 +325,65 @@ namespace FishLens_App
                 return;
             }
 
-            int updated = 0;
-
-            foreach (var u in _users)
+            // Find only users that actually changed
+            var changedUsers = _users.Where(u =>
             {
                 if (string.IsNullOrWhiteSpace(u.Username) || u.role == null)
-                    continue;
+                    return false;
 
-                if (UpdateUser(u.Id, u.Username.Trim(), u.role.ID))
-                    updated++;
+                if (!_originalUserData.TryGetValue(u.Id, out var original))
+                    return false;
+
+                return u.Username.Trim() != original.Username || u.role.ID != original.RoleId;
+            }).ToList();
+
+            if (changedUsers.Count == 0)
+            {
+                MessageBox.Show(
+                    "No changes detected.",
+                    "Nothing to Save",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
             }
 
-            MessageBox.Show($"Saved changes for {updated} user(s).");
+            int updated = 0;
+            var updatedNames = new List<string>();
+
+            foreach (var u in changedUsers)
+            {
+                if (UpdateUser(u.Id, u.Username.Trim(), u.role.ID))
+                {
+                    updated++;
+                    updatedNames.Add(u.Username.Trim());
+                }
+            }
+
+            if (updated > 0)
+            {
+                string names = string.Join(", ", updatedNames);
+                string message = updated == 1
+                    ? $"Successfully updated {names}."
+                    : $"Successfully updated {updated} users: {names}.";
+
+                MessageBox.Show(
+                    message,
+                    "Changes Saved ✓",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            else
+            {
+                MessageBox.Show(
+                    "Something went wrong — no changes were saved. Please try again.",
+                    "Save Failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+
             LoadUsers();
         }
+
 
         private void RefreshUsers_Click(object sender, RoutedEventArgs e)
         {
@@ -459,8 +513,12 @@ namespace FishLens_App
             }
             catch { }
         }
+
         #endregion
 
+        private void UsersGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
 
+        }
     }
 }

@@ -34,5 +34,9 @@ namespace FishLens_App
             Name = name;
             ID = id;
         }
+        public override string ToString()
+        {
+            return Name;
+        }
     }
 }

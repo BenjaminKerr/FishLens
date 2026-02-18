@@ -59,16 +59,40 @@ namespace FishLens_App
                 {
                     conn.Open();
 
+                    // First, authenticate with existing stored procedure
                     using (SqlCommand cmd = new SqlCommand("kaharra.Unsalt", conn))
                     {
                         cmd.CommandType = System.Data.CommandType.StoredProcedure;
-
                         cmd.Parameters.AddWithValue("@pUser", username);
                         cmd.Parameters.AddWithValue("@pPassword", password);
-
                         int result = Convert.ToInt32(cmd.ExecuteScalar());
-
                         signinSuccessful = (result == 1);
+                    }
+
+                    // If authenticated, grab user details
+                    if (signinSuccessful)
+                    {
+                        string sql = @"
+                    SELECT Id, Username, RoleId, OrganizationId
+                    FROM [kaharra].[FishLensUsers]
+                    WHERE Username = @user";
+
+                        using (SqlCommand cmd = new SqlCommand(sql, conn))
+                        {
+                            cmd.Parameters.AddWithValue("@user", username);
+
+                            using (SqlDataReader reader = cmd.ExecuteReader())
+                            {
+                                if (reader.Read())
+                                {
+                                    var app = Application.Current as App;
+                                    app.CurrentUserId = reader.GetInt32(0);
+                                    app.CurrentUsername = reader.GetString(1);
+                                    app.CurrentRoleId = reader.GetInt32(2);
+                                    app.CurrentOrganizationId = reader.IsDBNull(3) ? 0 : reader.GetInt32(3);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -83,6 +107,7 @@ namespace FishLens_App
 
             return signinSuccessful;
         }
+
 
 
 
