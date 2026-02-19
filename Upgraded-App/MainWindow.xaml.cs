@@ -291,9 +291,9 @@ namespace FishLens_App
             // Notes: Original writing credit to Aden Ratliff, async update by Benjamin Kerr
             //          Running async so that UI thread isn't blocked
             // **************************************************
-        private async Task RunYolo()
+        private async Task RunYolo(string videoFolder)
         {
-            ProcessStartInfo processInfo = CreateYoloProcessStartInfo();
+            ProcessStartInfo processInfo = CreateYoloProcessStartInfo(videoFolder);
 
             ProgressDialog progressDialog = new ProgressDialog();
             progressDialog.Show();
@@ -314,15 +314,21 @@ namespace FishLens_App
         // Function: CreateYoloProcessStartInfo
         // Description: Configures process start information for YOLO script execution
         // **************************************************
-        private ProcessStartInfo CreateYoloProcessStartInfo()
+        private ProcessStartInfo CreateYoloProcessStartInfo(string dataPath)
         {
             string yoloScriptDirectory = _pathResolver.ResolveYoloScriptPath();
-            string sampleDataPath = Path.Combine(_pathResolver.ResolveProjectRoot(), SAMPLE_DATA_FOLDER);
+
+            // REMOVE THESE IF WORKING
+            // Also issue here because it uses default "sampleDataPath" that has nothing to do with
+            // the data given from the button click for opening a folder
+            //string sampleDataPath = Path.Combine(_pathResolver.ResolveProjectRoot(), SAMPLE_DATA_FOLDER);
+            //if (dataPath == null)
+            //    dataPath = Path.Combine(_pathResolver.ResolveProjectRoot(), SAMPLE_DATA_FOLDER);
 
             return new ProcessStartInfo
             {
                 FileName = "python",
-                Arguments = $"\"{yoloScriptDirectory}\" \"{sampleDataPath}\"",
+                Arguments = $"\"{yoloScriptDirectory}\" \"{dataPath}\"",
                 RedirectStandardError = _checkBoxes.ErrorBox,
                 RedirectStandardOutput = _checkBoxes.OutputBox,
                 UseShellExecute = false
@@ -411,9 +417,14 @@ namespace FishLens_App
         private async void ProcessVideos(string inputFolder, string outputDirectory)
         {
             MakeDirectoryIfNotExists(outputDirectory);
-            DisplayDataInUi(outputDirectory);
+            
+            // REMOVE THESE IF WORKING
+            // This is the main issue here
+            // Should be running YOLO before updating the UI with data from videos
+            
             EnterDataInFile(inputFolder, outputDirectory);
-            await RunYolo();
+            await RunYolo(outputDirectory);
+            DisplayDataInUi(outputDirectory);
 
             List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList = CreateSortedListOfVideos(outputDirectory);
             CreateVideoButtonsList(videoDataList);

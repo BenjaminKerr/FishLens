@@ -43,6 +43,10 @@ namespace FishLens_App.Services
             var vid = new Video();
             if (!File.Exists(csvPath)) return vid;
 
+            // REMOVE THESE IF WORKING
+            // THIS NEEDS TO RUN MAIN YOLO BEFORE READING FROM CSV - currently it just reads the already
+            // filled out csv which makes it not provide the data for the correct videos
+            
             var lines = File.ReadAllLines(csvPath);
             for (int i = 1; i < lines.Length; i++)
             {
