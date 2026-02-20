@@ -189,7 +189,7 @@ def extract_timestamp_from_frame(frame, debug=False):
         h, w = frame.shape[:2]
         
         # Focus on bottom-left corner where timestamp appears
-        # Taking bottom 20% of height and left 65% of width
+        # Taking bottom 25% of height and left 65% of width
         region_height = int(h * 0.25)
         region_width = int(w * 0.65)
         
@@ -254,9 +254,11 @@ def parse_timestamp(text):
     
     # Pattern for YYYY/MM/DD HH:MM:SS
     # Allow both / and - as separators (in case OCR misreads)
+    text = re.sub(r'(\d{4}/\d{2}/\d{2})(\d{2}:)', r'\1 \2', text)
+    
+    # Now use the standard pattern
     pattern = r'(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})'
     match = re.search(pattern, text)
-    
     if match:
         year, month, day, hour, minute, second = match.groups()
         

@@ -1,7 +1,7 @@
 video_file,trackId,image_path,likely_class,confidence,start_time_sec,end_time_sec,avg_confidence,direction,species,species_confidence,video_timestamp
-FishTest1.mp4,3,fish_images\Chinook\FishTest1_track_3.jpg,fish,94.07%,2.433333333333333,9.2,94.07%,upstream,Chinook,65.90%,Not detected
-FishTest1.mp4,6,fish_images\Chinook\FishTest1_track_6.jpg,fish,93.82%,4.533333333333333,9.2,93.82%,upstream,Chinook,68.58%,Not detected
+FishTest1.mp4,3,fish_images\Chinook\FishTest1_track_3.jpg,fish,94.07%,2.433333333333333,9.2,94.07%,upstream,Chinook,65.90%,2025/10/08 15:27:41
+FishTest1.mp4,6,fish_images\Chinook\FishTest1_track_6.jpg,fish,93.82%,4.533333333333333,9.2,93.82%,upstream,Chinook,68.58%,2025/10/08 15:27:43
 FishTest2.mp4,1,fish_images\Chinook\FishTest2_track_1.jpg,fish,88.78%,9.433333333333334,21.033333333333335,88.78%,downstream,Chinook,61.89%,Not detected
-FishTest2Fish.mp4,1,fish_images\Chinook\FishTest2Fish_track_1.jpg,fish,91.69%,8.566666666666666,23.933333333333334,91.69%,downstream,Chinook,82.11%,Not detected
-FishTest2Fish.mp4,2,fish_images\Chinook\FishTest2Fish_track_2.jpg,fish,91.78%,11.433333333333334,23.933333333333334,91.78%,downstream,Chinook,73.99%,Not detected
-FishTest3.mp4,1,fish_images\Chinook\FishTest3_track_1.jpg,fish,95.07%,10.433333333333334,20.433333333333334,95.07%,upstream,Chinook,70.18%,Not detected
+FishTest2Fish.mp4,1,fish_images\Chinook\FishTest2Fish_track_1.jpg,fish,91.69%,8.566666666666666,23.933333333333334,91.69%,downstream,Chinook,82.11%,2025/10/02 14:10:06
+FishTest2Fish.mp4,2,fish_images\Chinook\FishTest2Fish_track_2.jpg,fish,91.78%,11.433333333333334,23.933333333333334,91.78%,downstream,Chinook,73.99%,2026/10/02 14:10:09
+FishTest3.mp4,1,fish_images\Chinook\FishTest3_track_1.jpg,fish,95.07%,10.433333333333334,20.433333333333334,95.07%,upstream,Chinook,70.18%,2025/10/01 19:07:44
