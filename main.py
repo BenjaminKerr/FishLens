@@ -27,6 +27,7 @@ from keras.preprocessing.image import load_img, img_to_array
 import pytesseract
 import re
 from dateutil import parser as date_parser
+from extract_timestamp import extract_timestamp_from_frame, parse_timestamp
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Update this path if Tesseract is installed elsewhere
 
 
@@ -170,124 +171,10 @@ def enhance_image(crop):
     return crop
 
 # ****************************************************************
-# Function: extract_timestamp_from_frame
-# Description: Extract date/time timestamp from bottom-left region of video frame using OCR.
-# Notes: Optimized for typical video timestamp formats
-def extract_timestamp_from_frame(frame, debug=False):
-    """
-    Extract timestamp from bottom-left corner of video frame.
-    Format: YYYY/MM/DD HH:MM:SS (white text on dark background)
-    Example: 2025/10/08 23:31:11
-    """
-    if frame is None or frame.size == 0:
-        return None
-    
-    if not TESSERACT_AVAILABLE:
-        return None
-    
-    try:
-        h, w = frame.shape[:2]
-        
-        # Focus on bottom-left corner where timestamp appears
-        # Taking bottom 25% of height and left 65% of width
-        region_height = int(h * 0.25)
-        region_width = int(w * 0.65)
-        
-        # Extract the timestamp region
-        timestamp_region = frame[h - region_height:h, 0:region_width]
-        
-        if debug:
-            cv2.imwrite("debug_timestamp_region.jpg", timestamp_region)
-            print(f"  Saved timestamp region: {timestamp_region.shape}")
-        
-        # Convert to grayscale
-        gray = cv2.cvtColor(timestamp_region, cv2.COLOR_BGR2GRAY)
-        
-        # White text on dark background - use binary threshold
-        # Invert so text becomes black on white (better for OCR)
-        _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
-        
-        # Optional: Apply slight dilation to thicken text
-        kernel = np.ones((2, 2), np.uint8)
-        processed = cv2.dilate(thresh, kernel, iterations=1)
-        
-        if debug:
-            cv2.imwrite("debug_timestamp_processed.jpg", processed)
-        
-        # OCR configuration optimized for single-line timestamps
-        # Whitelist only characters that appear in timestamps
-        custom_config = r'--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789/:- '
-        
-        # Perform OCR
-        text = pytesseract.image_to_string(processed, config=custom_config)
-        text = text.strip()
-        
-        if debug:
-            print(f"  OCR raw output: '{text}'")
-        
-        if len(text) < 15:  # Timestamp should be at least 19 chars
-            return None
-        
-        # Parse the timestamp
-        timestamp = parse_timestamp(text)
-        
-        if timestamp and debug:
-            print(f"  ✓ Parsed timestamp: {timestamp}")
-        
-        return timestamp
-        
-    except Exception as e:
-        print(f"Error extracting timestamp: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
+# Note: extract_timestamp_from_frame and parse_timestamp functions
+# are now imported from extract_timestamp.py module
+# ****************************************************************
 
-
-def parse_timestamp(text):
-    """
-    Parse timestamp from OCR text.
-    Expected format: 2025/10/08 23:31:11
-    Also handles common OCR errors (e.g., 'l' mistaken for '1')
-    """
-    # Clean up common OCR mistakes
-    text = text.replace('l', '1').replace('O', '0').replace('o', '0')
-    
-    # Pattern for YYYY/MM/DD HH:MM:SS
-    # Allow both / and - as separators (in case OCR misreads)
-    text = re.sub(r'(\d{4}/\d{2}/\d{2})(\d{2}:)', r'\1 \2', text)
-    
-    # Now use the standard pattern
-    pattern = r'(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})'
-    match = re.search(pattern, text)
-    if match:
-        year, month, day, hour, minute, second = match.groups()
-        
-        # Convert to integers for validation
-        try:
-            y, m, d, h, min_val, s = int(year), int(month), int(day), int(hour), int(minute), int(second)
-            
-            # Validate ranges
-            if not (2020 <= y <= 2030):
-                return None
-            if not (1 <= m <= 12):
-                return None
-            if not (1 <= d <= 31):
-                return None
-            if not (0 <= h <= 23):
-                return None
-            if not (0 <= min_val <= 59):
-                return None
-            if not (0 <= s <= 59):
-                return None
-            
-            # Format consistently with zero-padding
-            timestamp = f"{y}/{m:02d}/{d:02d} {h:02d}:{min_val:02d}:{s:02d}"
-            return timestamp
-            
-        except ValueError:
-            return None
-    
-    return None
 # ****************************************************************
 # Function: run_video_tracker
 # Description: Process a single video through both YOLO and DeepSort;
