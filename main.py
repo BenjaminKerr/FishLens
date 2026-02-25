@@ -11,6 +11,7 @@ from fileinput import filename
 import os
 import csv
 import cv2
+import os
 import numpy as np
 from ultralytics import YOLO
 import shutil
@@ -24,7 +25,28 @@ from keras.models import load_model
 from dataclasses import dataclass, field
 from typing import List
 from keras.preprocessing.image import load_img, img_to_array
+import pytesseract
+import re
+from dateutil import parser as date_parser
+from extract_timestamp import extract_timestamp_from_frame, parse_timestamp
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Update this path if Tesseract is installed elsewhere
 
+
+<<<<<<< HEAD
+def check_tesseract():
+    """Verify Tesseract is installed and accessible."""
+    try:
+        version = pytesseract.get_tesseract_version()
+        print(f"✓ Tesseract OCR detected: v{version}")
+        return True
+    except Exception as e:
+        print(f"    WARNING: Tesseract OCR not found or not configured")
+        print(f"   Timestamp extraction will be disabled")
+        print(f"   Error: {e}")
+        return False
+
+# ADD THIS CONSTANT
+TESSERACT_AVAILABLE = check_tesseract()
 # Suppress deprecation warning from pkg_resources
 warnings.filterwarnings(
     "ignore",
@@ -48,7 +70,8 @@ CSV_KEYS = [
     "avg_confidence",
     "direction",
     "species",
-    "species_confidence"
+    "species_confidence",
+    "video_timestamp"
 ]
 
 # Constants--YOLO
@@ -65,7 +88,7 @@ FISH_IMAGE_DIR = "fish_images"
 CLASSIFIER_MODEL_PATH = os.path.join(PROJECT_ROOT, "fish_classifier_model.h5")
 CLASSIFIER_MODEL = load_model(CLASSIFIER_MODEL_PATH)
 CLASSIFIER_TARGET_FOLDER = "images"
-CLASS_NAMES = ["Chinook", "Omykiss"] 
+CLASS_NAMES = ["Omykiss", "Chinook"] 
 IMAGE_SIZE = (150, 150)
 IMAGE_EXTS = {'.jpg', '.jpeg', '.png'}
 
@@ -96,6 +119,7 @@ class VideoData:
         self.v_current_track_ids = set()
         self.v_confidence_sum = 0.0
         self.v_confidence_count = 0 
+        self.v_video_timestamp = None
 
 
 # ****************************************************************
@@ -149,6 +173,21 @@ def enhance_image(crop):
     return crop
 
 # ****************************************************************
+# Note: extract_timestamp_from_frame and parse_timestamp functions
+# are now imported from extract_timestamp.py module
+# ****************************************************************
+=======
+# Initialize YOLO and DeepSort
+detector = YoloDetector(weights_path="YOLO/yolov8n.pt")
+tracker = DeepSortTracker()
+
+# Parameters
+HISTORY_LENGTH = 5        # number of previous positions to smooth direction
+DIRECTION_THRESHOLD = 5   # minimum pixel movement to count as direction change
+
+>>>>>>> c292ee1 (Structured some deepsort functionality back into deepsort_tracker, and tried to make bounding boxes more accurate.)
+
+# ****************************************************************
 # Function: run_video_tracker
 # Description: Process a single video through both YOLO and DeepSort;
 # return tracked fish data.
@@ -164,6 +203,7 @@ def run_video_tracker(video_path):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print(f"Error: Could not open video: {video_path}")
+<<<<<<< HEAD
         return []
     vidData.v_fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
     ret, frame = cap.read()
@@ -190,13 +230,81 @@ def run_video_tracker(video_path):
         # Increment frame index and read next frame
         vidData.v_frame_index += 1
         vidData.v_total_frames += 1
+=======
+        return
+
+    print(f"Tracking video: {video_path}")
+
+    while True:
+>>>>>>> c292ee1 (Structured some deepsort functionality back into deepsort_tracker, and tried to make bounding boxes more accurate.)
         ret, frame = cap.read()
 
+<<<<<<< HEAD
     # Finalize forced tracks (detections that were still active at the end of the video)
     finalize_tracks(frameData, vidData, termination_reason="forced")
+=======
+        h, w, _ = frame.shape
+
+        # 1. ---- YOLO DETECTION ----
+        detections = detector.detect(frame)  
+        # detections = [x1, y1, x2, y2, conf, cls]
+
+        # clamp and ensure proper format
+        cleaned_dets = []
+        for det in detections:
+            x1, y1, x2, y2, conf, cls_id = det
+
+            x1 = max(0, min(int(x1), w - 1))
+            x2 = max(0, min(int(x2), w - 1))
+            y1 = max(0, min(int(y1), h - 1))
+            y2 = max(0, min(int(y2), h - 1))
+
+            # Optional: filter tiny boxes to reduce duplicates
+            if (x2 - x1) * (y2 - y1) < 100:  # adjust 100 to your min fish size
+                continue
+
+            cleaned_dets.append([x1, y1, x2, y2, float(conf), int(cls_id)])
+
+        # 2. ---- UPDATE DEEPSORT ----
+        tracks = tracker.update(cleaned_dets, frame)
+
+        # 3. ---- DRAW TRACKS ----
+        for track in tracks:
+            track_id = track["track_id"]
+            x1, y1, x2, y2 = track["bbox"]
+
+            # --- update track position history ---
+            x_center = int((x1 + x2) / 2)
+            y_center = int((y1 + y2) / 2)
+            if "positions" not in track:
+                track["positions"] = []
+                track["previous_direction"] = "downstream"  # default
+
+            track["positions"].append((x_center, y_center))
+            if len(track["positions"]) > HISTORY_LENGTH:
+                track["positions"].pop(0)
+
+            # --- calculate smoothed direction ---
+            direction = track["direction"] 
+
+            # Draw bounding box
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+            # Label
+            label = f"ID:{track_id} {direction}"
+            cv2.putText(frame, label, (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5, (0, 255, 0), 2)
+
+        # 4. ---- SHOW FRAME ----
+        cv2.imshow("Fish Tracker", frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+>>>>>>> c292ee1 (Structured some deepsort functionality back into deepsort_tracker, and tried to make bounding boxes more accurate.)
 
     cap.release()
 
+<<<<<<< HEAD
     # Skip export if fish was not detected in video
     if not vidData.v_found_fish:
         no_fish_found(video_path, vidData.v_filename)
@@ -288,15 +396,35 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         trackId = obj["trackId"]
         vidData.v_current_track_ids.add(trackId)
 
-        if trackId not in vidData.v_active_tracks:
+        # ✅ Check if this is a NEW track
+        is_new_track = trackId not in vidData.v_active_tracks
+
+        if is_new_track:
             vidData.v_active_tracks[trackId] = {
                 "start_frame": frameData.f_index,
                 "confidences": [],
                 "directions": [],
                 "best_conf": -1.0,
-                "best_crop": None
+                "best_crop": None,
+                "video_timestamp": None  # ✅ Will be set below
             }
+            
+            # ✅ Extract timestamp ONCE when track is first created
+            print(f"  New fish detected (Track {trackId}) at frame {frameData.f_index}")
+            timestamp = extract_timestamp_from_frame(frame, debug=True)
+            
+            if timestamp:
+                vidData.v_active_tracks[trackId]["video_timestamp"] = timestamp
+                print(f"    Timestamp: {timestamp}")
+            else:
+                vidData.v_active_tracks[trackId]["video_timestamp"] = "Not detected"
+                print(f"    Could not extract timestamp")
 
+                debug_frame_path = f"debug_full_frame_track_{trackId}.jpg"
+                cv2.imwrite(debug_frame_path, frame)
+                print(f"    Saved full frame to: {debug_frame_path}")
+
+        # Update track data (runs every frame for this track)
         vidData.v_active_tracks[trackId]["confidences"].append(obj["confidence"])
         vidData.v_active_tracks[trackId]["directions"].append(obj["direction"])
 
@@ -318,7 +446,6 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
             if conf > vidData.v_active_tracks[trackId]["best_conf"]:
                 vidData.v_active_tracks[trackId]["best_conf"] = conf
                 vidData.v_active_tracks[trackId]["best_crop"] = crop.copy()
-    
 
 # ****************************************************************
 # Function: finalize_tracks
@@ -359,11 +486,11 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     confidences = [c for c in track_data["confidences"] if c is not None]
     avg_conf_DS = sum(confidences) / len(confidences) if confidences else 0.0
     
-    # GET BEST CONFIDENCE FROM TRACK (this was missing!)
+    # GET BEST CONFIDENCE FROM TRACK
     best_conf = track_data.get("best_conf", 0.0)
     best_conf_pct = best_conf * 100 if best_conf <= 1.0 else best_conf
     
-    # Calculate overall direction (more accurate than just last frame)
+    # Calculate overall direction
     directions = track_data["directions"]
     overall_direction = "unknown"
     if directions:
@@ -381,16 +508,15 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     return {
         "trackId": trackId,
         "likely_class": vidData.v_most_common_class,
-        # 🟢 USE BEST CONFIDENCE IF AVAILABLE
         "confidence": f"{best_conf_pct:.2f}%" if best_conf_pct > 0 else f"{vidData.v_avg_confidence_YL:.2f}%",
-        # 🟢 PREFER BEST OVER AVERAGE
         "avg_confidence": f"{best_conf_pct:.2f}%" if best_conf_pct > 0 else f"{avg_conf_DS:.2f}%",
         "start_time_sec": track_data["start_frame"] / vidData.v_fps,
         "end_time_sec": frameData.f_index / vidData.v_fps,
-        "direction": overall_direction,  # 🟢 More accurate direction
+        "direction": overall_direction,
         "best_crop": track_data.get("best_crop"),
         "species": species_data[0] if species_data else "No data",
-        "species_confidence": f"{species_data[1]:.2f}%" if species_data else "No data"
+        "species_confidence": f"{species_data[1]:.2f}%" if species_data else "No data",
+        "video_timestamp": track_data.get("video_timestamp", "Not detected")
     }
 
 
@@ -472,7 +598,7 @@ def classify_image(image_path):
         img_array = img_array / 255.0 
         img_array = np.expand_dims(img_array, axis=0)
 
-        # ✅ Predict using pre-loaded model (no retracing after first call)
+      
         predictions = model.predict(img_array, verbose=0)
         
         # Get results
@@ -502,3 +628,12 @@ def get_image_name() -> str:
     return images[0].name
 
 main()
+=======
+
+if __name__ == "__main__":
+    analyze_videos()
+
+    for filename in os.listdir("results/has_fish/"):
+        video_path = os.path.join("results/has_fish/", filename)
+        run_video_tracker(video_path)
+>>>>>>> c292ee1 (Structured some deepsort functionality back into deepsort_tracker, and tried to make bounding boxes more accurate.)
