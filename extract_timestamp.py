@@ -11,7 +11,7 @@ import re
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 def parse_timestamp(text):
-    """Parse timestamp from OCR text."""
+    """Parse timestamp from OCR text with validation and common OCR error correction."""
     if not text:
         return None
     
@@ -19,8 +19,11 @@ def parse_timestamp(text):
     text = text.replace(' ', '')
     
     # Try regex patterns - more flexible to match the OCR output
+    # Extended patterns to handle OCR errors like extra digits
     patterns = [
+        r'(\d{4})[/\-](\d{2})[/\-](\d{2})(\d{2}):(\d{2,3}):(\d{2})',  # Allow 2-3 digits for minutes (OCR errors)
         r'(\d{4})[/\-](\d{2})[/\-](\d{2})(\d{2}):(\d{2}):(\d{2})',  # No space between date/time
+        r'(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})\s*(\d{1,2}):(\d{2,3}):(\d{2})',  # Allow 2-3 digits for minutes
         r'(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})\s*(\d{1,2}):(\d{2}):(\d{2})',
         r'(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})\s*(\d{1,2}):(\d{2})',
     ]
@@ -28,14 +31,51 @@ def parse_timestamp(text):
     for pattern in patterns:
         match = re.search(pattern, text)
         if match:
-            # Format properly: YYYY/MM/DD HH:MM:SS
             groups = match.groups()
-            if len(groups) == 6:
-                # Has date and time with seconds
-                return f"{groups[0]}/{groups[1].zfill(2)}/{groups[2].zfill(2)} {groups[3].zfill(2)}:{groups[4]}:{groups[5]}"
-            elif len(groups) == 5:
-                # Has date and time without seconds
-                return f"{groups[0]}/{groups[1].zfill(2)}/{groups[2].zfill(2)} {groups[3].zfill(2)}:{groups[4]}"
+            
+            # Parse into components
+            year = groups[0]
+            month = int(groups[1])
+            day = int(groups[2])
+            hour = int(groups[3])
+            minute = int(groups[4])
+            second = int(groups[5]) if len(groups) == 6 else 0
+            
+            # Fix common OCR errors in minutes
+            # Handle 3-digit minutes (e.g., 688 -> 58)
+            if minute >= 100:
+                # Extract the last two digits and check if reasonable
+                # 688 -> take middle two: 68 -> 58
+                minute_str = str(minute)
+                if len(minute_str) == 3:
+                    # Try middle two digits
+                    minute = int(minute_str[0:2])
+                    
+            # Handle 2-digit minute errors (68 -> 58, 69 -> 59, etc.)
+            if minute >= 60:
+                # Common OCR mistake: 5 read as 6
+                if 60 <= minute <= 69:
+                    minute = minute - 10
+                # Common OCR mistake: 4 read as 9  
+                elif 90 <= minute <= 99:
+                    minute = minute - 50
+            
+            # Validate ranges
+            if not (2020 <= int(year) <= 2030):
+                continue
+            if not (1 <= month <= 12):
+                continue
+            if not (1 <= day <= 31):
+                continue
+            if not (0 <= hour <= 23):
+                continue
+            if not (0 <= minute <= 59):
+                continue
+            if not (0 <= second <= 59):
+                continue
+            
+            # Format properly: YYYY/MM/DD HH:MM:SS
+            return f"{year}/{month:02d}/{day:02d} {hour:02d}:{minute:02d}:{second:02d}"
     
     return None
 
