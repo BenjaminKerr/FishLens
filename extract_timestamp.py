@@ -1,8 +1,9 @@
-"""
-Module for extracting timestamps from video frames using OCR.
-Author: Aleks
-"""
-
+# ****************************************************************
+# File: extract_timestamp.py
+# Description: Module for extracting timestamps from video frames using OCR.
+# Author: Aleksen Thayer
+# Notes: N/A
+# ****************************************************************
 import cv2
 import numpy as np
 import pytesseract
@@ -10,8 +11,12 @@ import re
 
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
+
+# ****************************************************************
+# Function: parse_timestamp
+# Description: Parse timestamp from OCR text with validation and common OCR error correction.
+# Notes: N/A
 def parse_timestamp(text):
-    """Parse timestamp from OCR text with validation and common OCR error correction."""
     if not text:
         return None
     
@@ -79,12 +84,11 @@ def parse_timestamp(text):
     
     return None
 
+# ****************************************************************
+# Function: extract_timestamp_from_frame
+# Description: Extract timestamp from bottom-left corner of video frame.
+# Notes: N/A
 def extract_timestamp_from_frame(frame, debug=False):
-    """
-    Extract timestamp from bottom-left corner of video frame.
-    Format: YYYY/MM/DD HH:MM:SS (white text on dark background)
-    Example: 2025/10/08 23:31:11
-    """
     if frame is None or frame.size == 0:
         return None
     
@@ -111,8 +115,6 @@ def extract_timestamp_from_frame(frame, debug=False):
         kernel = np.ones((2, 2), np.uint8)
         processed = cv2.dilate(thresh, kernel, iterations=1)
         
-        if debug:
-            cv2.imwrite("debug_timestamp_processed.jpg", processed)
         
         # OCR configuration optimized for single-line timestamps
         # Whitelist only characters that appear in timestamps
@@ -132,7 +134,7 @@ def extract_timestamp_from_frame(frame, debug=False):
         timestamp = parse_timestamp(text)
         
         if timestamp and debug:
-            print(f"  ✓ Parsed timestamp: {timestamp}")
+            print(f"  Parsed timestamp: {timestamp}")
         
         return timestamp
         

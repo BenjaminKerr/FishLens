@@ -11,7 +11,6 @@ from fileinput import filename
 import os
 import csv
 import cv2
-import os
 import numpy as np
 from ultralytics import YOLO
 import shutil
@@ -32,12 +31,11 @@ from extract_timestamp import extract_timestamp_from_frame, parse_timestamp
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Update this path if Tesseract is installed elsewhere
 
 
-<<<<<<< HEAD
 def check_tesseract():
     """Verify Tesseract is installed and accessible."""
     try:
         version = pytesseract.get_tesseract_version()
-        print(f"✓ Tesseract OCR detected: v{version}")
+        print(f"Tesseract OCR detected: v{version}")
         return True
     except Exception as e:
         print(f"    WARNING: Tesseract OCR not found or not configured")
@@ -172,20 +170,7 @@ def enhance_image(crop):
     
     return crop
 
-# ****************************************************************
-# Note: extract_timestamp_from_frame and parse_timestamp functions
-# are now imported from extract_timestamp.py module
-# ****************************************************************
-=======
-# Initialize YOLO and DeepSort
-detector = YoloDetector(weights_path="YOLO/yolov8n.pt")
-tracker = DeepSortTracker()
 
-# Parameters
-HISTORY_LENGTH = 5        # number of previous positions to smooth direction
-DIRECTION_THRESHOLD = 5   # minimum pixel movement to count as direction change
-
->>>>>>> c292ee1 (Structured some deepsort functionality back into deepsort_tracker, and tried to make bounding boxes more accurate.)
 
 # ****************************************************************
 # Function: run_video_tracker
@@ -203,7 +188,6 @@ def run_video_tracker(video_path):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print(f"Error: Could not open video: {video_path}")
-<<<<<<< HEAD
         return []
     vidData.v_fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
     ret, frame = cap.read()
@@ -230,81 +214,13 @@ def run_video_tracker(video_path):
         # Increment frame index and read next frame
         vidData.v_frame_index += 1
         vidData.v_total_frames += 1
-=======
-        return
-
-    print(f"Tracking video: {video_path}")
-
-    while True:
->>>>>>> c292ee1 (Structured some deepsort functionality back into deepsort_tracker, and tried to make bounding boxes more accurate.)
         ret, frame = cap.read()
 
-<<<<<<< HEAD
     # Finalize forced tracks (detections that were still active at the end of the video)
     finalize_tracks(frameData, vidData, termination_reason="forced")
-=======
-        h, w, _ = frame.shape
-
-        # 1. ---- YOLO DETECTION ----
-        detections = detector.detect(frame)  
-        # detections = [x1, y1, x2, y2, conf, cls]
-
-        # clamp and ensure proper format
-        cleaned_dets = []
-        for det in detections:
-            x1, y1, x2, y2, conf, cls_id = det
-
-            x1 = max(0, min(int(x1), w - 1))
-            x2 = max(0, min(int(x2), w - 1))
-            y1 = max(0, min(int(y1), h - 1))
-            y2 = max(0, min(int(y2), h - 1))
-
-            # Optional: filter tiny boxes to reduce duplicates
-            if (x2 - x1) * (y2 - y1) < 100:  # adjust 100 to your min fish size
-                continue
-
-            cleaned_dets.append([x1, y1, x2, y2, float(conf), int(cls_id)])
-
-        # 2. ---- UPDATE DEEPSORT ----
-        tracks = tracker.update(cleaned_dets, frame)
-
-        # 3. ---- DRAW TRACKS ----
-        for track in tracks:
-            track_id = track["track_id"]
-            x1, y1, x2, y2 = track["bbox"]
-
-            # --- update track position history ---
-            x_center = int((x1 + x2) / 2)
-            y_center = int((y1 + y2) / 2)
-            if "positions" not in track:
-                track["positions"] = []
-                track["previous_direction"] = "downstream"  # default
-
-            track["positions"].append((x_center, y_center))
-            if len(track["positions"]) > HISTORY_LENGTH:
-                track["positions"].pop(0)
-
-            # --- calculate smoothed direction ---
-            direction = track["direction"] 
-
-            # Draw bounding box
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-            # Label
-            label = f"ID:{track_id} {direction}"
-            cv2.putText(frame, label, (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5, (0, 255, 0), 2)
-
-        # 4. ---- SHOW FRAME ----
-        cv2.imshow("Fish Tracker", frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
->>>>>>> c292ee1 (Structured some deepsort functionality back into deepsort_tracker, and tried to make bounding boxes more accurate.)
 
     cap.release()
 
-<<<<<<< HEAD
     # Skip export if fish was not detected in video
     if not vidData.v_found_fish:
         no_fish_found(video_path, vidData.v_filename)
@@ -628,12 +544,3 @@ def get_image_name() -> str:
     return images[0].name
 
 main()
-=======
-
-if __name__ == "__main__":
-    analyze_videos()
-
-    for filename in os.listdir("results/has_fish/"):
-        video_path = os.path.join("results/has_fish/", filename)
-        run_video_tracker(video_path)
->>>>>>> c292ee1 (Structured some deepsort functionality back into deepsort_tracker, and tried to make bounding boxes more accurate.)
