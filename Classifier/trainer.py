@@ -27,25 +27,25 @@ TRAIN_DIR = os.path.join(BASE_DIR, 'data', 'train')
 
 # Data Constants
 SHEAR = 0.2 # % of total width to randomly shear the image
-ZOOM = 0.3 # % of total size to randomly zoom the image
-BRIGHTNESS = [0.5, 1.5] # Range for random brightness adjustment (50% darker to 50% brighter)
-WIDTH_SHIFT = 0.1 # % of total width to randomly shift the image left and right
-HEIGHT_SHIFT = 0.1 # % of total height to randomly shift the image up and down
-RANDOM_BRIGHTNESS = 0.5 # Maximum brightness adjustment factor (50% darker to 50% brighter)
+ZOOM = 0.2 # % of total size to randomly zoom the image
+WIDTH_SHIFT = 0.12 # % of total width to randomly shift the image left and right
+HEIGHT_SHIFT = 0.12 # % of total height to randomly shift the image up and down
+RANDOM_BRIGHTNESS = 0.4 # Maximum brightness adjustment factor (40% darker to 40% brighter)
+RANDOM_CONTRAST = 0.1 # Maximum contrast adjustment factor (10% less to 10% more contrast)
 VALIDATION_SPLIT = 0.15 # % of data to use for validation
 IMAGE_SIZE = 150 # in pixels
 BATCH_SIZE = 8 # Number of images to process in a batch
-EPOCHS = 30 # Number of times to iterate over the entire dataset
+EPOCHS = 40 # Number of times to iterate over the entire dataset
 RANDOM_SEED = 42 # Random seed for reproducibility of shuffling and train/validation split
 
 # Model Constants
 # Dropout: regularization technique that randomly sets a fraction of input units to 0 during training to prevent overfitting.
-#   **Keep between 0.4-0.6
+#   **Keep between 0.5-0.7
 # Learning rate: hyperparameter that controls how much to change the model in response to estimated error.
-#   **Keep between 1e-4 and 5e-5
+#   **Keep between 1e-4 and 5e-5 (1*10^-4 and 5*10^-5)
 # Patience: number of epochs with no improvement after which training will be stopped.
 #   **Keep between 10 and 20
-DROPOUT_RATE = 0.5
+DROPOUT_RATE = 0.6
 LEARNING_RATE = 5e-5
 PATIENCE = 15
 
@@ -69,6 +69,7 @@ augmentation = Sequential([
     layers.RandomZoom(ZOOM),
     layers.RandomTranslation(HEIGHT_SHIFT, WIDTH_SHIFT),
     layers.RandomBrightness(RANDOM_BRIGHTNESS),
+    layers.RandomContrast(RANDOM_CONTRAST),
 ], name="data_augmentation")
 
 # ******************************
