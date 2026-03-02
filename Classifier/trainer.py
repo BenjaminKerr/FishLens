@@ -10,169 +10,244 @@
 # Notes: At time of writing, needs python version 3.12 as tensorflow does not support python 3.13+
 # ****************************************************************
 
-from tensorflow.keras.preprocessing.image import ImageDataGenerator # type : ignore
-from keras.models import Sequential
-from keras.layers import BatchNormalization, Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+import tensorflow as tf
+from keras import layers, Sequential, callbacks
 from keras.optimizers import Adam
-from keras.callbacks import EarlyStopping
 import os
 
-# This is the folder where the script lives
-# Model will be saved at the project root
+# ========================================================================
+# CONFIGURATION AND CONSTANTS
+# ========================================================================
+
+# File paths and directories
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(BASE_DIR)
 EXPORT_PATH = os.path.join(PARENT_DIR, 'fish_classifier_model.h5')
 TRAIN_DIR = os.path.join(BASE_DIR, 'data', 'train')
 
-# Data Constants --
+# Data Constants
 SHEAR = 0.2 # % of total width to randomly shear the image
 ZOOM = 0.2 # % of total size to randomly zoom the image
-BRIGHTNESS = [0.5, 1.5] # Range for random brightness adjustment (50% darker to 50% brighter)
-WIDTH_SHIFT = 0.1 # % of total width to randomly shift the image left and right
-HEIGHT_SHIFT = 0.1 # % of total height to randomly shift the image up and down
-VALIDATION_SPLIT = 0.2 # % of data to use for validation
+WIDTH_SHIFT = 0.12 # % of total width to randomly shift the image left and right
+HEIGHT_SHIFT = 0.12 # % of total height to randomly shift the image up and down
+RANDOM_BRIGHTNESS = 0.4 # Maximum brightness adjustment factor (40% darker to 40% brighter)
+RANDOM_CONTRAST = 0.1 # Maximum contrast adjustment factor (10% less to 10% more contrast)
+VALIDATION_SPLIT = 0.15 # % of data to use for validation
 IMAGE_SIZE = 150 # in pixels
-BATCH_SIZE = 32 # Number of images to process in a batch
-EPOCHS = 30 # Number of times to iterate over the entire dataset
+BATCH_SIZE = 8 # Number of images to process in a batch
+EPOCHS = 40 # Number of times to iterate over the entire dataset
+RANDOM_SEED = 42 # Random seed for reproducibility of shuffling and train/validation split
 
-# Model Constants --
-# Dropout is a regularization technique that randomly sets a fraction of the input units to 0 during training to prevent overfitting.
-#   **Keep between 0.3-0.5
-# Learning rate is a hyperparameter that controls how much to change the model in response to the estimated error each time the model weights are updated.
-#   **Keep between 1e-3 and 1e-5
-# Patience is the number of epochs with no improvement after which training will be stopped. This is used in EarlyStopping to prevent overfitting by stopping training when the validation loss stops improving.
-#   **Keep between 5 and 10
-DROPOUT_RATE = 0.4
-LEARNING_RATE = 1e-4
-PATIENCE = 7
+# Model Constants
+# Dropout: regularization technique that randomly sets a fraction of input units to 0 during training to prevent overfitting.
+#   **Keep between 0.5-0.7
+# Learning rate: hyperparameter that controls how much to change the model in response to estimated error.
+#   **Keep between 1e-4 and 5e-5 (1*10^-4 and 5*10^-5)
+# Patience: number of epochs with no improvement after which training will be stopped.
+#   **Keep between 10 and 20
+DROPOUT_RATE = 0.6
+LEARNING_RATE = 5e-5
+PATIENCE = 15
 
-# Add EarlyStopping to stop training when validation loss stops improving
-EARLYSTOP = EarlyStopping(monitor='val_loss', patience=PATIENCE, restore_best_weights=True)
+# ========================================================================
+# DATA AUGMENTATION
+# ========================================================================
 
 # ******************************
-# Function: ImageDataGenerator
-# Description: Creates a generator for loading and augmenting images for training and validation.
-#   This function applies various transformations to the images to increase the diversity of the training data.
+# Function: Data Augmentation Layers
+# Description: Creates augmentation transformations to be applied during training.
+#   These layers apply various transformations to images to increase training data diversity.
+# Transformations applied:
+#   RandomFlip        - Randomly flips images horizontally
+#   RandomRotation    - Randomly rotates images (shear range)
+#   RandomZoom        - Randomly zooms images
+#   RandomTranslation - Randomly shifts images left/right and up/down
+#   RandomBrightness  - Randomly adjusts brightness
+augmentation = Sequential([
+    layers.RandomFlip("horizontal"),
+    layers.RandomRotation(SHEAR),
+    layers.RandomZoom(ZOOM),
+    layers.RandomTranslation(HEIGHT_SHIFT, WIDTH_SHIFT),
+    layers.RandomBrightness(RANDOM_BRIGHTNESS),
+    layers.RandomContrast(RANDOM_CONTRAST),
+], name="data_augmentation")
+
+# ******************************
+# Function: augment_data
+# Description: Applies the defined augmentation transformations to a batch of images and labels.
 # Input:
-#       rescale             - Rescales pixel values to the range [0, 1] instead of [0, 255]
-#       shear_range         - Randomly shears the image by a fraction of the total width
-#       zoom_range          - Randomly zooms the image by a fraction of the total size
-#       brightness_range    - Randomly adjusts the brightness of the image within the specified range (e.g., 50% darker to 50% brighter)
-#       width_shift_range   - Randomly shifts the image left and right by a fraction of the total width
-#       height_shift_range  - Randomly shifts the image up and down by a fraction of the total height
-#       horizontal_flip     - Randomly flips the image horizontally
-#       validation_split    - Reserves a portion of the training data for validation
-# Output: A generator that can be used to load and augment images for training and validation
-train_datagen = ImageDataGenerator(
-    rescale=1./255,
-    shear_range=SHEAR,
-    zoom_range=ZOOM,
-    brightness_range=BRIGHTNESS,
-    width_shift_range=WIDTH_SHIFT,
-    height_shift_range=HEIGHT_SHIFT,
-    horizontal_flip=True,
-    validation_split=VALIDATION_SPLIT
-)
+#   image - A batch of images to be augmented
+#   label - Corresponding labels for the images
+# Output: Augmented image batch with original labels
+def augment_data(image, label):
+    """Apply data augmentation transformations to training images."""
+    return augmentation(image, training=True), label
+
+# ========================================================================
+# DATA LOADING
+# ========================================================================
 
 # ******************************
-# Function: train_generator
-# Description: Loads Training Data from the specified directory using the ImageDataGenerator.
-# Inputs:
-#   TRAIN_DIR   - The directory where the training images are stored, organized in subfolders for each class.
-#   target_size - Resizes all images to the specified dimensions (e.g., 150x150 pixels).
-#   batch_size  - The number of images to process in a batch (e.g., 32).
-#   class_mode  - Specifies the type of label arrays that are returned (e.g., 'categorical' for multi-class classification).
-#   subset      - Specifies that this generator is for the training subset of the data.
-train_generator = train_datagen.flow_from_directory(
+# Function: Load Training Dataset
+# Description: Loads training images from directory using tf.keras.utils.image_dataset_from_directory.
+#   This is the modern approach replacing legacy ImageDataGenerator.
+# Returns a tf.data.Dataset for efficient pipeline processing
+# Input:
+#   TRAIN_DIR         - Directory where training images are stored in class subfolders
+#   image_size        - Resizes all images to the specified dimensions (e.g., 150x150 pixels)
+#   batch_size        - Number of images to process in a batch
+#   validation_split  - Reserves a portion of training data for validation
+#   subset            - Specifies this is the training subset
+#   seed              - Random seed for reproducible shuffling
+train_dataset = tf.keras.utils.image_dataset_from_directory(
     TRAIN_DIR,
-    target_size=(IMAGE_SIZE, IMAGE_SIZE),
+    labels='inferred',
+    label_mode='categorical',
+    image_size=(IMAGE_SIZE, IMAGE_SIZE),
     batch_size=BATCH_SIZE,
-    class_mode='categorical',
-    subset='training'
+    validation_split=VALIDATION_SPLIT,
+    subset='training',
+    seed=RANDOM_SEED
 )
 
 # ******************************
-# Function: validation_generator
-# Description: Loads Validation Data from the specified directory using the ImageDataGenerator.
-# Inputs:
-#   TRAIN_DIR   - The directory where the training images are stored, organized in subfolders for each class.
-#   target_size - Resizes all images to the specified dimensions (e.g., 150x150 pixels).
-#   batch_size  - The number of images to process in a batch (e.g., 32).
-#   class_mode  - Specifies the type of label arrays that are returned (e.g., 'categorical' for multi-class classification).
-#   subset      - Specifies that this generator is for the validation subset of the data.
-validation_generator = train_datagen.flow_from_directory(
+# Function: Load Validation Dataset
+# Description: Loads validation images from directory using tf.keras.utils.image_dataset_from_directory.
+#   This is the modern approach replacing legacy ImageDataGenerator.
+# Returns a tf.data.Dataset for efficient pipeline processing
+# Input:
+#   TRAIN_DIR         - Directory where training images are stored in class subfolders
+#   image_size        - Resizes all images to the specified dimensions (e.g., 150x150 pixels)
+#   batch_size        - Number of images to process in a batch
+#   validation_split  - Reserves a portion of training data for validation
+#   subset            - Specifies this is the validation subset
+#   seed              - Random seed for reproducible shuffling
+validation_dataset = tf.keras.utils.image_dataset_from_directory(
     TRAIN_DIR,
-    target_size=(IMAGE_SIZE, IMAGE_SIZE),
+    labels='inferred',
+    label_mode='categorical',
+    image_size=(IMAGE_SIZE, IMAGE_SIZE),
     batch_size=BATCH_SIZE,
-    class_mode='categorical',
-    subset='validation'
+    validation_split=VALIDATION_SPLIT,
+    subset='validation',
+    seed=RANDOM_SEED
 )
 
-# Prints class names "{Chinook : 0}, {Omykiss : 1}"
-# The numbers are just locations in the array of output classes, not actual labels
-print(train_generator.class_indices)
-
-# Get the number of output classes from the generator
-num_classes = train_generator.num_classes
+# ========================================================================
+# DATA PROCESSING
+# ========================================================================
 
 # ******************************
-# Function: model = Sequential
+# Function: Extract Class Metadata
+# Description: Extracts class names and counts from the dataset.
+# Extract class information
+class_names = train_dataset.class_names
+num_classes = len(class_names)
+print(f"Class indices: {dict(enumerate(class_names))}")
+
+# ******************************
+# Function: Create Normalization Layer
+# Description: Rescales pixel values from [0, 255] to [0, 1] range for better model training.
+# Create normalization layer
+normalization_layer = layers.Rescaling(1./255)
+
+# Apply augmentation to training data only
+train_dataset = train_dataset.map(augment_data)
+
+# Apply normalization to both datasets
+train_dataset = train_dataset.map(lambda x, y: (normalization_layer(x), y))
+validation_dataset = validation_dataset.map(lambda x, y: (normalization_layer(x), y))
+
+# Prefetch datasets for optimal performance
+train_dataset = train_dataset.prefetch(tf.data.AUTOTUNE)
+validation_dataset = validation_dataset.prefetch(tf.data.AUTOTUNE)
+
+# ========================================================================
+# MODEL DEFINITION
+# ========================================================================
+
+# ******************************
+# Function: Build CNN Model
 # Description: Creates a Convolutional Neural Network (CNN) model using Keras Sequential API.
-# Inputs:
-#   Conv2D          - Convolutional layer that applies 32 filters of size 3x3 with ReLU activation function to the input images.
-#   MaxPooling2D    - Pooling layer that reduces the spatial dimensions of the feature maps by taking the maximum value in a 2x2 window.
-#   Flatten         - Flattens the 2D feature maps into a 1D array to be fed into the fully connected layers.
-#   Dense           - Fully connected layer with 256 neurons and ReLU activation function, followed by an output layer with a number of neurons equal to the number of classes and softmax activation function for multi-class classification.
-#   Dropout         - Regularization layer that randomly sets 50% of the input units to 0 during training to prevent overfitting.
+# Architecture Details:
+#   Conv2D        - Convolutional layers that apply filters to extract features from images
+#   BatchNorm     - Normalizes layer inputs to improve training stability
+#   MaxPooling2D  - Reduces spatial dimensions by taking maximum value in a window
+#   Flatten       - Converts 2D feature maps into a 1D array for dense layers
+#   Dense         - Fully connected layers for classification
+#   Dropout       - Regularization technique to prevent overfitting
 model = Sequential([
-    Conv2D(32, (3, 3), activation='relu', input_shape=(IMAGE_SIZE, IMAGE_SIZE, 3)),
-    BatchNormalization(),
-    MaxPooling2D(2, 2),
+    # First convolutional block
+    layers.Conv2D(32, (3, 3), activation='relu', input_shape=(IMAGE_SIZE, IMAGE_SIZE, 3)),
+    layers.BatchNormalization(),
+    layers.MaxPooling2D((2, 2)),
     
-    Conv2D(64, (3, 3), activation='relu'),
-    BatchNormalization(),
-    MaxPooling2D(2, 2),
-
-    Conv2D(128, (3, 3), activation='relu'),
-    BatchNormalization(),
-    MaxPooling2D(2, 2),
+    # Second convolutional block
+    layers.Conv2D(64, (3, 3), activation='relu'),
+    layers.BatchNormalization(),
+    layers.MaxPooling2D((2, 2)),
     
-    Flatten(),
-    Dense(256, activation='relu'),
-    Dropout(DROPOUT_RATE),
-    Dense(num_classes, activation='softmax') 
+    # Dense layers
+    layers.Flatten(),
+    layers.Dense(256, activation='relu'),
+    layers.Dropout(DROPOUT_RATE),
+    layers.Dense(num_classes, activation='softmax') 
 ])
 
+# ========================================================================
+# MODEL COMPILATION
+# ========================================================================
+
 # ******************************
-# Function: model.compile
-# Description: Defines the optimizer, loss function, and evaluation metrics for the model.
-# Inputs:
-#   optimizer   - 'Adam' is an industry-standard optimizer that is known for being fast and reliable for training deep learning models.
-#   loss        - 'categorical_crossentropy' is appropriate for multi-class classification
-#   metrics     - 'accuracy' is a common metric for classification tasks that measures the proportion of correctly classified samples.
+# Function: Compile Model
+# Description: Configures the model for training by specifying optimizer, loss function, and metrics.
+# Settings:
+#   optimizer - 'Adam' is an industry-standard optimizer known for being fast and reliable
+#   loss      - 'categorical_crossentropy' for multi-class classification
+#   metrics   - 'accuracy' measures the proportion of correctly classified samples
 model.compile(
     optimizer=Adam(learning_rate=LEARNING_RATE),
     loss='categorical_crossentropy',
     metrics=['accuracy']
 )
 
+# ========================================================================
+# MODEL TRAINING
+# ========================================================================
+
 # ******************************
-# Function: model.fit
-# Description: Fit the model to the training data using the generators for both training and validation.
-# Inputs:
-#   train_generator        - The generator that provides batches of training data with augmentation.
-#   epochs                 - The number of times to iterate over the training data arrays.
-#   validation_data        - The generator that provides batches of validation data for evaluating the model's performance after each epoch.
-#   callbacks              - List of callbacks to apply during training (e.g., EarlyStopping).
-history = model.fit(
-    train_generator,
-    epochs=EPOCHS,
-    validation_data=validation_generator,
-    callbacks=[EARLYSTOP]
+# Function: Configure Training Callbacks
+# Description: Sets up early stopping to prevent overfitting by monitoring validation loss.
+# Create early stopping callback to prevent overfitting
+early_stop = callbacks.EarlyStopping(
+    monitor='val_loss',
+    patience=PATIENCE,
+    restore_best_weights=True
 )
 
-# Defines the saved model file for use
-model.save(EXPORT_PATH)
+# ******************************
+# Function: Train Model
+# Description: Fits the model to training data using the tf.data.Dataset pipeline.
+# Inputs:
+#   train_dataset      - tf.data.Dataset providing batches of training data with augmentation
+#   epochs             - Number of complete passes through the training dataset
+#   validation_data    - tf.data.Dataset for evaluating model performance after each epoch
+#   callbacks          - List of callbacks including EarlyStopping to prevent overfitting
+# Note: tf.data.Dataset is more efficient than legacy generators and supports eager execution.
+# Train the model
+history = model.fit(
+    train_dataset,
+    epochs=EPOCHS,
+    validation_data=validation_dataset,
+    callbacks=[early_stop]
+)
 
-# Only runs as a confirmation that the model was saved
+# ========================================================================
+# MODEL SAVING
+# ========================================================================
+
+# ******************************
+# Function: Save Trained Model
+# Description: Saves the trained model to disk in HDF5 format for later use.
+model.save(EXPORT_PATH)
 print("Model saved successfully as fish_classifier_model.h5")
