@@ -148,5 +148,11 @@ namespace FishLens_App
             this.Close();
 
         }
+        private void ForgotPassword_Click(object sender, MouseButtonEventArgs e)
+        {
+            ForgotPasswordWindow resetWindow = new ForgotPasswordWindow();
+            resetWindow.Show();
+        }
+
     }
 }
