@@ -130,7 +130,6 @@ namespace FishLens_App
             }
         }
 
-        // STEP 2: User enters the code and new password
         private void ResetPassword_Click(object sender, RoutedEventArgs e)
         {
             string code = CodeBox.Text.Trim();
@@ -218,6 +217,13 @@ namespace FishLens_App
 
 
         }
+        private void BackToSignIn_Click(object sender, MouseButtonEventArgs e)
+        {
+            SigninPage signin = new SigninPage();
+            signin.Show();
+            this.Close();
+        }
+
     }
 
 }

@@ -143,7 +143,7 @@ namespace FishLens_App
         private void SignUp_Click(object sender, MouseButtonEventArgs e)
         {
 
-           SignUpPage sign_up_page = new SignUpPage();
+           SignUpPage sign_up_page = new SignUpPage();   
             sign_up_page.Show();
             this.Close();
 
@@ -151,7 +151,9 @@ namespace FishLens_App
         private void ForgotPassword_Click(object sender, MouseButtonEventArgs e)
         {
             ForgotPasswordWindow resetWindow = new ForgotPasswordWindow();
+           
             resetWindow.Show();
+            this.Close();
         }
 
     }
