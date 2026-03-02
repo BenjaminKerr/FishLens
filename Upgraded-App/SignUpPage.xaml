@@ -62,6 +62,16 @@
                              Padding="8"
                              FontSize="{DynamicResource BaseFontSize}"
                              Margin="0,5,0,15"/>
+                    <!-- Email -->
+                    <TextBlock Text="Email"
+           FontSize="{DynamicResource BaseFontSize}"
+           Foreground="{DynamicResource SecondaryText}"/>
+
+                    <TextBox x:Name="NewEmail"
+         Height="36"
+         Padding="8"
+         FontSize="{DynamicResource BaseFontSize}"
+         Margin="0,5,0,15"/>
 
                     <!-- Username -->
                     <TextBlock Text="Username"

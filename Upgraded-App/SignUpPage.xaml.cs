@@ -43,14 +43,21 @@ namespace FishLens_App
             ErrorMessage.Visibility = Visibility.Collapsed;
 
             string orgName = OrgName.Text.Trim();
+            string email = NewEmail.Text.Trim();
             string username = NewUsername.Text.Trim();
             string password = NewPassword.Password;
             string confirmPassword = ConfirmPassword.Password;
 
             string error = null;
 
+
+            //TODO: Make this a helper function
             if (string.IsNullOrWhiteSpace(orgName))
                 error = "Please enter an organization name.";
+            else if (string.IsNullOrWhiteSpace(email))
+                error = "Please enter an email address.";
+            else if (!email.Contains("@") || !email.Contains("."))
+                error = "Please enter a valid email address.";
             else if (string.IsNullOrWhiteSpace(username))
                 error = "Please enter a username.";
             else if (username.Length < 6)
@@ -61,9 +68,6 @@ namespace FishLens_App
                 error = "Password must be at least 6 characters.";
             else if (password != confirmPassword)
                 error = "Passwords do not match.";
-
-
-
 
             if (error != null)
             {
@@ -109,7 +113,21 @@ namespace FishLens_App
                             }
                         }
 
-                        // Call the stored procedure
+                        // Check if email already exists
+                        if (canProceed)
+                        {
+                            using (SqlCommand checkCmd = new SqlCommand(
+                                "SELECT COUNT(*) FROM [kaharra].[FishLensUsers] WHERE Email = @email", conn))
+                            {
+                                checkCmd.Parameters.AddWithValue("@email", email);
+                                if (Convert.ToInt32(checkCmd.ExecuteScalar()) > 0)
+                                {
+                                    ShowError("That email is already in use.");
+                                    canProceed = false;
+                                }
+                            }
+                        }
+
                         if (canProceed)
                         {
                             using (SqlCommand cmd = new SqlCommand("kaharra.CreateOrganization", conn))
@@ -120,6 +138,7 @@ namespace FishLens_App
                                 cmd.Parameters.AddWithValue("@pUser", username);
                                 cmd.Parameters.AddWithValue("@pPassword", password);
                                 cmd.Parameters.AddWithValue("@pRoleId", AdminRoleId);
+                                cmd.Parameters.AddWithValue("@pEmail", email);
 
                                 var orgIdParam = new SqlParameter("@pOrgId", System.Data.SqlDbType.Int)
                                 {
@@ -160,6 +179,7 @@ namespace FishLens_App
                 }
             }
         }
+
 
 
 

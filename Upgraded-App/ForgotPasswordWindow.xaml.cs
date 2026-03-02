@@ -136,78 +136,87 @@ namespace FishLens_App
             string code = CodeBox.Text.Trim();
             string newPassword = NewPasswordBox.Password;
             string confirmPassword = ConfirmPasswordBox.Password;
+            bool pass = true;
+            string message = "";
 
             if (newPassword != confirmPassword)
             {
-                MessageBox.Show("Passwords do not match.");
-                return;
+                message = "Passwords do not match.";
+                pass = false;
             }
-
             if (string.IsNullOrEmpty(newPassword))
             {
-                MessageBox.Show("Password cannot be empty.");
-                return;
+                message = "Password cannot be empty.";
+                pass = false;
             }
-
-            try
-            {
-                using (SqlConnection conn = new SqlConnection(connectionString))
+                if (pass == true)
                 {
-                    conn.Open();
+                    try
+                    {
+                        using (SqlConnection conn = new SqlConnection(connectionString))
+                        {
+                            conn.Open();
 
-                    // Verify the code is valid and not expired
-                    string checkSql = @"
+                            // Verify the code is valid and not expired
+                            string checkSql = @"
                     SELECT Id FROM [kaharra].[PasswordResetTokens]
                     WHERE UserId = @userId 
                       AND Token = @token 
                       AND ExpiresAt > GETDATE() 
                       AND Used = 0";
 
-                    using (SqlCommand cmd = new SqlCommand(checkSql, conn))
-                    {
-                        cmd.Parameters.AddWithValue("@userId", currentUserId);
-                        cmd.Parameters.AddWithValue("@token", code);
+                            using (SqlCommand cmd = new SqlCommand(checkSql, conn))
+                            {
+                                cmd.Parameters.AddWithValue("@userId", currentUserId);
+                                cmd.Parameters.AddWithValue("@token", code);
 
-                        object result = cmd.ExecuteScalar();
+                                object result = cmd.ExecuteScalar();
 
-                        if (result != null)
-                        {
-                            int tokenId = Convert.ToInt32(result);
+                                if (result != null)
+                                {
+                                    int tokenId = Convert.ToInt32(result);
 
-                            // Mark token as used
-                            string updateToken = @"UPDATE [kaharra].[PasswordResetTokens] 
+                                    // Mark token as used
+                                    string updateToken = @"UPDATE [kaharra].[PasswordResetTokens] 
                                                SET Used = 1 WHERE Id = @id";
-                            using (SqlCommand updateCmd = new SqlCommand(updateToken, conn))
-                            {
-                                updateCmd.Parameters.AddWithValue("@id", tokenId);
-                                updateCmd.ExecuteNonQuery();
-                            }
+                                    using (SqlCommand updateCmd = new SqlCommand(updateToken, conn))
+                                    {
+                                        updateCmd.Parameters.AddWithValue("@id", tokenId);
+                                        updateCmd.ExecuteNonQuery();
+                                    }
 
-                            // Reset the password using your stored procedure
-                            using (SqlCommand resetCmd = new SqlCommand(
-                                "kaharra.ResetPassword", conn))
-                            {
-                                resetCmd.CommandType = System.Data.CommandType.StoredProcedure;
-                                resetCmd.Parameters.AddWithValue("@pUserId", currentUserId);
-                                resetCmd.Parameters.AddWithValue("@pNewPassword", newPassword);
-                                resetCmd.ExecuteNonQuery();
-                            }
+                                    // Reset the password using your stored procedure
+                                    using (SqlCommand resetCmd = new SqlCommand(
+                                        "kaharra.ResetPassword", conn))
+                                    {
+                                        resetCmd.CommandType = System.Data.CommandType.StoredProcedure;
+                                        resetCmd.Parameters.AddWithValue("@pUserId", currentUserId);
+                                        resetCmd.Parameters.AddWithValue("@pNewPassword", newPassword);
+                                        resetCmd.ExecuteNonQuery();
+                                    }
 
-                            MessageBox.Show("Password reset successfully! You can now sign in.");
-                            this.Close();
-                        }
-                        else
-                        {
-                            MessageBox.Show("Invalid or expired code. Please try again.");
+                                    MessageBox.Show("Password reset successfully! You can now sign in.");
+                                    this.Close();
+                                }
+                                else
+                                {
+                                    MessageBox.Show("Invalid or expired code. Please try again.");
+                                }
+                            }
                         }
                     }
+                    catch (SqlException ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine("SQL Exception: " + ex.Message);
+                        MessageBox.Show("An error occurred. Please try again.");
+                    }
                 }
-            }
-            catch (SqlException ex)
+            else
             {
-                System.Diagnostics.Debug.WriteLine("SQL Exception: " + ex.Message);
-                MessageBox.Show("An error occurred. Please try again.");
+                MessageBox.Show(message);
             }
+
+
         }
     }
 
