@@ -350,13 +350,13 @@
 
                     </StackPanel>
                 </Border>
-                <TextBlock Text="Manage Users"
+                <TextBlock x:Name="ManageUsersText" Text="Manage Users"
            FontSize="{DynamicResource LargeHeaderFontSize}"
            FontWeight="SemiBold"
            Foreground="{DynamicResource PrimaryText}"
            Margin="0,0,0,15"/>
 
-                <Border Background="{DynamicResource CardBackground}"
+                <Border x:Name="ManageUsersCard" Background="{DynamicResource CardBackground}"
         BorderBrush="{DynamicResource BorderBrush}"
         BorderThickness="1"
         CornerRadius="8"

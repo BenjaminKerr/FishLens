@@ -58,7 +58,13 @@ namespace FishLens_App
             _checkBoxes = (Application.Current as App).CheckBoxes;
             _config = (Application.Current as App).Configuration;
 
+            var app = Application.Current as App;
 
+            if (!app.IsAdmin)
+            {
+                ManageUsersCard.Visibility = Visibility.Collapsed;
+                ManageUsersText.Visibility = Visibility.Collapsed;
+            }
             // Initialize UI from current state / persisted settings
             try
             {

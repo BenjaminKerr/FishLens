@@ -17,6 +17,8 @@ namespace FishLens_App
         public int CurrentRoleId { get; set; }
         public int CurrentOrganizationId { get; set; }
 
+        public bool IsAdmin => CurrentRoleId == 1;
+
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e); // Call the regular startup logic first
