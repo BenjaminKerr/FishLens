@@ -33,6 +33,11 @@ namespace FishLens_App
             InitializeComponent();
         }
 
+        // ****************************************************************
+        // Function: CreateAccount_Click
+        // Description: Handles the create account button being pressed before creating their
+        // account and organization in the database
+        // Notes: N/A
         private void CreateAccount_Click(object sender, RoutedEventArgs e)
         {
             ErrorMessage.Visibility = Visibility.Collapsed;
@@ -164,7 +169,10 @@ namespace FishLens_App
             ErrorMessage.Text = message;
             ErrorMessage.Visibility = Visibility.Visible;
         }
-
+        // ****************************************************************
+        // Function: SignIn_Click
+        // Description: Handle signin button click, takes user to the signin page
+        // Notes: N/A
         private void SignIn_Click(object sender, MouseButtonEventArgs e)
         {
             SigninPage signin = new SigninPage();

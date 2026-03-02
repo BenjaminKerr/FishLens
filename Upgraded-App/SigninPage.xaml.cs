@@ -136,6 +136,10 @@ namespace FishLens_App
             }
         }
 
+        // ****************************************************************
+        // Function: SignUp_Click
+        // Description: Handle signup button click, takes user to the signup page
+        // Notes: N/A
         private void SignUp_Click(object sender, MouseButtonEventArgs e)
         {
 

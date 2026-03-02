@@ -254,7 +254,10 @@ namespace FishLens_App
         }
 
 
-
+        // ****************************************************************
+        // Function: LoadUsers
+        // Description: Loads the users for the Manage users card
+        // Notes: N/A
         private void LoadUsers()
         {
             try
@@ -304,7 +307,11 @@ namespace FishLens_App
             }
         }
 
-
+        // ****************************************************************
+        // Function: UpdateUser
+        // Description: Based on the changes made inside of the manage user section will
+        // apply them to the FishLensUsers database
+        // Notes: N/A
         private bool UpdateUser(int userId, string newUsername, int newRoleId)
         {
             try
@@ -336,6 +343,11 @@ namespace FishLens_App
             }
         }
 
+        // ****************************************************************
+        // Function: SaveUserChanges_Click
+        // Description: Handles the save user changes click and ensures valid input
+        // before calling updateuser
+        // Notes: N/A
         private void SaveUserChanges_Click(object sender, RoutedEventArgs e)
         {
             if (_users == null || _users.Count == 0)
@@ -347,13 +359,21 @@ namespace FishLens_App
             // Find only users that actually changed
             var changedUsers = _users.Where(u =>
             {
+                bool Pass = true;
                 if (string.IsNullOrWhiteSpace(u.Username) || u.role == null)
-                    return false;
+                    Pass = false;
 
                 if (!_originalUserData.TryGetValue(u.Id, out var original))
-                    return false;
+                    Pass = false;
 
-                return u.Username.Trim() != original.Username || u.role.ID != original.RoleId;
+                if (Pass == true)
+                {
+                    return u.Username.Trim() != original.Username || u.role.ID != original.RoleId;
+                }
+                else
+                {
+                    return Pass;
+                }
             }).ToList();
 
             if (changedUsers.Count == 0)
@@ -363,44 +383,46 @@ namespace FishLens_App
                     "Nothing to Save",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
-                return;
-            }
 
-            int updated = 0;
-            var updatedNames = new List<string>();
-
-            foreach (var u in changedUsers)
-            {
-                if (UpdateUser(u.Id, u.Username.Trim(), u.role.ID))
-                {
-                    updated++;
-                    updatedNames.Add(u.Username.Trim());
-                }
-            }
-
-            if (updated > 0)
-            {
-                string names = string.Join(", ", updatedNames);
-                string message = updated == 1
-                    ? $"Successfully updated {names}."
-                    : $"Successfully updated {updated} users: {names}.";
-
-                MessageBox.Show(
-                    message,
-                    "Changes Saved ✓",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
             }
             else
             {
-                MessageBox.Show(
-                    "Something went wrong — no changes were saved. Please try again.",
-                    "Save Failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-            }
+                int updated = 0;
+                var updatedNames = new List<string>();
 
-            LoadUsers();
+                foreach (var u in changedUsers)
+                {
+                    if (UpdateUser(u.Id, u.Username.Trim(), u.role.ID))
+                    {
+                        updated++;
+                        updatedNames.Add(u.Username.Trim());
+                    }
+                }
+
+                if (updated > 0)
+                {
+                    string names = string.Join(", ", updatedNames);
+                    string message = updated == 1
+                        ? $"Successfully updated {names}."
+                        : $"Successfully updated {updated} users: {names}.";
+
+                    MessageBox.Show(
+                        message,
+                        "Changes Saved ✓",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
+                else
+                {
+                    MessageBox.Show(
+                        "Something went wrong — no changes were saved. Please try again.",
+                        "Save Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+
+                LoadUsers();
+            }
         }
 
 
@@ -409,6 +431,10 @@ namespace FishLens_App
             LoadUsers();
         }
 
+        // ****************************************************************
+        // Function: LoadRoles
+        // Description: Loads the roles available from the Roles table
+        // Notes: N/A
         private void LoadRoles()
         {
             try
