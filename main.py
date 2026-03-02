@@ -21,9 +21,9 @@ from collections import Counter
 from pathlib import Path
 import numpy as np
 from keras.models import load_model
+from keras.preprocessing.image import load_img, img_to_array
 from dataclasses import dataclass, field
 from typing import List
-from keras.preprocessing.image import load_img, img_to_array
 
 # Suppress deprecation warning from pkg_resources
 warnings.filterwarnings(
