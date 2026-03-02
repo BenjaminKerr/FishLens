@@ -18,6 +18,7 @@ namespace FishLens_App
         public int CurrentOrganizationId { get; set; }
 
         public bool IsAdmin => CurrentRoleId == 1;
+        public bool IsUser => CurrentRoleId == 2;
 
         protected override void OnStartup(StartupEventArgs e)
         {

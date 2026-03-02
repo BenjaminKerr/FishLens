@@ -145,13 +145,13 @@
                                   Margin="0,0,0,15"/>
                     </StackPanel>
                 </Border>
-                <TextBlock Text="Create User"
+                <TextBlock x:Name="CreateUserText" Text="Create User"
            FontSize="{DynamicResource LargeHeaderFontSize}"
            FontWeight="SemiBold"
            Foreground="{DynamicResource PrimaryText}"
            Margin="0,0,0,15"/>
 
-                <Border Background="{DynamicResource CardBackground}" 
+                <Border x:Name="CreateUserCard" Background="{DynamicResource CardBackground}" 
         BorderBrush="{DynamicResource BorderBrush}" 
         BorderThickness="1" 
         CornerRadius="8"

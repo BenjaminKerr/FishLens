@@ -28,7 +28,7 @@ namespace FishLens_App
     public partial class Settings : Page
     {
         #region Fields
-        private string connectionString = 
+        private string connectionString =
         "server=aura.cset.oit.edu,5433; " +
         "database=kaharra; " +
         "UID=kaharra; " +
@@ -54,28 +54,7 @@ namespace FishLens_App
             _pathResolver = pathresolver ?? throw new ArgumentNullException(nameof(pathresolver));
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
             InitializeComponent();
-            DataContext = this;
-            _checkBoxes = (Application.Current as App).CheckBoxes;
-            _config = (Application.Current as App).Configuration;
-
-            var app = Application.Current as App;
-
-            if (!app.IsAdmin)
-            {
-                ManageUsersCard.Visibility = Visibility.Collapsed;
-                ManageUsersText.Visibility = Visibility.Collapsed;
-            }
-            // Initialize UI from current state / persisted settings
-            try
-            {
-                LoadSettings();
-                LoadRoles();
-                LoadUsers();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to load settings");
-            }
+            LoadAll();
         }
         #endregion
 
@@ -259,7 +238,39 @@ namespace FishLens_App
             return success;
         }
 
+        // ****************************************************************
+        // Function: LoadAll
+        // Description: Function to cleanup code Initializes UI from current state / persisted settings / database values
+        // Notes: N/A
+        private void LoadAll()
+        { 
+            try
+            {
+                DataContext = this;
+                _checkBoxes = (Application.Current as App).CheckBoxes;
+                _config = (Application.Current as App).Configuration;
+                LoadRoles();
+                LoadUsers();
+                LoadPageVisibility();
+                LoadSettings();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to load settings");
+            }
+        }
+        private void LoadPageVisibility()
+        {
+            var app = Application.Current as App;
 
+            if (!app.IsAdmin)
+            {
+                ManageUsersCard.Visibility = Visibility.Collapsed;
+                ManageUsersText.Visibility = Visibility.Collapsed;
+                CreateUserCard.Visibility = Visibility.Collapsed;
+                CreateUserText.Visibility = Visibility.Collapsed;
+            }
+        }
         // ****************************************************************
         // Function: LoadUsers
         // Description: Loads the users for the Manage users card
