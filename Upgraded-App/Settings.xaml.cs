@@ -107,10 +107,8 @@ namespace FishLens_App
                 File.WriteAllText(configPath, updatedJson);
                 App.Settings = settings;
 
-                // Apply certain settings immediately to main window
+                // Apply settings to main window
                 ApplySettingsToMainWindow();
-                // Force theme update for the whole app
-                ThemeHelper.ThemeSwap(_config.HighContrastMode);
 
                 MessageBox.Show("Settings updated.", "Success", MessageBoxButton.OK, MessageBoxImage.None);
             }
@@ -137,8 +135,7 @@ namespace FishLens_App
         {
             try
             {
-                var main = Application.Current.MainWindow as MainWindow;
-                if (main != null)
+                if (Application.Current.MainWindow != null)
                 {
                     // Apply large text setting
                     if (_config.LargeText)
@@ -162,6 +159,8 @@ namespace FishLens_App
                 _logger.LogError(ex, "Failed to apply settings to main window");
                 MessageBox.Show($"Failed to apply theme settings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+
+            ThemeHelper.ThemeSwap(_config.HighContrastMode);
         }
         #endregion
     }
