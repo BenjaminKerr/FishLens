@@ -65,22 +65,15 @@ def parse_timestamp(text):
                 elif 90 <= minute <= 99:
                     minute = minute - 50
             
-            # Validate ranges
-            if not (2020 <= int(year) <= 2030):
-                continue
-            if not (1 <= month <= 12):
-                continue
-            if not (1 <= day <= 31):
-                continue
-            if not (0 <= hour <= 23):
-                continue
-            if not (0 <= minute <= 59):
-                continue
-            if not (0 <= second <= 59):
-                continue
-            
-            # Format properly: YYYY/MM/DD HH:MM:SS
-            return f"{year}/{month:02d}/{day:02d} {hour:02d}:{minute:02d}:{second:02d}"
+            # Validate ranges - return formatted timestamp if all valid
+            if (2020 <= int(year) <= 2030 and
+                1 <= month <= 12 and
+                1 <= day <= 31 and
+                0 <= hour <= 23 and
+                0 <= minute <= 59 and
+                0 <= second <= 59):
+                # Format properly: YYYY/MM/DD HH:MM:SS
+                return f"{year}/{month:02d}/{day:02d} {hour:02d}:{minute:02d}:{second:02d}"
     
     return None
 

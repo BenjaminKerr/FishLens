@@ -30,9 +30,11 @@ from dateutil import parser as date_parser
 from extract_timestamp import extract_timestamp_from_frame, parse_timestamp
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Update this path if Tesseract is installed elsewhere
 
-
+# ****************************************************************
+# Function: check_tesseract
+# Description: Verify Tesseract OCR installation and accessibility.
+# Notes: N/A
 def check_tesseract():
-    """Verify Tesseract is installed and accessible."""
     try:
         version = pytesseract.get_tesseract_version()
         print(f"Tesseract OCR detected: v{version}")
@@ -312,7 +314,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         trackId = obj["trackId"]
         vidData.v_current_track_ids.add(trackId)
 
-        # ✅ Check if this is a NEW track
+        # Check if this is a NEW track
         is_new_track = trackId not in vidData.v_active_tracks
 
         if is_new_track:
@@ -322,16 +324,16 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                 "directions": [],
                 "best_conf": -1.0,
                 "best_crop": None,
-                "video_timestamp": None  # ✅ Will be set below
+                "video_timestamp": None  # Will be set below
             }
             
-            # ✅ Extract timestamp ONCE when track is first created
+            # Extract timestamp ONCE when track is first created
             print(f"  New fish detected (Track {trackId}) at frame {frameData.f_index}")
-            timestamp = extract_timestamp_from_frame(frame, debug=True)
+            timestamp = extract_timestamp_from_frame(frame, False)
             
             if timestamp:
                 vidData.v_active_tracks[trackId]["video_timestamp"] = timestamp
-                print(f"    Timestamp: {timestamp}")
+                #print(f"    Timestamp: {timestamp}")
             else:
                 vidData.v_active_tracks[trackId]["video_timestamp"] = "Not detected"
                 print(f"    Could not extract timestamp")
