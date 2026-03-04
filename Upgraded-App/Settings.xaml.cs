@@ -3,10 +3,12 @@ using FishLens_App.Models;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -25,8 +27,7 @@ namespace FishLens_App
         private readonly IProjectPathResolver _pathResolver;
         private readonly IFileSystemManager _fileSystemManager;
         private readonly ILogger<MainWindow> _logger;
-        private CheckBoxToggle _checkBoxes;
-        private AppConfiguration _config;
+        private UserSettings _config;
         #endregion
 
         #region Constructors
@@ -36,8 +37,7 @@ namespace FishLens_App
             _pathResolver = pathresolver ?? throw new ArgumentNullException(nameof(pathresolver));
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
             InitializeComponent();
-            _checkBoxes = (Application.Current as App).CheckBoxes;
-            _config = (Application.Current as App).Configuration;
+            _config = (UserSettings)App.Settings;
 
             // Initialize UI from current state / persisted settings
             try
@@ -59,27 +59,13 @@ namespace FishLens_App
             confidenceValue.Text = $"{percent}%";
         }
 
-        private void Cancel_Click(object sender, RoutedEventArgs e)
+        private void ToggleOutputMessages(object sender, RoutedEventArgs e)
         {
-            // Try to navigate back if possible, otherwise hide the main frame (return to home)
-            try
-            {
-                if (this.NavigationService != null && this.NavigationService.CanGoBack)
-                {
-                    this.NavigationService.GoBack();
-                    return;
-                }
-
-                var main = Application.Current.MainWindow as MainWindow;
-                if (main != null)
-                {
-                    main.MainFrame.Visibility = Visibility.Collapsed;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Cancel navigation failed");
-            }
+            MessageBox.Show("Not Implemented");
+        }
+        private void ToggleErrorMessages(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show("Not Implemented");
         }
 
         private void SaveSettings_Click(object sender, RoutedEventArgs e)
@@ -89,10 +75,6 @@ namespace FishLens_App
                 // Update configuration in memory
                 _config.ConfidenceThreshold = (confidenceThreshold?.Value ?? 0) / 100.0;
 
-                // Ensure CheckBoxToggle is up to date
-                _checkBoxes.ErrorBox = hideErrors.IsChecked ?? false;
-                _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
-
                 bool highContrast = highContrastMode.IsChecked ?? false;
                 bool largeTxt = largeText.IsChecked ?? false;
 
@@ -101,25 +83,36 @@ namespace FishLens_App
                 _config.HighContrastMode = highContrast;
                 _config.LargeText = largeTxt;
 
-                var settingsObj = new
+                var settings = new UserSettings
                 {
                     ConfidenceThreshold = _config.ConfidenceThreshold,
-                    OutputBox = _checkBoxes.OutputBox,
-                    ErrorBox = _checkBoxes.ErrorBox,
+                    OutputBox = _config.OutputBox,
+                    ErrorBox = _config.ErrorBox,
                     HighContrastMode = _config.HighContrastMode,
                     LargeText = _config.LargeText
                 };
 
                 string projectRoot = _pathResolver.ResolveProjectRoot();
-                string configPath = System.IO.Path.Combine(projectRoot ?? string.Empty, "appsettings.json");
-                var options = new JsonSerializerOptions { WriteIndented = true };
-                File.WriteAllText(configPath, JsonSerializer.Serialize(settingsObj, options));
+                string configPath = System.IO.Path.Combine(projectRoot, "appsettings.json");
+                var json = File.ReadAllText(configPath);
+                var jsonDoc = JsonNode.Parse(json);
 
-                MessageBox.Show("Settings saved.", "Saved", MessageBoxButton.OK, MessageBoxImage.Information);
-                _logger.LogInformation("Settings saved to {path}", configPath);
+                jsonDoc["UserSettings"] = JsonSerializer.SerializeToNode(settings);
+
+                var updatedJson = jsonDoc.ToJsonString(new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+
+                File.WriteAllText(configPath, updatedJson);
+                App.Settings = settings;
 
                 // Apply certain settings immediately to main window
                 ApplySettingsToMainWindow();
+                // Force theme update for the whole app
+                ThemeHelper.ThemeSwap(_config.HighContrastMode);
+
+                MessageBox.Show("Settings updated.", "Success", MessageBoxButton.OK, MessageBoxImage.None);
             }
             catch (Exception ex)
             {
@@ -127,74 +120,17 @@ namespace FishLens_App
                 MessageBox.Show($"Failed to save settings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-
-        private void ToggleErrorMessages(object sender, RoutedEventArgs e)
-        {
-            _checkBoxes.ErrorBox = hideErrors.IsChecked ?? false;
-        }
-
-        private void ToggleOutputMessages(object sender, RoutedEventArgs e)
-        {
-            _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
-        }
         #endregion
 
         #region Private Methods
         private void LoadSettings()
         {
-            // Set defaults from current runtime state
             confidenceThreshold.Value = Math.Round((_config?.ConfidenceThreshold ?? 0.7) * 100);
             confidenceValue.Text = $"{(int)Math.Round((_config?.ConfidenceThreshold ?? 0.7) * 100)}%";
-            hideErrors.IsChecked = _checkBoxes.ErrorBox;
-            hideOutput.IsChecked = _checkBoxes.OutputBox;
-
-            // Try to read persisted settings
-            try
-            {
-                string projectRoot = _pathResolver.ResolveProjectRoot();
-                string configPath = System.IO.Path.Combine(projectRoot ?? string.Empty, "appsettings.json");
-                if (!File.Exists(configPath)) return;
-
-                using var stream = File.OpenRead(configPath);
-                using var doc = JsonDocument.Parse(stream);
-                var root = doc.RootElement;
-
-                if (root.TryGetProperty("ConfidenceThreshold", out var confEl) && confEl.ValueKind == JsonValueKind.Number)
-                {
-                    double conf = confEl.GetDouble();
-                    _config.ConfidenceThreshold = conf;
-                    confidenceThreshold.Value = Math.Round(conf * 100);
-                    confidenceValue.Text = $"{(int)Math.Round(conf * 100)}%";
-                }
-
-                if (root.TryGetProperty("OutputBox", out var outEl) && outEl.ValueKind == JsonValueKind.True || outEl.ValueKind == JsonValueKind.False)
-                {
-                    _checkBoxes.OutputBox = outEl.GetBoolean();
-                    hideOutput.IsChecked = _checkBoxes.OutputBox;
-                }
-
-                if (root.TryGetProperty("ErrorBox", out var errEl) && errEl.ValueKind == JsonValueKind.True || errEl.ValueKind == JsonValueKind.False)
-                {
-                    _checkBoxes.ErrorBox = errEl.GetBoolean();
-                    hideErrors.IsChecked = _checkBoxes.ErrorBox;
-                }
-
-                if (root.TryGetProperty("HighContrastMode", out var hcEl) && (hcEl.ValueKind == JsonValueKind.True || hcEl.ValueKind == JsonValueKind.False))
-                {
-                    _config.HighContrastMode = hcEl.GetBoolean();
-                    highContrastMode.IsChecked = _config.HighContrastMode;
-                }
-
-                if (root.TryGetProperty("LargeText", out var ltEl) && (ltEl.ValueKind == JsonValueKind.True || ltEl.ValueKind == JsonValueKind.False))
-                {
-                    _config.LargeText = ltEl.GetBoolean();
-                    largeText.IsChecked = _config.LargeText;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not parse settings file; using defaults");
-            }
+            hideErrors.IsChecked = _config.ErrorBox;
+            hideOutput.IsChecked = _config.OutputBox;
+            highContrastMode.IsChecked = _config.HighContrastMode;
+            largeText.IsChecked = _config.LargeText;
         }
 
         private void ApplySettingsToMainWindow()
@@ -204,12 +140,6 @@ namespace FishLens_App
                 var main = Application.Current.MainWindow as MainWindow;
                 if (main != null)
                 {
-                    // Apply high contrast mode (handles both enabled and disabled states)
-                    main.Dispatcher.Invoke(() =>
-                    {
-                        ThemeHelper.ApplyHighContrastMode(_config.HighContrastMode);
-                    });
-
                     // Apply large text setting
                     if (_config.LargeText)
                     {
@@ -227,7 +157,11 @@ namespace FishLens_App
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to apply settings to main window");
+                MessageBox.Show($"Failed to apply theme settings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
         #endregion
     }

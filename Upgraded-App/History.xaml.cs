@@ -46,57 +46,12 @@ namespace FishLens_App
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
 
             InitializeComponent();
+            GenerateReport();
         }
 
         #endregion
 
         #region Button Event Handlers
-
-        // **************************************************
-        // Function: GenerateReportClick
-        // Description: Generates and displays a filtered analysis report from CSV data
-        public void GenerateReportClick(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                string csvPath = _pathResolver.ResolveCsvScriptPath();
-
-                if (!File.Exists(csvPath))
-                {
-                    ShowNoDataMessage();
-                    return;
-                }
-
-                string[] allLines = File.ReadAllLines(csvPath);
-
-                if (allLines.Length <= 1)
-                {
-                    // No data rows (only header or empty)
-                    ShowNoDataMessage();
-                    return;
-                }
-
-                // Skip the header row (first line) which contains field names
-                var dataLines = allLines.Skip(1).ToArray();
-
-                // Apply filters to data rows only
-                var filteredLines = ApplyFilters(dataLines);
-
-                if (filteredLines.Length == 0)
-                {
-                    ShowNoMatchingDataMessage();
-                    return;
-                }
-
-                // Generate and display report
-                DisplayReport(filteredLines);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error generating report");
-                ShowErrorMessage("Unable to generate report. Please check the logs for details.", "Error Generating Report");
-            }
-        }
 
         // **************************************************
         // Function: ExportReportClick
@@ -132,7 +87,7 @@ namespace FishLens_App
         // **************************************************
         // Function: ConfidenceSlider_ValueChanged
         // Description: Updates confidence filter and display when slider changes
-        public void ConfidenceSlider_ValueChanged(object sender, RoutedPropertyChangedEventHandler<double> e)
+        public void ConfidenceSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (confidenceSlider == null || confidenceValueText == null)
                 return;
@@ -150,7 +105,7 @@ namespace FishLens_App
             UpdateFiltersFromUI();
 
             // Regenerate report with filters
-            GenerateReportClick(sender, e);
+            GenerateReport();
         }
 
         // **************************************************
@@ -185,7 +140,7 @@ namespace FishLens_App
                 confidenceSlider.Value = 0;
 
             // Regenerate report
-            GenerateReportClick(sender, e);
+            GenerateReport();
         }
 
         // **************************************************
@@ -193,7 +148,7 @@ namespace FishLens_App
         // Description: Refreshes the current report with latest data
         public void RefreshReportClick(object sender, RoutedEventArgs e)
         {
-            GenerateReportClick(sender, e);
+            GenerateReport();
         }
 
         // **************************************************
@@ -344,6 +299,52 @@ namespace FishLens_App
         #endregion
 
         #region Report Display
+
+        // **************************************************
+        // Function: GenerateReportClick
+        // Description: Generates and displays a filtered analysis report from CSV data
+        public void GenerateReport()
+        {
+            try
+            {
+                string csvPath = _pathResolver.ResolveCsvScriptPath();
+
+                if (!File.Exists(csvPath))
+                {
+                    ShowNoDataMessage();
+                    return;
+                }
+
+                string[] allLines = File.ReadAllLines(csvPath);
+
+                if (allLines.Length <= 1)
+                {
+                    // No data rows (only header or empty)
+                    ShowNoDataMessage();
+                    return;
+                }
+
+                // Skip the header row (first line) which contains field names
+                var dataLines = allLines.Skip(1).ToArray();
+
+                // Apply filters to data rows only
+                var filteredLines = ApplyFilters(dataLines);
+
+                if (filteredLines.Length == 0)
+                {
+                    ShowNoMatchingDataMessage();
+                    return;
+                }
+
+                // Generate and display report
+                DisplayReport(filteredLines);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating report");
+                ShowErrorMessage("Unable to generate report. Please check the logs for details.", "Error Generating Report");
+            }
+        }
 
         // **************************************************
         // Function: DisplayReport
@@ -1304,7 +1305,7 @@ namespace FishLens_App
             videoPlayer.Visibility = Visibility.Collapsed;
             // 'videoControls' control was removed/renamed in XAML; ensure video player is hidden.
             reportScrollViewer.Visibility = Visibility.Visible;
-            reportControls.Visibility = Visibility.Visible;
+            // reportControls.Visibility = Visibility.Visible;
             viewTitle.Text = "Analysis Report";
         }
 

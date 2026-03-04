@@ -195,7 +195,8 @@
                                     Maximum="100"
                                     Value="0"
                                     TickFrequency="10"
-                                    IsSnapToTickEnabled="True"/>
+                                    IsSnapToTickEnabled="True"
+                                    ValueChanged="ConfidenceSlider_ValueChanged"/>
 
                             <TextBlock x:Name="confidenceValueText"
                                        Grid.Column="1"
@@ -352,94 +353,8 @@
                         <StackPanel x:Name="reportPanel">
                         </StackPanel>
                     </ScrollViewer>
-
-                    <Border x:Name="reportControls"
-                            Grid.Row="2" 
-                            Background="{DynamicResource PageBackgroundBrush}" 
-                            Padding="20,15"
-                            CornerRadius="0,0,12,12"
-                            Visibility="Collapsed">
-                        <StackPanel Orientation="Horizontal" 
-                                    HorizontalAlignment="Center">
-                            <Button Content="Export Report" 
-                                    Click="ExportReportClick"
-                                    Background="{DynamicResource PrimaryColorBrush}"
-                                    Foreground="{DynamicResource SecondaryTextBrush}"
-                                    FontSize="{DynamicResource BaseFontSize}"
-                                    FontWeight="SemiBold"
-                                    Padding="20,10"
-                                    BorderThickness="0"
-                                    Cursor="Hand"
-                                    Margin="0,0,10,0">
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border Background="{TemplateBinding Background}"
-                                                            CornerRadius="6"
-                                                            Padding="{TemplateBinding Padding}">
-                                                        <ContentPresenter HorizontalAlignment="Center"
-                                                                          VerticalAlignment="Center"/>
-                                                    </Border>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                        <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
-                                            </Trigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
-                        </StackPanel>
-                    </Border>
                 </Grid>
             </Border>
         </Grid>
-
-        <Border Grid.Row="2" 
-                Background="{DynamicResource SecondaryBackgroundBrush}" 
-                BorderBrush="{DynamicResource BorderColorBrush}" 
-                BorderThickness="0,1,0,0"
-                Padding="30,20">
-            <Grid>
-                <StackPanel Orientation="Horizontal" 
-                            HorizontalAlignment="Right">
-                    <Button Content="Generate Report" 
-                            Click="GenerateReportClick"
-                            Background="{DynamicResource PrimaryColorBrush}"
-                            Foreground="{DynamicResource SecondaryTextBrush}"
-                            FontSize="{DynamicResource BaseFontSize}"
-                            FontWeight="SemiBold"
-                            Padding="25,12"
-                            BorderThickness="0"
-                            Cursor="Hand">
-                        <Button.Style>
-                            <Style TargetType="Button">
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="{TemplateBinding Background}"
-                                                    CornerRadius="6"
-                                                    Padding="{TemplateBinding Padding}">
-                                                <ContentPresenter HorizontalAlignment="Center"
-                                                                  VerticalAlignment="Center"/>
-                                            </Border>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                </StackPanel>
-            </Grid>
-        </Border>
     </Grid>
 </Page>

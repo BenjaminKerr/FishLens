@@ -60,8 +60,7 @@ namespace FishLens_App
         private readonly IProjectPathResolver _pathResolver;
         private readonly IFileSystemManager _fileSystemManager;
         private readonly ILogger<MainWindow> _logger;
-        private readonly AppConfiguration _config;
-        private readonly CheckBoxToggle _checkBoxes;
+        private readonly UserSettings _config;
         private readonly IUiDialogService _uiDialogService;
         private readonly Stack<DeletionBatch> _deletionHistory = new Stack<DeletionBatch>();        // Stack of deletion batches so you can undo last deletion(s)
 
@@ -96,20 +95,9 @@ namespace FishLens_App
 
             InitializeComponent();
 
-            _checkBoxes = GetCheckBoxToggleFromApplication();
             _config = GetConfigurationFromApplication();
 
-            // Only reset theme if high contrast mode was enabled
-            Loaded += (s, e) =>
-            {
-                if (_config?.HighContrastMode ?? false)
-                {
-                    // Reset to normal mode
-                    _config.HighContrastMode = false;
-                    ThemeHelper.ApplyHighContrastMode(false);
-                }
-                // Otherwise, leave everything at default XAML values
-            };
+            ThemeHelper.ThemeSwap(_config?.HighContrastMode ?? false);
         }
 
         // **************************************************
@@ -148,21 +136,12 @@ namespace FishLens_App
         }
 
         // **************************************************
-        // Function: GetCheckBoxToggleFromApplication
-        // Description: Retrieves CheckBoxToggle instance from application
-        // **************************************************
-        private CheckBoxToggle GetCheckBoxToggleFromApplication()
-        {
-            return (Application.Current as App)?.CheckBoxes;
-        }
-
-        // **************************************************
         // Function: GetConfigurationFromApplication
         // Description: Retrieves AppConfiguration instance from application
         // **************************************************
-        private AppConfiguration GetConfigurationFromApplication()
+        private UserSettings GetConfigurationFromApplication()
         {
-            return (Application.Current as App)?.Configuration;
+            return App.Settings;
         }
 
         #endregion
@@ -214,7 +193,7 @@ namespace FishLens_App
         private void HomeButtonClick(object sender, RoutedEventArgs e)
         {
             ExpandSidebar();
-            MainFrame.Visibility = Visibility.Collapsed;
+            MainFrame.Visibility = Visibility.Collapsed;            
         }
 
         // **************************************************
@@ -241,22 +220,14 @@ namespace FishLens_App
         // Function: NavigateToPage
         // Description: Handles logic common to both navigation functions
         // **************************************************
-        private void NavigateToPage(object page, string pageName)
+        public void NavigateToPage(object page, string pageName)
         {
             MainFrame.Visibility = Visibility.Visible;
             _logger.LogInformation("Navigating to {PageName}", pageName);
 
             try
             {
-                MainFrame.Navigate(page);
-
-                // Apply high contrast theme if enabled
-                if (_config?.HighContrastMode ?? false)
-                {
-                    MainFrame.Dispatcher.InvokeAsync(
-                        () => ThemeHelper.ApplyHighContrastMode(true),
-                        System.Windows.Threading.DispatcherPriority.Loaded);
-                }
+                MainFrame.Navigate(page);                
             }
             catch (Exception ex)
             {
@@ -332,8 +303,6 @@ namespace FishLens_App
             {
                 FileName = "python", // Lowercase 'p' for cross-platform compatibility
                 Arguments = $"\"{yoloScriptDirectory}\" \"{sampleDataPath}\"",
-                RedirectStandardError = _checkBoxes.ErrorBox,
-                RedirectStandardOutput = _checkBoxes.OutputBox,
                 UseShellExecute = false
             };
         }
@@ -352,8 +321,8 @@ namespace FishLens_App
             {
                 using (Process process = Process.Start(processInfo))
                 {
-                    string output = ReadProcessOutput(process);
-                    string error = ReadProcessError(process);
+                    string output = App.Settings.OutputBox.ToString();
+                    string error = App.Settings.ErrorBox.ToString();
 
                     process.WaitForExit();
 
@@ -362,24 +331,6 @@ namespace FishLens_App
                         DisplayProcessOutputIfNeeded(output, error);
                 }
             });
-        }
-
-        // **************************************************
-        // Function: ReadProcessOutput
-        // Description: Reads standard output from process if enabled
-        // **************************************************
-        private string ReadProcessOutput(Process process)
-        {
-            return _checkBoxes.OutputBox ? process.StandardOutput.ReadToEnd() : string.Empty;
-        }
-
-        // **************************************************
-        // Function: ReadProcessError
-        // Description: Reads standard error from process if enabled
-        // **************************************************
-        private string ReadProcessError(Process process)
-        {
-            return _checkBoxes.ErrorBox ? process.StandardError.ReadToEnd() : string.Empty;
         }
 
         // **************************************************
