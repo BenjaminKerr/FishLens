@@ -88,9 +88,14 @@
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource PrimaryText}"
                            Margin="0,0,0,15"/>
-
-                <StackPanel>
-                    <CheckBox x:Name="hideOutput"
+                <Border Background="{DynamicResource CardBackground}" 
+                        BorderBrush="{DynamicResource BorderBrush}" 
+                        BorderThickness="1" 
+                        CornerRadius="8"
+                        Padding="20"
+                        Margin="0,0,0,30">
+                    <StackPanel>
+                        <CheckBox x:Name="hideOutput"
                               Content="Redirect Output Messages"
                               FontSize="{DynamicResource BaseFontSize}"
                               Foreground="{DynamicResource PrimaryText}"
@@ -98,13 +103,13 @@
                               IsChecked="False"
                               Click="ToggleOutputMessages"/>
 
-                    <TextBlock Text="Show output messages as a pop-up window at the end of the program instead of in the terminal."
+                        <TextBlock Text="Show output messages as a pop-up window at the end of the program instead of in the terminal."
                                FontSize="{DynamicResource BaseFontSize}"
                                Foreground="{DynamicResource SecondaryText}"
                                Margin="0,0,0,15"
                                TextWrapping="Wrap"/>
 
-                    <CheckBox x:Name="hideErrors"
+                        <CheckBox x:Name="hideErrors"
                               Content="Redirect Error Messages"
                               FontSize="{DynamicResource BaseFontSize}"
                               Foreground="{DynamicResource PrimaryText}"
@@ -112,12 +117,13 @@
                               IsChecked="False"
                               Click="ToggleErrorMessages"/>
 
-                    <TextBlock Text="Show error messages as a pop-up window at the end of the program instead of in the terminal."
+                        <TextBlock Text="Show error messages as a pop-up window at the end of the program instead of in the terminal."
                                FontSize="{DynamicResource BaseFontSize}"
                                Foreground="{DynamicResource SecondaryText}"
                                Margin="0,0,0,15"
                                TextWrapping="Wrap"/>
-                </StackPanel>
+                    </StackPanel>
+                </Border>
 
                 <TextBlock Text="Accessibility" 
                            FontSize="{DynamicResource LargeHeaderFontSize}"
