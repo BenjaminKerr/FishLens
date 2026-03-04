@@ -328,7 +328,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
             
             # Extract timestamp once, when track is first created
             print(f"  New fish detected (Track {trackId}) at frame {frameData.f_index}")
-            timestamp = extract_timestamp_from_frame(frame, False)
+            timestamp = extractTimestamFromFrame(frame, False)
             
             if timestamp:
                 vidData.v_active_tracks[trackId]["video_timestamp"] = timestamp

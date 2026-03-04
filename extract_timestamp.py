@@ -16,7 +16,7 @@ pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tessera
 # Function: parse_timestamp
 # Description: Parse timestamp from OCR text with validation and common OCR error correction.
 # Notes: N/A
-def parse_timestamp(text):
+def parseTimestamp(text):
     if not text:
         return None
     
@@ -81,7 +81,7 @@ def parse_timestamp(text):
 # Function: extract_timestamp_from_frame
 # Description: Extract timestamp from bottom-left corner of video frame.
 # Notes: N/A
-def extract_timestamp_from_frame(frame, debug=False):
+def extractTimestamFromFrame(frame, debug=False):
     if frame is None or frame.size == 0:
         return None
     
@@ -90,16 +90,16 @@ def extract_timestamp_from_frame(frame, debug=False):
         
         # Focus on bottom-left corner where timestamp appears
         # Taking bottom 25% of height and left 65% of width
-        region_height = int(h * 0.25)
-        region_width = int(w * 0.65)
+        regionHeight = int(h * 0.25)
+        regionWidth = int(w * 0.65)
         
         # Extract the timestamp region
-        timestamp_region = frame[h - region_height:h, 0:region_width]
+        timestampRegion = frame[h - regionHeight:h, 0:regionWidth]
         
        
         
         # Convert to grayscale
-        gray = cv2.cvtColor(timestamp_region, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(timestampRegion, cv2.COLOR_BGR2GRAY)
         
         # White text on dark background - use binary threshold
         _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
@@ -124,7 +124,7 @@ def extract_timestamp_from_frame(frame, debug=False):
             return None
         
         # Parse the timestamp
-        timestamp = parse_timestamp(text)
+        timestamp = parseTimestamp(text)
         
         if timestamp and debug:
             print(f"  Parsed timestamp: {timestamp}")
