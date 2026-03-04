@@ -30,9 +30,10 @@ from dateutil import parser as date_parser
 from extract_timestamp import extract_timestamp_from_frame, parse_timestamp
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Update this path if Tesseract is installed elsewhere
 
+
 # ****************************************************************
 # Function: check_tesseract
-# Description: Verify Tesseract OCR installation and accessibility.
+# Description: Check if Tesseract OCR is available and accessible.
 # Notes: N/A
 def check_tesseract():
     try:
@@ -45,8 +46,6 @@ def check_tesseract():
         print(f"   Error: {e}")
         return False
 
-# ADD THIS CONSTANT
-TESSERACT_AVAILABLE = check_tesseract()
 # Suppress deprecation warning from pkg_resources
 warnings.filterwarnings(
     "ignore",
@@ -73,6 +72,7 @@ CSV_KEYS = [
     "species_confidence",
     "video_timestamp"
 ]
+TESSERACT_AVAILABLE = check_tesseract()
 
 # Constants--YOLO
 MODEL = YOLO("models/fish_detector.pt")
@@ -171,8 +171,6 @@ def enhance_image(crop):
     crop = np.clip(crop, 0, 255).astype(np.uint8)
     
     return crop
-
-
 
 # ****************************************************************
 # Function: run_video_tracker
@@ -306,6 +304,7 @@ def process_yolo_results(frameData, vidData, model):
 # Description: Run video through DeepSort and return track data.
 # Notes: N/A
 def deepsort_analysis(tracker, frame, frameData, vidData):
+
     # Use the tracker's default iou threshold (tuned in the tracker)
     frameData.f_detections = tracker.filterOverlaps(frameData.f_detections)
     tracked_objects = tracker.update(frameData.f_detections, frame)
@@ -314,7 +313,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         trackId = obj["trackId"]
         vidData.v_current_track_ids.add(trackId)
 
-        # Check if this is a NEW track
+        # Check if this is a newtrack
         is_new_track = trackId not in vidData.v_active_tracks
 
         if is_new_track:
@@ -324,10 +323,10 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                 "directions": [],
                 "best_conf": -1.0,
                 "best_crop": None,
-                "video_timestamp": None  # Will be set below
+                "video_timestamp": None 
             }
             
-            # Extract timestamp ONCE when track is first created
+            # Extract timestamp once, when track is first created
             print(f"  New fish detected (Track {trackId}) at frame {frameData.f_index}")
             timestamp = extract_timestamp_from_frame(frame, False)
             
@@ -342,11 +341,12 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                 cv2.imwrite(debug_frame_path, frame)
                 print(f"    Saved full frame to: {debug_frame_path}")
 
-        # Update track data (runs every frame for this track)
+        # Update track data per-frame
         vidData.v_active_tracks[trackId]["confidences"].append(obj["confidence"])
         vidData.v_active_tracks[trackId]["directions"].append(obj["direction"])
 
         x1, y1, x2, y2 = obj["bbox"]
+        
         # Add 30% margin around the bounding box for zoomed-out view
         h, w = frame.shape[:2]
         margin_x = int((x2 - x1) * 0.3)
@@ -364,6 +364,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
             if conf > vidData.v_active_tracks[trackId]["best_conf"]:
                 vidData.v_active_tracks[trackId]["best_conf"] = conf
                 vidData.v_active_tracks[trackId]["best_crop"] = crop.copy()
+
 
 # ****************************************************************
 # Function: finalize_tracks
@@ -404,7 +405,7 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     confidences = [c for c in track_data["confidences"] if c is not None]
     avg_conf_DS = sum(confidences) / len(confidences) if confidences else 0.0
     
-    # GET BEST CONFIDENCE FROM TRACK
+    # Get best confidence for track
     best_conf = track_data.get("best_conf", 0.0)
     best_conf_pct = best_conf * 100 if best_conf <= 1.0 else best_conf
     
@@ -446,6 +447,7 @@ def no_fish_found(video_path, filename): # TODO: Change function name?
     print("***************************************************************")
     print(f"No fish detected in {filename}. Skipping export.")
     print("***************************************************************")
+
     # Copy video to no_fish folder
     no_fish_path = os.path.join("no_fish", filename)
     try:
@@ -532,6 +534,7 @@ def classify_image(image_path):
     except Exception as e:
         print(f"ERROR during classification of {image_path}: {e}")
         return ("No data", 0.0)
+
 
 # ****************************************************************
 # Function: get_image_name
