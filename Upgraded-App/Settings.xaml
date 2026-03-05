@@ -174,6 +174,16 @@
                  Padding="8"
                  FontSize="{DynamicResource BaseFontSize}"
                  Margin="0,5,0,15"/>
+                        <TextBlock Text="Email"
+           FontSize="{DynamicResource BaseFontSize}"
+           Foreground="{DynamicResource SecondaryText}"/>
+
+                        <TextBox x:Name="NewUserEmail"
+         Height="36"
+         Padding="8"
+         FontSize="{DynamicResource BaseFontSize}"
+         Margin="0,5,0,15"/>
+
 
                         <TextBlock Text="Password"
                    FontSize="{DynamicResource BaseFontSize}"
@@ -472,6 +482,31 @@
                              FontSize="{DynamicResource BaseFontSize}"
                              Padding="10,8"
                              VerticalContentAlignment="Center"/>
+                                            </Border>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellEditingTemplate>
+                                </DataGridTemplateColumn>
+                                <!-- Email -->
+                                <DataGridTemplateColumn Header="Email" Width="*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Email}"
+                       VerticalAlignment="Center"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                    <DataGridTemplateColumn.CellEditingTemplate>
+                                        <DataTemplate>
+                                            <Border BorderBrush="#888888"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Background="{DynamicResource CardBackground}">
+                                                <TextBox Text="{Binding Email, UpdateSourceTrigger=PropertyChanged}"
+                         BorderThickness="0"
+                         Background="Transparent"
+                         Foreground="{DynamicResource PrimaryText}"
+                         FontSize="{DynamicResource BaseFontSize}"
+                         Padding="10,8"
+                         VerticalContentAlignment="Center"/>
                                             </Border>
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellEditingTemplate>

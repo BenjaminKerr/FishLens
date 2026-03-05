@@ -20,20 +20,23 @@ namespace FishLens_App
         public string Username { get; set; }
         public string Password { get; set; }
         public Role role { get; set; }
+        public string Email { get; set; }
 
-        public User(string username, string pass, Role Role)
+        public User(string username, string pass, Role Role, string email)
         {
             Username = username;
             Password = pass;
+            Email = email;
             Role = role;
         }
 
         //Pulling for edit users not sign in so password not needed
-        public User(int id, string username, Role userRole)
+        public User(int id, string username, Role userRole, string email)
         {
             Id = id;
             Username = username;
             role = userRole;
+            Email = email;
         }
 
 
