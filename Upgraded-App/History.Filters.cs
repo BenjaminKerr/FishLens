@@ -1,12 +1,14 @@
-﻿using System;
+﻿using Microsoft.Extensions.Logging;
+using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Windows.Controls;
 
 namespace FishLens_App
 {
     public partial class History
     {
-        #region Helper Methods - Filters
 
         // **************************************************
         // Function: UpdateFiltersFromUI
@@ -57,14 +59,14 @@ namespace FishLens_App
                 string[] columns = line.Split(',');
                 if (columns.Length == 0) continue;
 
-                string videoName = columns.Length > 0 ? columns[0].Trim() : string.Empty;
-                string species = columns.Length > 9 ? columns[9].Trim() : (columns.Length > 3 ? columns[3].Trim() : string.Empty);
-                string direction = columns.Length > 8 ? columns[8].Trim() : (columns.Length > 7 ? columns[7].Trim() : string.Empty);
+                string videoName = columns.Length > 2 ? columns[2].Trim() : string.Empty;
+                string species = columns.Length > 11 ? columns[11].Trim() : string.Empty;
+                string direction = columns.Length > 10 ? columns[10].Trim() : string.Empty;
 
                 double? avgConf = null;
-                if (columns.Length > 7)
+                if (columns.Length > 9)
                 {
-                    var raw = columns[7].Trim().TrimEnd('%');
+                    var raw = columns[9].Trim().TrimEnd('%');
                     if (double.TryParse(raw, out var d))
                     {
                         if (d > 1) d = d / 100.0;
@@ -73,10 +75,10 @@ namespace FishLens_App
                 }
 
                 DateTime? timestamp = null;
-                if (columns.Length > 11)
+                if (columns.Length > 0)
                 {
-                    var datePart = columns[11].Trim();
-                    var timePart = columns.Length > 12 ? columns[12].Trim() : string.Empty;
+                    var datePart = columns[0].Trim();
+                    var timePart = columns.Length > 1 ? columns[1].Trim() : string.Empty;
                     if (!string.IsNullOrEmpty(timePart))
                     {
                         if (DateTime.TryParse($"{datePart} {timePart}", out DateTime ts)) timestamp = ts;
@@ -157,6 +159,60 @@ namespace FishLens_App
             return true;
         }
 
-        #endregion
+        // **************************************************
+        // Function: PopulateFilterDropdowns
+        // Description: Reads the CSV and fills filter dropdowns with actual values
+        private void PopulateFilterDropdowns()
+        {
+            try
+            {
+                string csvPath = _pathResolver.ResolveCsvScriptPath();
+                if (!File.Exists(csvPath)) return;
+
+                string[] allLines = File.ReadAllLines(csvPath);
+                if (allLines.Length <= 1) return;
+
+                var species = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var directions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (string line in allLines.Skip(1))
+                {
+                    string[] col = line.Split(',');
+
+                    if (col.Length > 11)
+                    {
+                        string s = col[11].Trim();
+                        if (!string.IsNullOrWhiteSpace(s))
+                            species.Add(s);
+                    }
+
+                    if (col.Length > 10)
+                    {
+                        string d = col[10].Trim();
+                        if (!string.IsNullOrWhiteSpace(d))
+                            directions.Add(d);
+                    }
+                }
+
+                // Species dropdown
+                foreach (var s in species.OrderBy(x => x))
+                    speciesFilter.Items.Add(new ComboBoxItem { Content = s });
+
+                // Direction dropdown — only add values not already hardcoded
+                foreach (var d in directions.OrderBy(x => x))
+                {
+                    bool alreadyPresent = directionFilter.Items
+                        .OfType<ComboBoxItem>()
+                        .Any(item => item.Content?.ToString().Equals(d, StringComparison.OrdinalIgnoreCase) == true);
+
+                    if (!alreadyPresent)
+                        directionFilter.Items.Add(new ComboBoxItem { Content = d });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error populating filter dropdowns");
+            }
+        }
     }
 }

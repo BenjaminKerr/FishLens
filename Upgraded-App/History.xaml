@@ -126,16 +126,13 @@
                                    Margin="0,0,0,8"/>
 
                         <ComboBox x:Name="speciesFilter"
-                                  Background="{DynamicResource PageBackgroundBrush}"
-                                  BorderBrush="{DynamicResource BorderColorBrush}"
-                                  Padding="12,8"
-                                  FontSize="{DynamicResource BaseFontSize}"
-                                  Margin="0,0,0,15"
-                                  SelectedIndex="0">
+                              Background="{DynamicResource PageBackgroundBrush}"
+                              BorderBrush="{DynamicResource BorderColorBrush}"
+                              Padding="12,8"
+                              FontSize="{DynamicResource BaseFontSize}"
+                              Margin="0,0,0,15"
+                              SelectedIndex="0">
                             <ComboBoxItem Content="All Species"/>
-                            <ComboBoxItem Content="Trout"/>
-                            <ComboBoxItem Content="Salmon"/>
-                            <ComboBoxItem Content="Other"/>
                         </ComboBox>
 
                         <TextBlock Text="Direction" 

@@ -41,6 +41,7 @@ namespace FishLens_App
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
 
             InitializeComponent();
+            PopulateFilterDropdowns();
             GenerateReport();
         }
 

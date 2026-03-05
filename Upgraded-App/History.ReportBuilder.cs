@@ -134,13 +134,13 @@ namespace FishLens_App
                 AddEmptyNote("No location data available.");
             }
 
-            // Activity by hour line chart
+            // Activity by day line chart
             AddSectionTitle("Observations by Day");
             if (stats.DetectionsByDate.Count > 0)
             {
                 var points = stats.DetectionsByDate
                     .OrderBy(x => x.Key)
-                    .Select(kvp => (kvp.Key.ToString("MMM d"), kvp.Value))
+                    .Select(kvp => (kvp.Key.ToString("MMM d, ''yy"), kvp.Value))
                     .ToList();
                 reportPanel.Children.Add(CreateLineChart(points, "#1E88E5", 180));
             }
