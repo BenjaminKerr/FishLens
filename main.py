@@ -27,7 +27,7 @@ from keras.preprocessing.image import load_img, img_to_array
 import pytesseract
 import re
 from dateutil import parser as date_parser
-from extract_timestamp import extract_timestamp_from_frame, parse_timestamp
+from extract_timestamp import extractTimestamFromFrame, parseTimestamp
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Update this path if Tesseract is installed elsewhere
 
 
@@ -55,7 +55,14 @@ warnings.filterwarnings(
 
 # Constants--Folders and Directories
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-VIDEO_FOLDER = sys.argv[1] if len(sys.argv) > 1 else os.path.join(PROJECT_ROOT, "sample_data") 
+INPUT_PATH = sys.argv[1] if len(sys.argv) > 1 else os.path.join(PROJECT_ROOT, "sample_data")
+# Handle both directory and single file inputs
+if os.path.isfile(INPUT_PATH):
+    VIDEO_FOLDER = os.path.dirname(INPUT_PATH)
+    SINGLE_VIDEO_FILE = INPUT_PATH
+else:
+    VIDEO_FOLDER = INPUT_PATH
+    SINGLE_VIDEO_FILE = None 
 
 # Constants--General
 CSV_KEYS = [
@@ -130,12 +137,27 @@ def main():
 
     # Process all videos in folder
     all_tracks = []
-    for filename in os.listdir(VIDEO_FOLDER):
-        video_path = os.path.join(VIDEO_FOLDER, filename)
+    if SINGLE_VIDEO_FILE:
+        # Process single video file
+        video_path = SINGLE_VIDEO_FILE
+        filename = os.path.basename(SINGLE_VIDEO_FILE)
         video_tracks = run_video_tracker(video_path)
         for t in video_tracks:
             t["video_file"] = filename
         all_tracks.extend(video_tracks)
+    else:
+        # Process all videos in folder
+        video_extensions = ('.mp4', '.avi', '.mov', '.mkv', '.asf', '.wmv', '.flv', '.webm')
+        for filename in os.listdir(VIDEO_FOLDER):
+            item_path = os.path.join(VIDEO_FOLDER, filename)
+            # Skip directories and non-video files
+            if os.path.isfile(item_path) and filename.lower().endswith(video_extensions):
+                video_path = item_path
+                print(f"Processing: {filename}")
+                video_tracks = run_video_tracker(video_path)
+                for t in video_tracks:
+                    t["video_file"] = filename
+                all_tracks.extend(video_tracks)
 
     # Export CSV
     if all_tracks:
