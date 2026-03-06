@@ -1,4 +1,5 @@
-﻿using FishLens_App;
+﻿using DocumentFormat.OpenXml.Spreadsheet;
+using FishLens_App;
 using FishLens_App.Interfaces;
 using FishLens_App.Models;
 using Microsoft.Extensions.Logging;
@@ -25,7 +26,7 @@ namespace FishLens_App
     /// <summary>
     /// Interaction logic for Settings.xaml
     /// </summary>
-    public partial class Settings : Page
+    public partial class Settings : System.Windows.Controls.Page
     {
         #region Fields
         private string connectionString =
@@ -38,7 +39,7 @@ namespace FishLens_App
         private readonly ILogger<MainWindow> _logger;
         private CheckBoxToggle _checkBoxes;
         private AppConfiguration _config;
-        private Dictionary<int, (string Username, int RoleId)> _originalUserData = new();
+        private Dictionary<int, (string Username, int RoleId, string email)> _originalUserData = new();
 
         public List<Role> Roles { get; set; } = new List<Role>();
         private List<User> _users = new List<User>();
@@ -74,6 +75,7 @@ namespace FishLens_App
             {
                 string username = NewUsername.Text.Trim();
                 string password = NewPassword.Password;
+                string email = NewUserEmail.Text.Trim();
                 string error = null;
 
                 if (string.IsNullOrWhiteSpace(username))
@@ -84,6 +86,8 @@ namespace FishLens_App
                     error = "Please enter a password.";
                 else if (password.Length < 6)
                     error = "Password must be at least 6 characters.";
+                else if (string.IsNullOrWhiteSpace(email) || !email.Contains("@") || !email.Contains("."))
+                    error = "Please enter a valid email address";
 
                 if (error != null)
                 {
@@ -92,13 +96,14 @@ namespace FishLens_App
                 else
                 {
                     int roleId = selectedRole.ID;
-                    bool status = SignUp(username, password, roleId);
+                    bool status = SignUp(username, email, password, roleId);
 
                     if (status)
                     {
                         NewUsername.Text = "";
                         NewPassword.Password = "";
                         RoleComboBox.SelectedIndex = -1;
+                        NewUserEmail.Text = "";
                         MessageBox.Show("User created successfully!");
                         LoadUsers();
                     }
@@ -207,7 +212,7 @@ namespace FishLens_App
         // Description: Creates username and password credentials for signin with salting
         //     
         // Notes: Temporarily stores into Kaharra SQL
-        private bool SignUp(string username, string password, int roleId)
+        private bool SignUp(string username, string email, string password, int roleId)
         {
             bool success = false;
             try
@@ -222,6 +227,7 @@ namespace FishLens_App
                         cmd.Parameters.AddWithValue("@pPassword", password);
                         cmd.Parameters.AddWithValue("@pRoleId", roleId);
                         cmd.Parameters.AddWithValue("@pOrgId", CurrentOrgId);
+                        cmd.Parameters.AddWithValue("@pEmail", email);
                         cmd.ExecuteNonQuery();
                         success = true;
                     }
@@ -284,7 +290,7 @@ namespace FishLens_App
                     conn.Open();
 
                     string sql = @"
-                SELECT Id, Username, RoleId
+                SELECT Id, Username, Email, RoleId
                 FROM [kaharra].[kaharra].[FishLensUsers]
                 WHERE OrganizationId = @orgId
                 ORDER BY Username";
@@ -301,16 +307,17 @@ namespace FishLens_App
                             {
                                 int id = reader.GetInt32(0);
                                 string username = reader.GetString(1);
-                                int roleId = reader.GetInt32(2);
+                                string email = reader.GetString(2);
+                                int roleId = reader.GetInt32(3);
 
                                 Role matchedRole = Roles.FirstOrDefault(r => r.ID == roleId);
-                                users.Add(new User(id, username, matchedRole));
+                                users.Add(new User(id, username, matchedRole, email));
                             }
 
                             _users = users;
                             _originalUserData = users.ToDictionary(
                                 u => u.Id,
-                                u => (u.Username, u.role?.ID ?? -1)
+                                u => (u.Username, u.role?.ID ?? -1, u.Email)
                             );
                             UsersGrid.ItemsSource = _users;
                         }
@@ -329,7 +336,7 @@ namespace FishLens_App
         // Description: Based on the changes made inside of the manage user section will
         // apply them to the FishLensUsers database
         // Notes: N/A
-        private bool UpdateUser(int userId, string newUsername, int newRoleId)
+        private bool UpdateUser(int userId, string newUsername, int newRoleId, string email)
         {
             try
             {
@@ -339,14 +346,15 @@ namespace FishLens_App
 
                     string sql = @"
                 UPDATE [kaharra].[kaharra].[FishLensUsers]
-                SET Username = @u, RoleId = @r
-                WHERE Id = @id";
+                SET Username = @user, RoleId = @roleid, Email = @email
+                WHERE Id = @userid";
 
                     using (SqlCommand cmd = new SqlCommand(sql, conn))
                     {
-                        cmd.Parameters.AddWithValue("@u", newUsername);
-                        cmd.Parameters.AddWithValue("@r", newRoleId);
-                        cmd.Parameters.AddWithValue("@id", userId);
+                        cmd.Parameters.AddWithValue("@user", newUsername);
+                        cmd.Parameters.AddWithValue("@roleid", newRoleId);
+                        cmd.Parameters.AddWithValue("@email", email);
+                        cmd.Parameters.AddWithValue("@userid", userId);
 
                         cmd.ExecuteNonQuery();
                         return true;
@@ -367,78 +375,81 @@ namespace FishLens_App
         // Notes: N/A
         private void SaveUserChanges_Click(object sender, RoutedEventArgs e)
         {
+            string error;
+
             if (_users == null || _users.Count == 0)
             {
                 MessageBox.Show("No users to save.");
-                return;
-            }
-
-            // Find only users that actually changed
-            var changedUsers = _users.Where(u =>
-            {
-                bool Pass = true;
-                if (string.IsNullOrWhiteSpace(u.Username) || u.role == null)
-                    Pass = false;
-
-                if (!_originalUserData.TryGetValue(u.Id, out var original))
-                    Pass = false;
-
-                if (Pass == true)
-                {
-                    return u.Username.Trim() != original.Username || u.role.ID != original.RoleId;
-                }
-                else
-                {
-                    return Pass;
-                }
-            }).ToList();
-
-            if (changedUsers.Count == 0)
-            {
-                MessageBox.Show(
-                    "No changes detected.",
-                    "Nothing to Save",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-
             }
             else
             {
-                int updated = 0;
-                var updatedNames = new List<string>();
-
-                foreach (var u in changedUsers)
+                // Find only users that actually changed
+                var changedUsers = _users.Where(u =>
                 {
-                    if (UpdateUser(u.Id, u.Username.Trim(), u.role.ID))
+                    bool Pass = true;
+                    if (string.IsNullOrWhiteSpace(u.Username) || u.role == null)
+                        Pass = false;
+
+                    if (!_originalUserData.TryGetValue(u.Id, out var original))
+                        Pass = false;
+
+                    if (Pass == true)
                     {
-                        updated++;
-                        updatedNames.Add(u.Username.Trim());
+                        return u.Username.Trim() != original.Username || u.role.ID != original.RoleId || u.Email?.Trim() != original.email;
                     }
-                }
+                    else
+                    {
+                        return Pass;
+                    }
+                }).ToList();
 
-                if (updated > 0)
+                if (changedUsers.Count == 0)
                 {
-                    string names = string.Join(", ", updatedNames);
-                    string message = updated == 1
-                        ? $"Successfully updated {names}."
-                        : $"Successfully updated {updated} users: {names}.";
-
                     MessageBox.Show(
-                        message,
-                        "Changes Saved ✓",
+                        "No changes detected.",
+                        "Nothing to Save",
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);
+
                 }
                 else
                 {
-                    MessageBox.Show(
-                        "Something went wrong — no changes were saved. Please try again.",
-                        "Save Failed",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
-                }
+                    int updated = 0;
+                    var updatedNames = new List<string>();
 
-                LoadUsers();
+                    foreach (var u in changedUsers)
+                    {
+                        if (UpdateUser(u.Id, u.Username.Trim(), u.role.ID, u.Email))
+                        {
+                            updated++;
+                            updatedNames.Add(u.Username.Trim());
+                        }
+                    }
+
+                    if (updated > 0)
+                    {
+                        string names = string.Join(", ", updatedNames);
+                        string message = updated == 1
+                            ? $"Successfully updated {names}."
+                            : $"Successfully updated {updated} users: {names}.";
+
+                        MessageBox.Show(
+                            message,
+                            "Changes Saved ✓",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information);
+                    }
+                    else
+                    {
+                        MessageBox.Show(
+                            "Something went wrong — no changes were saved. Please try again.",
+                            "Save Failed",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                    }
+
+                    LoadUsers();
+                }
             }
         }
 
