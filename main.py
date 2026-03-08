@@ -205,6 +205,9 @@ def run_video_tracker(video_path):
     vidData = VideoData()
     vidData.v_filename = os.path.basename(video_path)
     tracker = DeepSortTracker()
+    
+    # Initialize frameData to avoid UnboundLocalError if video fails early
+    frameData = None
 
     # Open video, determine FPS, and read first frame
     cap = cv2.VideoCapture(video_path)
@@ -239,7 +242,8 @@ def run_video_tracker(video_path):
         ret, frame = cap.read()
 
     # Finalize forced tracks (detections that were still active at the end of the video)
-    finalize_tracks(frameData, vidData, termination_reason="forced")
+    if frameData is not None:
+        finalize_tracks(frameData, vidData, termination_reason="forced")
 
     cap.release()
 
