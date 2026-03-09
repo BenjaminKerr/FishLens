@@ -82,7 +82,7 @@ CSV_KEYS = [
 TESSERACT_AVAILABLE = check_tesseract()
 
 # Constants--YOLO
-MODEL = YOLO("models/fish_detector.pt")
+MODEL = YOLO("models/fish_detector2.pt")
 NO_FISH = "no_fish"
 
 # Constants--DeepSort
