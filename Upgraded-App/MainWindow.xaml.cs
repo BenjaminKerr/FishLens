@@ -1128,6 +1128,34 @@ namespace FishLens_App
             string species_confidence = originalColumns[10].Trim();
             string vidTimeStamp = originalColumns[11].Trim();
 
+            // Read and validate confidence values from UI TextBoxes
+            // fishPresentConfidence is displayed as percentage (e.g., "88.00%")
+            // avgConfidence in CSV is stored as decimal (e.g., 0.88)
+            string presentConfText = fishPresentConfidence.Text.Trim();
+            if (!string.IsNullOrEmpty(presentConfText) && presentConfText != "--")
+            {
+                // Remove % sign and convert percentage back to decimal
+                string cleanValue = presentConfText.Replace("%", "").Trim();
+                if (double.TryParse(cleanValue, out double presentConfValue))
+                {
+                    // Convert from percentage (0-100) back to decimal (0-1)
+                    avgConfidence = (presentConfValue / 100).ToString("F4");
+                }
+            }
+
+            // fishSpeciesConfidence is displayed as percentage (e.g., "92.45%")
+            // species_confidence in CSV is stored as decimal (e.g., 0.9245)
+            string speciesConfText = fishSpeciesConfidence.Text.Trim();
+            if (!string.IsNullOrEmpty(speciesConfText) && speciesConfText != "--")
+            {
+                // Remove % sign and convert percentage back to decimal
+                string cleanValue = speciesConfText.Replace("%", "").Trim();
+                if (double.TryParse(cleanValue, out double speciesConfValue))
+                {
+                    // Convert from percentage (0-100) back to decimal (0-1)
+                    species_confidence = (speciesConfValue / 100).ToString("F4");
+                }
+            }
 
             // If user entered a species, update the likely_class
             if (!string.IsNullOrEmpty(species) && species != "--")
@@ -1282,10 +1310,10 @@ namespace FishLens_App
             videoName.Text = vid.Name;
             videoDateTime.Text = $"Duration: {vid.StartTime}s - {vid.EndTime}s";
             fishPresentStatus.Text = vid.LikelyClass == "fish" ? "Present" : "Not Present";
-            fishPresentConfidence.Text = vid.AvgConfidence.ToString();
+            fishPresentConfidence.Text = $"{vid.AvgConfidence * 100:F2}%";
             travelDirection.Text = CapitalizeFirstLetter(vid.Direction);
             fishSpecies.Text = CapitalizeFirstLetter(vid.Species);
-            fishSpeciesConfidence.Text = vid.SpeciesConfidence > 0 ? $"{vid.SpeciesConfidence:F2}%" : "--";
+            fishSpeciesConfidence.Text = vid.SpeciesConfidence > 0 ? $"{vid.SpeciesConfidence * 100:F2}%" : "--";
         }
 
         // **************************************************

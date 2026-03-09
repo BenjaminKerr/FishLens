@@ -15,7 +15,7 @@
             <ColumnDefinition x:Name ="SidebarColumn" Width="Auto"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
-        <Frame x:Name="MainFrame" NavigationUIVisibility="Visible" Grid.Column="1" Panel.ZIndex="1"/>
+        <Frame x:Name="MainFrame" NavigationUIVisibility="Hidden" Grid.Column="1" Panel.ZIndex="1"/>
         <!--Sidebar: Media Selector-->
         <Border x:Name="SideBar" Width="320" Grid.Column="0" Background="{DynamicResource AccentBrush}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource HeaderBackground}">
             <Grid>
@@ -345,15 +345,20 @@ Height="70">
                                         <ComboBoxItem Content="Not Present"/>
                                     </ComboBox>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                     <TextBlock Text="Confidence: " 
                                                FontSize="{DynamicResource BaseFontSize}"
-                                               Foreground="{DynamicResource SecondaryText}"/>
-                                    <TextBlock x:Name="fishPresentConfidence" 
-                                               Text="--" 
-                                               FontSize="{DynamicResource BaseFontSize}"
-                                               FontWeight="Medium"
-                                               Foreground="{DynamicResource PrimaryText}"/>
+                                               Foreground="{DynamicResource SecondaryText}"
+                                               Margin="0,0,8,0"/>
+                                    <TextBox x:Name="fishPresentConfidence" 
+                                             Text="--" 
+                                             FontSize="{DynamicResource BaseFontSize}"
+                                             FontWeight="Medium"
+                                             Foreground="{DynamicResource PrimaryText}"
+                                             BorderBrush="{DynamicResource BorderBrush}"
+                                             BorderThickness="1"
+                                             Padding="8,4"
+                                             Width="80"/>
                                 </StackPanel>
                             </StackPanel>
 
@@ -408,15 +413,20 @@ Height="70">
                                         <System:String xmlns:System="clr-namespace:System;assembly=netstandard">Omykiss</System:String>
                                     </ComboBox>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                     <TextBlock Text="Confidence: " 
                                                FontSize="{DynamicResource BaseFontSize}"
-                                               Foreground="{DynamicResource SecondaryText}"/>
-                                    <TextBlock x:Name="fishSpeciesConfidence" 
-                                               Text="--" 
-                                               FontSize="{DynamicResource BaseFontSize}"
-                                               FontWeight="Medium"
-                                               Foreground="{DynamicResource PrimaryText}"/>
+                                               Foreground="{DynamicResource SecondaryText}"
+                                               Margin="0,0,8,0"/>
+                                    <TextBox x:Name="fishSpeciesConfidence" 
+                                             Text="--" 
+                                             FontSize="{DynamicResource BaseFontSize}"
+                                             FontWeight="Medium"
+                                             Foreground="{DynamicResource PrimaryText}"
+                                             BorderBrush="{DynamicResource BorderBrush}"
+                                             BorderThickness="1"
+                                             Padding="8,4"
+                                             Width="80"/>
                                 </StackPanel>
                             </StackPanel>
 

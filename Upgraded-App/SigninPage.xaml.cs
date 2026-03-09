@@ -156,5 +156,31 @@ namespace FishLens_App
             this.Close();
         }
 
+        // ****************************************************************
+        // Function: TextBox_KeyDown
+        // Description: Handle Enter key press in Username TextBox to submit signin
+        // Notes: N/A
+        private void TextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Return)
+            {
+                e.Handled = true;
+                SigninButtonClick(null, null);
+            }
+        }
+
+        // ****************************************************************
+        // Function: PasswordBox_KeyDown
+        // Description: Handle Enter key press in Password PasswordBox to submit signin
+        // Notes: N/A
+        private void PasswordBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Return)
+            {
+                e.Handled = true;
+                SigninButtonClick(null, null);
+            }
+        }
+
     }
 }
