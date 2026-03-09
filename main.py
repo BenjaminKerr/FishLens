@@ -83,6 +83,7 @@ TESSERACT_AVAILABLE = check_tesseract()
 
 # Constants--YOLO
 MODEL = YOLO("models/fish_detector.pt")
+YOLO_CONFIDENCE_THRESHOLD = 0.25  # Adjustable: lower = detects more fish (but more false positives), higher = more selective
 NO_FISH = "no_fish"
 
 # Constants--DeepSort
@@ -252,6 +253,14 @@ def run_video_tracker(video_path):
     vidData.v_fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
     print(f"[DEBUG] Video FPS: {vidData.v_fps}")
     
+    # Get frame dimensions
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    print(f"[DEBUG] Frame dimensions: {frame_width}x{frame_height}")
+    
+    # Store frame width in VideoData for later use
+    vidData.frame_width = frame_width
+    
     ret, frame = cap.read()
     if not ret:
         print(f"[ERROR] Could not read first frame from video: {video_path}")
@@ -318,19 +327,22 @@ def run_video_tracker(video_path):
 # Notes: Vars modified: found_fish (frame, video), detections(frame), frames with/without fish (video)
 def analyze_yolo_detections(frame, model, frameData, vidData):
 
-    # Run YOLO on frame
-    results = model.predict(source=frame, verbose=False, stream=False, save=False)
+    # Run YOLO on frame with adjustable confidence threshold
+    results = model.predict(source=frame, verbose=False, stream=False, save=False, conf=YOLO_CONFIDENCE_THRESHOLD)
 
     # Begin YOLO post-analysis
     if results:
         r = results[0]
+        detection_count = 0
         for box in r.boxes:
             x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
             conf_arr = box.conf.cpu().numpy()
             conf = float(conf_arr[0]) if conf_arr.size > 0 and conf_arr[0] is not None else 0.0
             cls_arr = box.cls.cpu().numpy()
             cls_id = int(cls_arr[0]) if cls_arr.size > 0 and cls_arr[0] is not None else -1
-            if (x2 - x1)*(y2 - y1) < 100:
+            box_area = (x2 - x1) * (y2 - y1)
+            
+            if box_area < 100:
                 continue
 
             # Mark if YOLO detected a fish in frame.
@@ -340,7 +352,13 @@ def analyze_yolo_detections(frame, model, frameData, vidData):
                 cls_name = str(cls_id)
             if "fish" in cls_name:
                 frameData.f_found_fish = True
+                detection_count += 1
             frameData.f_detections.append([x1, y1, x2, y2, conf, cls_id])
+        
+        # Log detections
+        if detection_count > 0:
+            frame_time_sec = frameData.f_index / vidData.v_fps
+            print(f"[YOLO] Frame {frameData.f_index} ({frame_time_sec:.2f}s): {detection_count} fish detected")
     
     # Increment video-level stats based on frame-level results
     vidData.v_found_fish = vidData.v_found_fish or frameData.f_found_fish
@@ -378,6 +396,11 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
     # Use the tracker's default iou threshold (tuned in the tracker)
     frameData.f_detections = tracker.filterOverlaps(frameData.f_detections)
     tracked_objects = tracker.update(frameData.f_detections, frame)
+    
+    # Debug: Log detection info every 30 frames
+    if frameData.f_index % 30 == 0:
+        frame_time_sec = frameData.f_index / vidData.v_fps
+        print(f"[FRAME {frameData.f_index} ({frame_time_sec:.2f}s)] Detections: {len(frameData.f_detections)}, Tracked objects: {len(tracked_objects)}, Active tracks: {len(vidData.v_active_tracks)}")
 
     for obj in tracked_objects:
         trackId = obj["trackId"]
@@ -387,13 +410,19 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         is_new_track = trackId not in vidData.v_active_tracks
 
         if is_new_track:
+            x1, y1, x2, y2 = obj["bbox"]
+            entry_x = (x1 + x2) / 2  # Center x-position at entry
+            track_time_sec = frameData.f_index / vidData.v_fps
+            print(f"  [TRACK START] Track {trackId} started at frame {frameData.f_index} ({track_time_sec:.2f}s)")
             vidData.v_active_tracks[trackId] = {
                 "start_frame": frameData.f_index,
                 "confidences": [],
                 "directions": [],
                 "best_conf": -1.0,
                 "best_crop": None,
-                "video_timestamp": None 
+                "video_timestamp": None,
+                "entry_x": entry_x,
+                "last_x": entry_x
             }
             
             # Extract timestamp once, when track is first created
@@ -416,6 +445,8 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         vidData.v_active_tracks[trackId]["directions"].append(obj["direction"])
 
         x1, y1, x2, y2 = obj["bbox"]
+        exit_x = (x1 + x2) / 2  # Center x-position at current frame
+        vidData.v_active_tracks[trackId]["last_x"] = exit_x
         
         # Add 30% margin around the bounding box for zoomed-out view
         h, w = frame.shape[:2]
@@ -451,13 +482,15 @@ def finalize_tracks(frameData, vidData, termination_reason):
         disappeared_ids = set(vidData.v_active_tracks.keys()) - vidData.v_current_track_ids 
         for tid in disappeared_ids:
             track_data = vidData.v_active_tracks.pop(tid)
-            track_dict = build_track_summary(tid, track_data, frameData, vidData, None)
+            end_time_sec = frameData.f_index / vidData.v_fps
+            print(f"  [TRACK END] Track {tid} disappeared at frame {frameData.f_index} ({end_time_sec:.2f}s)")
+            track_dict = build_track_summary(tid, track_data, frameData, vidData, None, frame_width=getattr(vidData, 'frame_width', 640))
             if track_dict:
                 vidData.v_finished_tracks.append(track_dict)
 
     elif termination_reason == "forced":
         for tid, track_data in vidData.v_active_tracks.items():
-            track_dict = build_track_summary(tid, track_data, frameData, vidData, None)
+            track_dict = build_track_summary(tid, track_data, frameData, vidData, None, frame_width=getattr(vidData, 'frame_width', 640))
             if track_dict:
                 vidData.v_finished_tracks.append(track_dict)
 
@@ -466,7 +499,7 @@ def finalize_tracks(frameData, vidData, termination_reason):
 # Function: build_track_summary
 # Description: Helper function for finalizing track data.
 # Notes: N/A
-def build_track_summary(trackId, track_data, frameData, vidData, image_path=None):
+def build_track_summary(trackId, track_data, frameData, vidData, image_path=None, frame_width=640):
     duration_sec = (frameData.f_index - track_data["start_frame"]) / vidData.v_fps
     if duration_sec < 1.0:
         return None
@@ -479,18 +512,32 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     best_conf = track_data.get("best_conf", 0.0)
     best_conf_pct = best_conf * 100 if best_conf <= 1.0 else best_conf
     
-    # Calculate overall direction
-    directions = track_data["directions"]
-    overall_direction = "unknown"
-    if directions:
-        upstream_count = directions.count("upstream")
-        downstream_count = directions.count("downstream")
-        if upstream_count > downstream_count:
-            overall_direction = "upstream"
-        elif downstream_count > upstream_count:
-            overall_direction = "downstream"
-        else:
-            overall_direction = directions[-1]
+    # Calculate overall direction based on entry and exit positions
+    entry_x = track_data.get("entry_x", 0)
+    exit_x = track_data.get("last_x", 0)
+    
+    # Determine if entry and exit are on same side of frame
+    # Left side: x < frame_width/2, Right side: x >= frame_width/2
+    entry_side = "left" if entry_x < frame_width / 2 else "right"
+    exit_side = "left" if exit_x < frame_width / 2 else "right"
+    
+    # Determine direction
+    if entry_side == exit_side:
+        # Fish entered and exited from same side - indecisive
+        overall_direction = "indecisive"
+    else:
+        # Fish crossed from one side to other - use direction counts
+        directions = track_data["directions"]
+        overall_direction = "unknown"
+        if directions:
+            upstream_count = directions.count("upstream")
+            downstream_count = directions.count("downstream")
+            if upstream_count > downstream_count:
+                overall_direction = "upstream"
+            elif downstream_count > upstream_count:
+                overall_direction = "downstream"
+            else:
+                overall_direction = directions[-1]
     
     species_data = classify_image(image_path) if image_path else ("No image", 0.0)
     

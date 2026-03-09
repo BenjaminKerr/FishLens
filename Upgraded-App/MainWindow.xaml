@@ -385,6 +385,7 @@ Height="70">
                                               MinWidth="120">
                                         <ComboBoxItem Content="Upstream"/>
                                         <ComboBoxItem Content="Downstream"/>
+                                        <ComboBoxItem Content="Indecisive"/>
                                     </ComboBox>
                                 </StackPanel>
                             </StackPanel>
