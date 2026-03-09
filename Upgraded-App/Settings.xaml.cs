@@ -63,6 +63,21 @@ namespace FishLens_App
         #region Event Handlers
 
         // ****************************************************************
+        // Function: ScrollViewer_PreviewMouseWheel
+        // Description: Slows down and smooths scrolling speed
+        // Notes: Reduces scroll delta to make scrolling less snappy
+        private void ScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            var scrollViewer = sender as ScrollViewer;
+            if (scrollViewer != null)
+            {
+                // Scroll slower - reduce delta by 75% (multiply by 0.25)
+                scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset - (e.Delta * 0.25));
+                e.Handled = true;
+            }
+        }
+
+        // ****************************************************************
         // Function: CreateUserClick
         // Description: Handle create user button click and calls signup
         // Notes: Temporary message boxes for debug
@@ -124,11 +139,6 @@ namespace FishLens_App
             if (confidenceValue == null) return;
             var percent = (int)Math.Round(e.NewValue);
             confidenceValue.Text = $"{percent}%";
-        }
-
-        private void ConfidenceThreshold_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            _isSliderDragging = true;
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
