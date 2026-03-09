@@ -1,2 +1,2 @@
 video_file,trackId,image_path,likely_class,confidence,start_time_sec,end_time_sec,avg_confidence,direction,species,species_confidence,video_timestamp
-00000001.ASF,1,fish_images\Chinook\00000001_track_1.jpg,fish,89.18%,29.625,60.0,89.18%,upstream,Chinook,58.50%,2026/10/01 18:10:12
+00000004.ASF,1,fish_images\Chinook\00000004_track_1.jpg,fish,94.01%,35.0,517.125,94.01%,upstream,Chinook,72.76%,2026/10/01 19:07:44

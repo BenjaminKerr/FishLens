@@ -20,22 +20,31 @@ def parseTimestamp(text):
     if not text:
         return None
     
-    # Clean up text - remove spaces that shouldn't be there
-    text = text.replace(' ', '')
-    
-    # Try regex patterns - more flexible to match the OCR output
-    # Extended patterns to handle OCR errors like extra digits
+    # Keep only chars expected in timestamps.
+    text = re.sub(r'[^0-9/\-:\s]', '', text).strip()
+    text = re.sub(r'\s+', ' ', text)
+
+    # Common OCR issue on ASF overlay: extra digit in year (e.g., 20265/10/01...)
+    # Convert 5-digit year starting with 20xxx to 4-digit year.
+    text = re.sub(r'^(20\d{2})\d([/\-])', r'\1\2', text)
+
+    # Also handle no-space date/time form before matching.
+    compact_text = text.replace(' ', '')
+
+    # Match full string only (prevents partial matches like ...:07:60 becoming ...:07)
     patterns = [
-        r'(\d{4})[/\-](\d{2})[/\-](\d{2})(\d{2}):(\d{2,3}):(\d{2})',  # Allow 2-3 digits for minutes (OCR errors)
-        r'(\d{4})[/\-](\d{2})[/\-](\d{2})(\d{2}):(\d{2}):(\d{2})',  # No space between date/time
-        r'(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})\s*(\d{1,2}):(\d{2,3}):(\d{2})',  # Allow 2-3 digits for minutes
-        r'(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})\s*(\d{1,2}):(\d{2}):(\d{2})',
-        r'(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})\s*(\d{1,2}):(\d{2})',
+        r'^(20\d{2})[/\-](\d{1,2})[/\-](\d{1,2})(\d{1,2}):(\d{2,3}):(\d{2})$',
+        r'^(20\d{2})[/\-](\d{1,2})[/\-](\d{1,2})(\d{1,2}):(\d{2,3})$',
+        r'^(20\d{2})[/\-](\d{1,2})[/\-](\d{1,2})\s*(\d{1,2}):(\d{2,3}):(\d{2})$',
+        r'^(20\d{2})[/\-](\d{1,2})[/\-](\d{1,2})\s*(\d{1,2}):(\d{2,3})$',
     ]
     
-    for pattern in patterns:
-        match = re.search(pattern, text)
-        if match:
+    for src in (text, compact_text):
+        for pattern in patterns:
+            match = re.match(pattern, src)
+            if not match:
+                continue
+
             groups = match.groups()
             
             # Parse into components
@@ -65,6 +74,10 @@ def parseTimestamp(text):
                 elif 90 <= minute <= 99:
                     minute = minute - 50
             
+            # Fix occasional OCR seconds errors like 60-69 -> 00-09.
+            if second >= 60 and 60 <= second <= 69:
+                second = second - 60
+
             # Validate ranges - return formatted timestamp if all valid
             if (2020 <= int(year) <= 2030 and
                 1 <= month <= 12 and
