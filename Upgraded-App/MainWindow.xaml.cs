@@ -168,16 +168,21 @@ namespace FishLens_App
 
         // **************************************************
         // Function: MakeDirectoryIfNotExists
-        // Description: Creates directory if it doesn't already exist
+        // Description: Creates directory if it doesn't exist, or clears it if it does (except .gitkeep)
         // **************************************************
         private void MakeDirectoryIfNotExists(string directory)
         {
-            if (Directory.Exists(directory))
-                return;
-
             try
             {
-                Directory.CreateDirectory(directory);
+                if (!Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+                else
+                {
+                    // Clear directory contents except .gitkeep
+                    ClearDirectoryExceptGitkeep(directory);
+                }
             }
             catch (UnauthorizedAccessException ex)
             {
@@ -188,6 +193,38 @@ namespace FishLens_App
             {
                 _logger.LogError(ex, "Failed to create directory");
                 HandleDirectoryCreationError(ex.Message);
+            }
+        }
+
+        // **************************************************
+        // Function: ClearDirectoryExceptGitkeep
+        // Description: Clears directory of all files and subdirectories except .gitkeep
+        // **************************************************
+        private void ClearDirectoryExceptGitkeep(string directory)
+        {
+            try
+            {
+                var dirInfo = new DirectoryInfo(directory);
+
+                // Delete all files except .gitkeep
+                foreach (var file in dirInfo.GetFiles())
+                {
+                    if (file.Name != ".gitkeep")
+                    {
+                        file.Delete();
+                    }
+                }
+
+                // Delete all subdirectories
+                foreach (var subDir in dirInfo.GetDirectories())
+                {
+                    subDir.Delete(recursive: true);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to clear directory");
+                throw;
             }
         }
 
@@ -316,24 +353,19 @@ namespace FishLens_App
         // **************************************************
         private ProcessStartInfo CreateYoloProcessStartInfo(string dataPath)
         {
-            string yoloScriptDirectory = _pathResolver.ResolveYoloScriptPath();
-
-            // REMOVE THESE IF WORKING
-            // Also issue here because it uses default "sampleDataPath" that has nothing to do with
-            // the data given from the button click for opening a folder
-            //string sampleDataPath = Path.Combine(_pathResolver.ResolveProjectRoot(), SAMPLE_DATA_FOLDER);
-            //if (dataPath == null)
-            //    dataPath = Path.Combine(_pathResolver.ResolveProjectRoot(), SAMPLE_DATA_FOLDER);
+            string yoloScriptPath = _pathResolver.ResolveYoloScriptPath();
 
             return new ProcessStartInfo
             {
                 FileName = "python",
-                Arguments = $"\"{yoloScriptDirectory}\" \"{dataPath}\"",
+                WorkingDirectory = _pathResolver.ResolveProjectRoot(),
+                Arguments = $"\"{yoloScriptPath}\" \"{dataPath}\"",
                 RedirectStandardError = _checkBoxes.ErrorBox,
                 RedirectStandardOutput = _checkBoxes.OutputBox,
                 UseShellExecute = false
             };
         }
+        
 
         // **************************************************
         // Function: ExecuteYoloProcess
@@ -417,30 +449,37 @@ namespace FishLens_App
         private async void ProcessVideos(string inputFolder, string outputDirectory)
         {
             MakeDirectoryIfNotExists(outputDirectory);
-            
-            // REMOVE THESE IF WORKING
-            // This is the main issue here
-            // Should be running YOLO before updating the UI with data from videos
-            
-            EnterDataInFile(inputFolder, outputDirectory);
-            await RunYolo(outputDirectory);
-            DisplayDataInUi(outputDirectory);
 
+            // Step 1: copy videos
+            EnterDataInFile(inputFolder, outputDirectory);
+
+            // Step 2: run YOLO to generate CSV
+            await RunYolo(outputDirectory);
+
+            // Step 3: read CSV now that it exists
             List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList = CreateSortedListOfVideos(outputDirectory);
+
+            var allRows = File.ReadAllLines(_pathResolver.ResolveCsvScriptPath());
+            MessageBox.Show(string.Join("\n", allRows));
+
+
+            // Step 4: update UI with first video
+            if (videoDataList.Count > 0)
+            {
+                DisplayDataInUi(videoDataList[0].vid.Name);
+            }
+
+            // Step 5: create sidebar buttons
             CreateVideoButtonsList(videoDataList);
 
-            // If configured, load (and auto-play) the first uploaded video
-            try
+            // Optional: auto-load first video into player
+            if (videoDataList.Count > 0)
             {
-                if (videoDataList != null && videoDataList.Count > 0)
-                {
-                    var firstVideoPath = videoDataList[0].vid.FullName;
-                    // Load the video into the player. LoadVideoInPlayer will respect _config.AutoPlayVideos
-                    Dispatcher.Invoke(() => LoadVideoInPlayer(firstVideoPath));
-                }
+                var firstVideoPath = videoDataList[0].vid.FullName;
+                Dispatcher.Invoke(() => LoadVideoInPlayer(firstVideoPath));
             }
-            catch { }
         }
+
 
         // **************************************************
         // Function: EnterDataInFile
@@ -1051,13 +1090,17 @@ namespace FishLens_App
             string direction = GetTravelDirectionValue();
             string species = fishSpecies.Text.Trim();
 
-            // Keep original values for fields not editable in UI
+            // Keep original values for fields not editable in UI -- 12 columns total
             string videoFile = originalColumns[0].Trim();
             string trackId = originalColumns[1].Trim();
-            string confidence = originalColumns[3].Trim();
-            string startTime = originalColumns[4].Trim();
-            string endTime = originalColumns[5].Trim();
-            string avgConfidence = originalColumns[6].Trim();
+            string imagePath = originalColumns[2].Trim();
+            string confidence = originalColumns[4].Trim();
+            string startTime = originalColumns[5].Trim();
+            string endTime = originalColumns[6].Trim();
+            string avgConfidence = originalColumns[7].Trim();
+            string species_confidence = originalColumns[10].Trim();
+            string vidTimeStamp = originalColumns[11].Trim();
+
 
             // If user entered a species, update the likely_class
             if (!string.IsNullOrEmpty(species) && species != "--")
@@ -1066,7 +1109,8 @@ namespace FishLens_App
             }
 
             // Build the CSV row
-            return $"{videoFile},{trackId},{likelyClass},{confidence},{startTime},{endTime},{avgConfidence},{direction}";
+            
+            return $"{videoFile},{trackId},{imagePath},{likelyClass},{confidence},{startTime},{endTime},{avgConfidence},{direction},{species},{species_confidence},{vidTimeStamp}";
         }
 
         // **************************************************
@@ -1182,8 +1226,13 @@ namespace FishLens_App
             LoadVideoInPlayer(videoPath);
 
             string videoFileName = Path.GetFileName(videoPath);
-            GetData(videoFileName);
+            var data = GetData(videoFileName);
+            if (data != null)
+            {
+                DisplayDataInUi(videoFileName);
+            }
         }
+
 
         // **************************************************
         // Function: LoadVideoInPlayer

@@ -22,7 +22,7 @@ import os
 # File paths and directories
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(BASE_DIR)
-EXPORT_PATH = os.path.join(PARENT_DIR, 'fish_classifier_model.h5')
+EXPORT_PATH = os.path.join(PARENT_DIR, "models", "fish_classifier_model.h5")
 TRAIN_DIR = os.path.join(BASE_DIR, 'data', 'train')
 
 # Data Constants

@@ -27,7 +27,7 @@ from keras.preprocessing.image import load_img, img_to_array
 import pytesseract
 import re
 from dateutil import parser as date_parser
-from extract_timestamp import extractTimestamFromFrame, parseTimestamp
+from extract_timestamp import extractTimestampFromFrame, parseTimestamp
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Update this path if Tesseract is installed elsewhere
 
 
@@ -55,7 +55,7 @@ warnings.filterwarnings(
 
 # Constants--Folders and Directories
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-INPUT_PATH = sys.argv[1] if len(sys.argv) > 1 else os.path.join(PROJECT_ROOT, "sample_data")
+INPUT_PATH = sys.argv[1] if len(sys.argv) > 1 else os.path.join(PROJECT_ROOT, "SavedVids")
 # Handle both directory and single file inputs
 if os.path.isfile(INPUT_PATH):
     VIDEO_FOLDER = os.path.dirname(INPUT_PATH)
@@ -92,7 +92,7 @@ OUTPUT_CSV = "fish_summary.csv"
 FISH_IMAGE_DIR = "fish_images"
 
 # Constants--Classifier
-CLASSIFIER_MODEL_PATH = os.path.join(PROJECT_ROOT, "fish_classifier_model.h5")
+CLASSIFIER_MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "fish_classifier_model.h5")
 CLASSIFIER_MODEL = load_model(CLASSIFIER_MODEL_PATH)
 CLASSIFIER_TARGET_FOLDER = "images"
 CLASS_NAMES = ["Omykiss", "Chinook"] 
@@ -135,12 +135,19 @@ class VideoData:
 # Notes: N/A
 def main():
 
+    # Debug: Print paths and initial setup
+    print(f"[DEBUG] PROJECT_ROOT: {PROJECT_ROOT}")
+    print(f"[DEBUG] VIDEO_FOLDER: {VIDEO_FOLDER}")
+    print(f"[DEBUG] VIDEO_FOLDER exists: {os.path.exists(VIDEO_FOLDER)}")
+    print(f"[DEBUG] VIDEO_FOLDER is directory: {os.path.isdir(VIDEO_FOLDER)}")
+
     # Process all videos in folder
     all_tracks = []
     if SINGLE_VIDEO_FILE:
         # Process single video file
         video_path = SINGLE_VIDEO_FILE
         filename = os.path.basename(SINGLE_VIDEO_FILE)
+        print(f"[DEBUG] Processing single video file: {filename}")
         video_tracks = run_video_tracker(video_path)
         for t in video_tracks:
             t["video_file"] = filename
@@ -148,25 +155,43 @@ def main():
     else:
         # Process all videos in folder
         video_extensions = ('.mp4', '.avi', '.mov', '.mkv', '.asf', '.wmv', '.flv', '.webm')
-        for filename in os.listdir(VIDEO_FOLDER):
+        files_in_folder = []
+        
+        try:
+            files_in_folder = os.listdir(VIDEO_FOLDER)
+            print(f"[DEBUG] Found {len(files_in_folder)} items in VIDEO_FOLDER: {files_in_folder}")
+        except Exception as e:
+            print(f"[ERROR] Failed to list VIDEO_FOLDER: {e}")
+            return
+        
+        for filename in files_in_folder:
             item_path = os.path.join(VIDEO_FOLDER, filename)
             # Skip directories and non-video files
             if os.path.isfile(item_path) and filename.lower().endswith(video_extensions):
                 video_path = item_path
-                print(f"Processing: {filename}")
+                print(f"[DEBUG] Processing: {filename}")
                 video_tracks = run_video_tracker(video_path)
-                for t in video_tracks:
-                    t["video_file"] = filename
-                all_tracks.extend(video_tracks)
+                if video_tracks:
+                    print(f"[DEBUG]   -> Found {len(video_tracks)} tracks")
+                    for t in video_tracks:
+                        t["video_file"] = filename
+                    all_tracks.extend(video_tracks)
+                else:
+                    print(f"[DEBUG]   -> No tracks found (no fish or failed to open)")
+            elif os.path.isdir(item_path):
+                print(f"[DEBUG] Skipping directory: {filename}")
 
-    # Export CSV
-    if all_tracks:
+    # Export CSV - ALWAYS write, even if empty (to clear old data)
+    print(f"\n[DEBUG] Writing CSV with {len(all_tracks)} total tracks...")
+    try:
         with open(OUTPUT_CSV, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=CSV_KEYS)
             writer.writeheader()
-            writer.writerows(all_tracks)
-
-    print(f"Exported {len(all_tracks)} tracked fish to {OUTPUT_CSV}")
+            if all_tracks:
+                writer.writerows(all_tracks)
+        print(f"[SUCCESS] Exported {len(all_tracks)} tracked fish to {OUTPUT_CSV}")
+    except Exception as e:
+        print(f"[ERROR] Failed to write CSV: {e}")
 
 # ****************************************************************
 # Function: enhance_image
@@ -209,13 +234,29 @@ def run_video_tracker(video_path):
     # Initialize frameData to avoid UnboundLocalError if video fails early
     frameData = None
 
+    # Debug: Check file before attempting to open
+    if not os.path.exists(video_path):
+        print(f"[ERROR] File does not exist: {video_path}")
+        return []
+    
+    file_size = os.path.getsize(video_path)
+    print(f"[DEBUG] File size: {file_size} bytes")
+
     # Open video, determine FPS, and read first frame
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        print(f"Error: Could not open video: {video_path}")
+        print(f"[ERROR] Could not open video with cv2.VideoCapture: {video_path}")
+        print(f"[DEBUG] This usually means the video codec is not supported or file is corrupted")
         return []
+    
     vidData.v_fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
+    print(f"[DEBUG] Video FPS: {vidData.v_fps}")
+    
     ret, frame = cap.read()
+    if not ret:
+        print(f"[ERROR] Could not read first frame from video: {video_path}")
+        cap.release()
+        return []
 
     # Cycle through video frames until end of video
     while ret:
@@ -247,8 +288,11 @@ def run_video_tracker(video_path):
 
     cap.release()
 
+    print(f"[DEBUG] Processed {vidData.v_total_frames} frames, fish found: {vidData.v_found_fish}, tracks: {len(vidData.v_finished_tracks)}")
+
     # Skip export if fish was not detected in video
     if not vidData.v_found_fish:
+        print(f"[DEBUG] No fish detected in {vidData.v_filename} - skipping")
         no_fish_found(video_path, vidData.v_filename)
         return []
 
@@ -354,7 +398,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
             
             # Extract timestamp once, when track is first created
             print(f"  New fish detected (Track {trackId}) at frame {frameData.f_index}")
-            timestamp = extractTimestamFromFrame(frame, False)
+            timestamp = extractTimestampFromFrame(frame, False)
             
             if timestamp:
                 vidData.v_active_tracks[trackId]["video_timestamp"] = timestamp
