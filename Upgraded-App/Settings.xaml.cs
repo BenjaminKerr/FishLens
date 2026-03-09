@@ -55,6 +55,7 @@ namespace FishLens_App
             _pathResolver = pathresolver ?? throw new ArgumentNullException(nameof(pathresolver));
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
             InitializeComponent();
+            
             LoadAll();
         }
         #endregion
@@ -123,6 +124,11 @@ namespace FishLens_App
             if (confidenceValue == null) return;
             var percent = (int)Math.Round(e.NewValue);
             confidenceValue.Text = $"{percent}%";
+        }
+
+        private void ConfidenceThreshold_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _isSliderDragging = true;
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
@@ -277,6 +283,7 @@ namespace FishLens_App
                 CreateUserText.Visibility = Visibility.Collapsed;
             }
         }
+
         // ****************************************************************
         // Function: LoadUsers
         // Description: Loads the users for the Manage users card
@@ -326,7 +333,6 @@ namespace FishLens_App
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("LoadUsers error: " + ex.Message);
                 MessageBox.Show("Failed to load users.");
             }
         }

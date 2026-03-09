@@ -136,11 +136,8 @@ class VideoData:
 # Notes: N/A
 def main():
 
-    # Debug: Print paths and initial setup
-    print(f"[DEBUG] PROJECT_ROOT: {PROJECT_ROOT}")
-    print(f"[DEBUG] VIDEO_FOLDER: {VIDEO_FOLDER}")
-    print(f"[DEBUG] VIDEO_FOLDER exists: {os.path.exists(VIDEO_FOLDER)}")
-    print(f"[DEBUG] VIDEO_FOLDER is directory: {os.path.isdir(VIDEO_FOLDER)}")
+    # Debug: Print paths
+    print(f"[INFO] Processing videos from: {VIDEO_FOLDER}")
 
     # Process all videos in folder
     all_tracks = []
@@ -148,7 +145,7 @@ def main():
         # Process single video file
         video_path = SINGLE_VIDEO_FILE
         filename = os.path.basename(SINGLE_VIDEO_FILE)
-        print(f"[DEBUG] Processing single video file: {filename}")
+        print(f"[INFO] Processing: {filename}")
         video_tracks = run_video_tracker(video_path)
         for t in video_tracks:
             t["video_file"] = filename
@@ -160,7 +157,7 @@ def main():
         
         try:
             files_in_folder = os.listdir(VIDEO_FOLDER)
-            print(f"[DEBUG] Found {len(files_in_folder)} items in VIDEO_FOLDER: {files_in_folder}")
+            print(f"[INFO] Found {len(files_in_folder)} items in folder")
         except Exception as e:
             print(f"[ERROR] Failed to list VIDEO_FOLDER: {e}")
             return
@@ -170,27 +167,22 @@ def main():
             # Skip directories and non-video files
             if os.path.isfile(item_path) and filename.lower().endswith(video_extensions):
                 video_path = item_path
-                print(f"[DEBUG] Processing: {filename}")
+                print(f"[INFO] Processing: {filename}")
                 video_tracks = run_video_tracker(video_path)
                 if video_tracks:
-                    print(f"[DEBUG]   -> Found {len(video_tracks)} tracks")
                     for t in video_tracks:
                         t["video_file"] = filename
                     all_tracks.extend(video_tracks)
-                else:
-                    print(f"[DEBUG]   -> No tracks found (no fish or failed to open)")
-            elif os.path.isdir(item_path):
-                print(f"[DEBUG] Skipping directory: {filename}")
+
 
     # Export CSV - ALWAYS write, even if empty (to clear old data)
-    print(f"\n[DEBUG] Writing CSV with {len(all_tracks)} total tracks...")
     try:
         with open(OUTPUT_CSV, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=CSV_KEYS)
             writer.writeheader()
             if all_tracks:
                 writer.writerows(all_tracks)
-        print(f"[SUCCESS] Exported {len(all_tracks)} tracked fish to {OUTPUT_CSV}")
+        print(f"[SUCCESS] Exported {len(all_tracks)} fish tracks to {OUTPUT_CSV}")
     except Exception as e:
         print(f"[ERROR] Failed to write CSV: {e}")
 
@@ -240,8 +232,7 @@ def run_video_tracker(video_path):
         print(f"[ERROR] File does not exist: {video_path}")
         return []
     
-    file_size = os.path.getsize(video_path)
-    print(f"[DEBUG] File size: {file_size} bytes")
+
 
     # Open video, determine FPS, and read first frame
     cap = cv2.VideoCapture(video_path)
@@ -251,12 +242,10 @@ def run_video_tracker(video_path):
         return []
     
     vidData.v_fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
-    print(f"[DEBUG] Video FPS: {vidData.v_fps}")
     
     # Get frame dimensions
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    print(f"[DEBUG] Frame dimensions: {frame_width}x{frame_height}")
     
     # Store frame width in VideoData for later use
     vidData.frame_width = frame_width
@@ -297,11 +286,11 @@ def run_video_tracker(video_path):
 
     cap.release()
 
-    print(f"[DEBUG] Processed {vidData.v_total_frames} frames, fish found: {vidData.v_found_fish}, tracks: {len(vidData.v_finished_tracks)}")
+    print(f"[INFO] Processed {vidData.v_total_frames} frames, found {len(vidData.v_finished_tracks)} fish tracks")
 
     # Skip export if fish was not detected in video
     if not vidData.v_found_fish:
-        print(f"[DEBUG] No fish detected in {vidData.v_filename} - skipping")
+        print(f"[INFO] No fish detected in {vidData.v_filename}")
         no_fish_found(video_path, vidData.v_filename)
         return []
 
@@ -355,10 +344,7 @@ def analyze_yolo_detections(frame, model, frameData, vidData):
                 detection_count += 1
             frameData.f_detections.append([x1, y1, x2, y2, conf, cls_id])
         
-        # Log detections
-        if detection_count > 0:
-            frame_time_sec = frameData.f_index / vidData.v_fps
-            print(f"[YOLO] Frame {frameData.f_index} ({frame_time_sec:.2f}s): {detection_count} fish detected")
+
     
     # Increment video-level stats based on frame-level results
     vidData.v_found_fish = vidData.v_found_fish or frameData.f_found_fish
@@ -397,11 +383,6 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
     frameData.f_detections = tracker.filterOverlaps(frameData.f_detections)
     tracked_objects = tracker.update(frameData.f_detections, frame)
     
-    # Debug: Log detection info every 30 frames
-    if frameData.f_index % 30 == 0:
-        frame_time_sec = frameData.f_index / vidData.v_fps
-        print(f"[FRAME {frameData.f_index} ({frame_time_sec:.2f}s)] Detections: {len(frameData.f_detections)}, Tracked objects: {len(tracked_objects)}, Active tracks: {len(vidData.v_active_tracks)}")
-
     for obj in tracked_objects:
         trackId = obj["trackId"]
         vidData.v_current_track_ids.add(trackId)
@@ -412,8 +393,6 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         if is_new_track:
             x1, y1, x2, y2 = obj["bbox"]
             entry_x = (x1 + x2) / 2  # Center x-position at entry
-            track_time_sec = frameData.f_index / vidData.v_fps
-            print(f"  [TRACK START] Track {trackId} started at frame {frameData.f_index} ({track_time_sec:.2f}s)")
             vidData.v_active_tracks[trackId] = {
                 "start_frame": frameData.f_index,
                 "confidences": [],
@@ -426,7 +405,6 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
             }
             
             # Extract timestamp once, when track is first created
-            print(f"  New fish detected (Track {trackId}) at frame {frameData.f_index}")
             timestamp = extractTimestampFromFrame(frame, False)
             
             if timestamp:
@@ -482,8 +460,6 @@ def finalize_tracks(frameData, vidData, termination_reason):
         disappeared_ids = set(vidData.v_active_tracks.keys()) - vidData.v_current_track_ids 
         for tid in disappeared_ids:
             track_data = vidData.v_active_tracks.pop(tid)
-            end_time_sec = frameData.f_index / vidData.v_fps
-            print(f"  [TRACK END] Track {tid} disappeared at frame {frameData.f_index} ({end_time_sec:.2f}s)")
             track_dict = build_track_summary(tid, track_data, frameData, vidData, None, frame_width=getattr(vidData, 'frame_width', 640))
             if track_dict:
                 vidData.v_finished_tracks.append(track_dict)

@@ -486,6 +486,9 @@ namespace FishLens_App
             // Step 3: read CSV now that it exists
             List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList = CreateSortedListOfVideos(outputDirectory);
 
+            //var allRows = File.ReadAllLines(_pathResolver.ResolveCsvScriptPath());
+            //MessageBox.Show(string.Join("\n", allRows));
+
             // Step 4: update UI with first video
             if (videoDataList.Count > 0)
             {
