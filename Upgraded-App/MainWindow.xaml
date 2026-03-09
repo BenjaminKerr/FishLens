@@ -396,14 +396,17 @@ Height="70">
                                                FontSize="{DynamicResource BaseFontSize}"
                                                Foreground="{DynamicResource SecondaryText}"
                                                Margin="0,0,0,4"/>
-                                    <TextBox x:Name="fishSpecies" 
-                                             FontSize="{DynamicResource BaseFontSize}"
-                                             FontWeight="Medium"
-                                             Foreground="{DynamicResource PrimaryText}"
-                                             BorderBrush="{DynamicResource BorderBrush}"
-                                             BorderThickness="1"
-                                             Padding="8,4"
-                                             TextWrapping="Wrap"/>
+                                    <ComboBox x:Name="fishSpecies" 
+                                              IsEditable="True"
+                                              FontSize="{DynamicResource BaseFontSize}"
+                                              FontWeight="Medium"
+                                              Foreground="{DynamicResource PrimaryText}"
+                                              BorderBrush="{DynamicResource BorderBrush}"
+                                              BorderThickness="1"
+                                              Padding="8,4">
+                                        <System:String xmlns:System="clr-namespace:System;assembly=netstandard">Chinook</System:String>
+                                        <System:String xmlns:System="clr-namespace:System;assembly=netstandard">Omykiss</System:String>
+                                    </ComboBox>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="Confidence: " 

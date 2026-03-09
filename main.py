@@ -95,7 +95,7 @@ FISH_IMAGE_DIR = "fish_images"
 CLASSIFIER_MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "fish_classifier_model.h5")
 CLASSIFIER_MODEL = load_model(CLASSIFIER_MODEL_PATH)
 CLASSIFIER_TARGET_FOLDER = "images"
-CLASS_NAMES = ["Omykiss", "Chinook"] 
+CLASS_NAMES = ["Chinook", "Omykiss"]
 IMAGE_SIZE = (150, 150)
 IMAGE_EXTS = {'.jpg', '.jpeg', '.png'}
 
