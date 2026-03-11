@@ -12,21 +12,18 @@ import os
 import csv
 import cv2
 import subprocess
+import importlib
 from contextlib import contextmanager
 import tempfile
 import numpy as np
-from ultralytics import YOLO
 import shutil
 import sys
 #from YOLO.detector import YoloDetector
 from tracking.deepsort_tracker import DeepSortTracker
 from collections import Counter
 from pathlib import Path
-import numpy as np
-from keras.models import load_model
 from dataclasses import dataclass, field
 from typing import List
-from keras.preprocessing.image import load_img, img_to_array
 from extract_timestamp import extractTimestamFromFrame, check_tesseract, probe_video_timestamp, dedupe_tracks_by_timestamp
 
 # Keep OpenCV logging quieter (FFmpeg decode warnings can be very noisy on damaged ASF streams).
@@ -44,6 +41,44 @@ warnings.filterwarnings(
     category=UserWarning,
     message="pkg_resources is deprecated"
 )
+
+
+def _load_yolo_model(model_path):
+    try:
+        ultralytics = importlib.import_module("ultralytics")
+        return ultralytics.YOLO(model_path)
+    except Exception as e:
+        print(f"WARNING: Could not load YOLO model '{model_path}': {e}")
+        return None
+
+
+def _load_classifier_model(model_path):
+    try:
+        keras_models = importlib.import_module("keras.models")
+        return keras_models.load_model(model_path)
+    except Exception as e:
+        print(f"WARNING: Could not load classifier model '{model_path}': {e}")
+        return None
+
+
+def _load_keras_image_utils():
+    try:
+        keras_image = importlib.import_module("keras.preprocessing.image")
+        return keras_image.load_img, keras_image.img_to_array
+    except Exception:
+        return None, None
+
+
+def _resolve_classifier_model_path():
+    candidates = [
+        os.path.join(PROJECT_ROOT, "models", "fish_classifier_model.h5"),
+        os.path.join(PROJECT_ROOT, "fish_classifier_model.h5")
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    # Keep old default if none found so warning message still shows attempted path.
+    return candidates[0]
 
 # Constants--Folders and Directories
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -74,7 +109,7 @@ CSV_KEYS = [
 TESSERACT_AVAILABLE = check_tesseract()
 
 # Constants--YOLO
-MODEL = YOLO("models/fish_detector2.pt")
+MODEL = _load_yolo_model("models/fish_detector2.pt")
 YOLO_CONFIDENCE_THRESHOLD = 0.25  # Adjustable: lower = detects more fish (but more false positives), higher = more selective
 NO_FISH = os.path.join(PROJECT_ROOT, "no_fish")
 
@@ -94,8 +129,9 @@ SUPPRESS_CODEC_WARNINGS = os.getenv("FISHLENS_SUPPRESS_CODEC_WARNINGS", "1") == 
 VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRAMES", "6" if FAST_MODE else "12")))
 
 # Constants--Classifier
-CLASSIFIER_MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "fish_classifier_model.h5")
-CLASSIFIER_MODEL = load_model(CLASSIFIER_MODEL_PATH)
+CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
+CLASSIFIER_MODEL = _load_classifier_model(CLASSIFIER_MODEL_PATH)
+LOAD_IMG, IMG_TO_ARRAY = _load_keras_image_utils()
 CLASSIFIER_TARGET_FOLDER = "images"
 CLASS_NAMES = ["Chinook", "Omykiss"]
 IMAGE_SIZE = (150, 150)
@@ -184,9 +220,10 @@ def main():
         finally:
             if is_temp:
                 _cleanup_temp(video_path)
-            for t in video_tracks:
-                t["video_file"] = filename
-            all_tracks.extend(video_tracks)
+
+        for t in video_tracks:
+            t["video_file"] = filename
+        all_tracks.extend(video_tracks)
     else:
         # Process all videos in folder
         video_extensions = ('.mp4', '.avi', '.mov', '.mkv', '.asf', '.wmv', '.flv', '.webm')
@@ -216,14 +253,16 @@ def main():
 
     # Export CSV
     if all_tracks:
-        with open(OUTPUT_CSV, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=CSV_KEYS)
-            writer.writeheader()
-            if all_tracks:
+        try:
+            with open(OUTPUT_CSV, "w", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=CSV_KEYS, extrasaction="ignore")
+                writer.writeheader()
                 writer.writerows(all_tracks)
-        print(f"[SUCCESS] Exported {len(all_tracks)} fish tracks to {OUTPUT_CSV}")
-    except Exception as e:
-        print(f"[ERROR] Failed to write CSV: {e}")
+            print(f"[SUCCESS] Exported {len(all_tracks)} fish tracks to {OUTPUT_CSV}")
+        except Exception as e:
+            print(f"[ERROR] Failed to write CSV: {e}")
+    else:
+        print("[INFO] No fish tracks to export.")
 
 # ****************************************************************
 # Function: enhance_image
@@ -845,7 +884,7 @@ def save_best_image(finished_tracks, filename):
                 track["species_confidence"] = f"{species_data[1]:.2f}%" if species_data and len(species_data) > 1 else "No data"
                 
                 # Create species subfolder and move image
-                if species != "No data":
+                if species in CLASS_NAMES:
                     species_folder = os.path.join(FISH_IMAGE_DIR, species)
                     os.makedirs(species_folder, exist_ok=True)
                     final_image_path = os.path.join(species_folder, temp_image_name)
@@ -854,9 +893,20 @@ def save_best_image(finished_tracks, filename):
                         track["image_path"] = final_image_path
                     except Exception as e:
                         print(f"Error moving image to species folder: {e}")
-                        track["image_path"] = temp_image_path
+                        track["image_path"] = None
+                        try:
+                            if os.path.exists(temp_image_path):
+                                os.remove(temp_image_path)
+                        except OSError:
+                            pass
                 else:
-                    track["image_path"] = temp_image_path
+                    # Do not keep unclassified images in root fish_images.
+                    track["image_path"] = None
+                    try:
+                        if os.path.exists(temp_image_path):
+                            os.remove(temp_image_path)
+                    except OSError:
+                        pass
             else:
                 track["image_path"] = None
             
@@ -934,11 +984,15 @@ def classify_image(image_path):
     if model is None:
         print("Model was not loaded at startup. Skipping classification.")
         return ("No data", 0.0)
+
+    if LOAD_IMG is None or IMG_TO_ARRAY is None:
+        print("Keras image preprocessing utilities are unavailable. Skipping classification.")
+        return ("No data", 0.0)
     
     try:
         # Load and preprocess image
-        img = load_img(image_path, target_size=IMAGE_SIZE)
-        img_array = img_to_array(img)
+        img = LOAD_IMG(image_path, target_size=IMAGE_SIZE)
+        img_array = IMG_TO_ARRAY(img)
         img_array = img_array / 255.0 
         img_array = np.expand_dims(img_array, axis=0)
 
