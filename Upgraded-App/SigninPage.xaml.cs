@@ -182,5 +182,29 @@ namespace FishLens_App
             }
         }
 
+        // ****************************************************************
+        // Function: UsernameBox_GotKeyFocus
+        // Description: Selects all text in the UsernameBox when it receives keyboard focus for easier editing.
+        // Notes: N/A
+        private void UsernameBox_GotKeyFocus(object sender, RoutedEventArgs e)
+        {
+            if (sender is TextBox pb)
+            {
+                pb.Dispatcher.BeginInvoke(new Action(() => pb.SelectAll()));
+            }
+        }
+
+        // ****************************************************************
+        // Function: PasswordBox_GotKeyFocus
+        // Description: Selects all text in the PasswordBox when it receives keyboard focus for easier editing.
+        // Notes: N/A
+        private void PasswordBox_GotKeyFocus(object sender, RoutedEventArgs e)
+        {
+            if (sender is PasswordBox pb)
+            {
+                pb.Dispatcher.BeginInvoke(new Action(() => pb.SelectAll()));
+            }
+        }
+
     }
 }

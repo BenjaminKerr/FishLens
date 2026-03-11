@@ -64,7 +64,8 @@
                              FontSize="{DynamicResource BaseFontSize}"
                              Margin="0,5,0,15"
                              TabIndex="0"
-                             KeyDown="TextBox_KeyDown"/>
+                             KeyDown="TextBox_KeyDown"
+                             GotKeyboardFocus="UsernameBox_GotKeyFocus"/>
 
                     <TextBlock Text="Password"
                                FontSize="{DynamicResource BaseFontSize}"
@@ -76,7 +77,8 @@
                                  FontSize="{DynamicResource BaseFontSize}"
                                  Margin="0,5,0,20"
                                  TabIndex="1"
-                                 KeyDown="PasswordBox_KeyDown"/>
+                                 KeyDown="PasswordBox_KeyDown"
+                                 GotKeyboardFocus="PasswordBox_GotKeyFocus"/>
 
                     <!-- Sign In Button -->
                     <Button x:Name="SignInButton"
