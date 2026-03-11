@@ -168,16 +168,21 @@ namespace FishLens_App
 
         // **************************************************
         // Function: MakeDirectoryIfNotExists
-        // Description: Creates directory if it doesn't already exist
+        // Description: Creates directory if it doesn't exist, or clears it if it does (except .gitkeep)
         // **************************************************
         private void MakeDirectoryIfNotExists(string directory)
         {
-            if (Directory.Exists(directory))
-                return;
-
             try
             {
-                Directory.CreateDirectory(directory);
+                if (!Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+                else
+                {
+                    // Clear directory contents except .gitkeep
+                    ClearDirectoryExceptGitkeep(directory);
+                }
             }
             catch (UnauthorizedAccessException ex)
             {
@@ -188,6 +193,38 @@ namespace FishLens_App
             {
                 _logger.LogError(ex, "Failed to create directory");
                 HandleDirectoryCreationError(ex.Message);
+            }
+        }
+
+        // **************************************************
+        // Function: ClearDirectoryExceptGitkeep
+        // Description: Clears directory of all files and subdirectories except .gitkeep
+        // **************************************************
+        private void ClearDirectoryExceptGitkeep(string directory)
+        {
+            try
+            {
+                var dirInfo = new DirectoryInfo(directory);
+
+                // Delete all files except .gitkeep
+                foreach (var file in dirInfo.GetFiles())
+                {
+                    if (file.Name != ".gitkeep")
+                    {
+                        file.Delete();
+                    }
+                }
+
+                // Delete all subdirectories
+                foreach (var subDir in dirInfo.GetDirectories())
+                {
+                    subDir.Delete(recursive: true);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to clear directory");
+                throw;
             }
         }
 
@@ -293,7 +330,13 @@ namespace FishLens_App
             // **************************************************
         private async Task RunYolo(string videoFolder)
         {
+            // Debug logging
+            _logger.LogInformation("Starting YOLO process with videoFolder: {VideoFolder}", videoFolder);
+            
             ProcessStartInfo processInfo = CreateYoloProcessStartInfo(videoFolder);
+            
+            _logger.LogInformation("Python Arguments: {Arguments}", processInfo.Arguments);
+            _logger.LogInformation("Working Directory: {WorkingDir}", processInfo.WorkingDirectory);
 
             ProgressDialog progressDialog = new ProgressDialog();
             progressDialog.Show();
@@ -316,24 +359,22 @@ namespace FishLens_App
         // **************************************************
         private ProcessStartInfo CreateYoloProcessStartInfo(string dataPath)
         {
-            string yoloScriptDirectory = _pathResolver.ResolveYoloScriptPath();
-
-            // REMOVE THESE IF WORKING
-            // Also issue here because it uses default "sampleDataPath" that has nothing to do with
-            // the data given from the button click for opening a folder
-            //string sampleDataPath = Path.Combine(_pathResolver.ResolveProjectRoot(), SAMPLE_DATA_FOLDER);
-            //if (dataPath == null)
-            //    dataPath = Path.Combine(_pathResolver.ResolveProjectRoot(), SAMPLE_DATA_FOLDER);
+            string yoloScriptPath = _pathResolver.ResolveYoloScriptPath();
+            
+            // Use full path to Python in venv
+            string pythonPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "venv", "Scripts", "python.exe");
 
             return new ProcessStartInfo
             {
-                FileName = "python",
-                Arguments = $"\"{yoloScriptDirectory}\" \"{dataPath}\"",
-                RedirectStandardError = _checkBoxes.ErrorBox,
-                RedirectStandardOutput = _checkBoxes.OutputBox,
+                FileName = pythonPath,
+                WorkingDirectory = _pathResolver.ResolveProjectRoot(),
+                Arguments = $"-u \"{yoloScriptPath}\" \"{dataPath}\"",
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
                 UseShellExecute = false
             };
         }
+        
 
         // **************************************************
         // Function: ExecuteYoloProcess
@@ -345,34 +386,23 @@ namespace FishLens_App
             {
                 using (Process process = Process.Start(processInfo))
                 {
-                    string output = ReadProcessOutput(process);
-                    string error = ReadProcessError(process);
+                    var outputTask = Task.Run(() => process.StandardOutput.ReadToEnd());
+                    var errorTask = Task.Run(() => process.StandardError.ReadToEnd());
 
                     process.WaitForExit();
 
+                    string output = outputTask.Result;
+                    string error = errorTask.Result;
+
                     Dispatcher.Invoke(() => progressDialog.Close());
 
-                    DisplayProcessOutputIfNeeded(output, error);
+                    // Display only if checkbox is enabled
+                    if (_checkBoxes.OutputBox || _checkBoxes.ErrorBox)
+                    {
+                        DisplayProcessOutputIfNeeded(output, error);
+                    }
                 }
             });
-        }
-
-        // **************************************************
-        // Function: ReadProcessOutput
-        // Description: Reads standard output from process if enabled
-        // **************************************************
-        private string ReadProcessOutput(Process process)
-        {
-            return _checkBoxes.OutputBox ? process.StandardOutput.ReadToEnd() : string.Empty;
-        }
-
-        // **************************************************
-        // Function: ReadProcessError
-        // Description: Reads standard error from process if enabled
-        // **************************************************
-        private string ReadProcessError(Process process)
-        {
-            return _checkBoxes.ErrorBox ? process.StandardError.ReadToEnd() : string.Empty;
         }
 
         // **************************************************
@@ -381,10 +411,17 @@ namespace FishLens_App
         // **************************************************
         private void DisplayProcessOutputIfNeeded(string output, string error)
         {
-            if (!string.IsNullOrEmpty(error) || !string.IsNullOrEmpty(output))
+            // Always show if there's an error, otherwise only if checkbox is enabled
+            if (!string.IsNullOrEmpty(error))
             {
                 Dispatcher.Invoke(() =>
-                    MessageBox.Show($"Output:\n{output}\n\nErrors:\n{error}")
+                    MessageBox.Show($"Python Error:\n{error}", "Process Error", MessageBoxButton.OK, MessageBoxImage.Error)
+                );
+            }
+            else if (_checkBoxes.OutputBox && !string.IsNullOrEmpty(output))
+            {
+                Dispatcher.Invoke(() =>
+                    MessageBox.Show($"Output:\n{output}", "Process Output", MessageBoxButton.OK, MessageBoxImage.Information)
                 );
             }
         }
@@ -397,7 +434,7 @@ namespace FishLens_App
         // Function: OpenFolderClick
         // Description: Opens folder dialog and initiates video processing
         // **************************************************
-        private void OpenFolderClick(object sender, RoutedEventArgs e)
+        private async void OpenFolderClick(object sender, RoutedEventArgs e)
         {
             string sourceFolderPath = _pathResolver.ResolveSourceFolder();
             _currentFolderName = Path.GetFileName(sourceFolderPath);
@@ -405,7 +442,7 @@ namespace FishLens_App
                 return;
 
             string saveDirectory = Path.Combine(_pathResolver.ResolveProjectRoot(), SAVED_VIDEOS_FOLDER);
-            ProcessVideos(sourceFolderPath, saveDirectory);
+            await ProcessVideos(sourceFolderPath, saveDirectory);
 
             exportData.Visibility = Visibility.Visible;
         }
@@ -414,33 +451,61 @@ namespace FishLens_App
         // Function: ProcessVideos
         // Description: Orchestrates complete video processing workflow
         // **************************************************
-        private async void ProcessVideos(string inputFolder, string outputDirectory)
+        private async Task ProcessVideos(string inputFolder, string outputDirectory)
         {
             MakeDirectoryIfNotExists(outputDirectory);
-            
-            // REMOVE THESE IF WORKING
-            // This is the main issue here
-            // Should be running YOLO before updating the UI with data from videos
-            
-            EnterDataInFile(inputFolder, outputDirectory);
-            await RunYolo(outputDirectory);
-            DisplayDataInUi(outputDirectory);
 
+            // Step 1: copy videos
+            EnterDataInFile(inputFolder, outputDirectory);
+
+            // Verify that videos were copied
+            var copiedFiles = Directory.GetFiles(outputDirectory);
+            var videoFiles = copiedFiles.Where(f => 
+                f.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
+                f.EndsWith(".avi", StringComparison.OrdinalIgnoreCase) ||
+                f.EndsWith(".mov", StringComparison.OrdinalIgnoreCase) ||
+                f.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase) ||
+                f.EndsWith(".asf", StringComparison.OrdinalIgnoreCase) ||
+                f.EndsWith(".wmv", StringComparison.OrdinalIgnoreCase) ||
+                f.EndsWith(".flv", StringComparison.OrdinalIgnoreCase) ||
+                f.EndsWith(".webm", StringComparison.OrdinalIgnoreCase)
+            ).ToList();
+
+            if (videoFiles.Count == 0)
+            {
+                MessageBox.Show("No video files were found or copied to SavedVids folder.", 
+                    "No Videos", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            _logger.LogInformation("Copied {Count} video files to {Directory}", videoFiles.Count, outputDirectory);
+
+            // Step 2: run YOLO to generate CSV
+            await RunYolo(outputDirectory);
+
+            // Step 3: read CSV now that it exists
             List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList = CreateSortedListOfVideos(outputDirectory);
+
+            //var allRows = File.ReadAllLines(_pathResolver.ResolveCsvScriptPath());
+            //MessageBox.Show(string.Join("\n", allRows));
+
+            // Step 4: update UI with first video
+            if (videoDataList.Count > 0)
+            {
+                DisplayDataInUi(videoDataList[0].vid.Name);
+            }
+
+            // Step 5: create sidebar buttons
             CreateVideoButtonsList(videoDataList);
 
-            // If configured, load (and auto-play) the first uploaded video
-            try
+            // Optional: auto-load first video into player
+            if (videoDataList.Count > 0)
             {
-                if (videoDataList != null && videoDataList.Count > 0)
-                {
-                    var firstVideoPath = videoDataList[0].vid.FullName;
-                    // Load the video into the player. LoadVideoInPlayer will respect _config.AutoPlayVideos
-                    Dispatcher.Invoke(() => LoadVideoInPlayer(firstVideoPath));
-                }
+                var firstVideoPath = videoDataList[0].vid.FullName;
+                Dispatcher.Invoke(() => LoadVideoInPlayer(firstVideoPath));
             }
-            catch { }
         }
+
 
         // **************************************************
         // Function: EnterDataInFile
@@ -1051,13 +1116,45 @@ namespace FishLens_App
             string direction = GetTravelDirectionValue();
             string species = fishSpecies.Text.Trim();
 
-            // Keep original values for fields not editable in UI
+            // Keep original values for fields not editable in UI -- 12 columns total
             string videoFile = originalColumns[0].Trim();
             string trackId = originalColumns[1].Trim();
-            string confidence = originalColumns[3].Trim();
-            string startTime = originalColumns[4].Trim();
-            string endTime = originalColumns[5].Trim();
-            string avgConfidence = originalColumns[6].Trim();
+            string imagePath = originalColumns[2].Trim();
+            string confidence = originalColumns[4].Trim();
+            string startTime = originalColumns[5].Trim();
+            string endTime = originalColumns[6].Trim();
+            string avgConfidence = originalColumns[7].Trim();
+            string species_confidence = originalColumns[10].Trim();
+            string vidTimeStamp = originalColumns[11].Trim();
+
+            // Read and validate confidence values from UI TextBoxes
+            // fishPresentConfidence is displayed as percentage (e.g., "88.00%")
+            // avgConfidence in CSV is stored as decimal (e.g., 0.88)
+            string presentConfText = fishPresentConfidence.Text.Trim();
+            if (!string.IsNullOrEmpty(presentConfText) && presentConfText != "--")
+            {
+                // Remove % sign and convert percentage back to decimal
+                string cleanValue = presentConfText.Replace("%", "").Trim();
+                if (double.TryParse(cleanValue, out double presentConfValue))
+                {
+                    // Convert from percentage (0-100) back to decimal (0-1)
+                    avgConfidence = (presentConfValue / 100).ToString("F4");
+                }
+            }
+
+            // fishSpeciesConfidence is displayed as percentage (e.g., "92.45%")
+            // species_confidence in CSV is stored as decimal (e.g., 0.9245)
+            string speciesConfText = fishSpeciesConfidence.Text.Trim();
+            if (!string.IsNullOrEmpty(speciesConfText) && speciesConfText != "--")
+            {
+                // Remove % sign and convert percentage back to decimal
+                string cleanValue = speciesConfText.Replace("%", "").Trim();
+                if (double.TryParse(cleanValue, out double speciesConfValue))
+                {
+                    // Convert from percentage (0-100) back to decimal (0-1)
+                    species_confidence = (speciesConfValue / 100).ToString("F4");
+                }
+            }
 
             // If user entered a species, update the likely_class
             if (!string.IsNullOrEmpty(species) && species != "--")
@@ -1066,7 +1163,8 @@ namespace FishLens_App
             }
 
             // Build the CSV row
-            return $"{videoFile},{trackId},{likelyClass},{confidence},{startTime},{endTime},{avgConfidence},{direction}";
+            
+            return $"{videoFile},{trackId},{imagePath},{likelyClass},{confidence},{startTime},{endTime},{avgConfidence},{direction},{species},{species_confidence},{vidTimeStamp}";
         }
 
         // **************************************************
@@ -1182,8 +1280,13 @@ namespace FishLens_App
             LoadVideoInPlayer(videoPath);
 
             string videoFileName = Path.GetFileName(videoPath);
-            GetData(videoFileName);
+            var data = GetData(videoFileName);
+            if (data != null)
+            {
+                DisplayDataInUi(videoFileName);
+            }
         }
+
 
         // **************************************************
         // Function: LoadVideoInPlayer
@@ -1206,8 +1309,10 @@ namespace FishLens_App
             videoName.Text = vid.Name;
             videoDateTime.Text = $"Duration: {vid.StartTime}s - {vid.EndTime}s";
             fishPresentStatus.Text = vid.LikelyClass == "fish" ? "Present" : "Not Present";
-            fishPresentConfidence.Text = vid.AvgConfidence.ToString();
+            fishPresentConfidence.Text = $"{vid.AvgConfidence * 100:F2}%";
             travelDirection.Text = CapitalizeFirstLetter(vid.Direction);
+            fishSpecies.Text = CapitalizeFirstLetter(vid.Species);
+            fishSpeciesConfidence.Text = vid.SpeciesConfidence > 0 ? $"{vid.SpeciesConfidence * 100:F2}%" : "--";
         }
 
         // **************************************************

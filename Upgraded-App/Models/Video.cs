@@ -36,7 +36,7 @@ namespace FishLens_App.Models
         // Species label (if provided separately from likelyClass)
         public string Species { get; set; }
         // Confidence for species label (text as stored in CSV)
-        public string SpeciesConfidence { get; set; }
+        public double SpeciesConfidence { get; set; }
         // Detection date and time (as strings from CSV)
         public string Date { get; set; }
         public string Time { get; set; }

@@ -81,7 +81,7 @@ def parseTimestamp(text):
 # Function: extract_timestamp_from_frame
 # Description: Extract timestamp from bottom-left corner of video frame.
 # Notes: N/A
-def extractTimestamFromFrame(frame, debug=False):
+def extractTimestampFromFrame(frame, debug=False):
     if frame is None or frame.size == 0:
         return None
     

@@ -27,7 +27,7 @@ from keras.preprocessing.image import load_img, img_to_array
 import pytesseract
 import re
 from dateutil import parser as date_parser
-from extract_timestamp import extractTimestamFromFrame, parseTimestamp
+from extract_timestamp import extractTimestampFromFrame, parseTimestamp
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Update this path if Tesseract is installed elsewhere
 
 
@@ -55,7 +55,7 @@ warnings.filterwarnings(
 
 # Constants--Folders and Directories
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-INPUT_PATH = sys.argv[1] if len(sys.argv) > 1 else os.path.join(PROJECT_ROOT, "sample_data")
+INPUT_PATH = sys.argv[1] if len(sys.argv) > 1 else os.path.join(PROJECT_ROOT, "SavedVids")
 # Handle both directory and single file inputs
 if os.path.isfile(INPUT_PATH):
     VIDEO_FOLDER = os.path.dirname(INPUT_PATH)
@@ -83,6 +83,7 @@ TESSERACT_AVAILABLE = check_tesseract()
 
 # Constants--YOLO
 MODEL = YOLO("models/fish_detector2.pt")
+YOLO_CONFIDENCE_THRESHOLD = 0.25  # Adjustable: lower = detects more fish (but more false positives), higher = more selective
 NO_FISH = "no_fish"
 
 # Constants--DeepSort
@@ -92,10 +93,10 @@ OUTPUT_CSV = "fish_summary.csv"
 FISH_IMAGE_DIR = "fish_images"
 
 # Constants--Classifier
-CLASSIFIER_MODEL_PATH = os.path.join(PROJECT_ROOT, "fish_classifier_model.h5")
+CLASSIFIER_MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "fish_classifier_model.h5")
 CLASSIFIER_MODEL = load_model(CLASSIFIER_MODEL_PATH)
 CLASSIFIER_TARGET_FOLDER = "images"
-CLASS_NAMES = ["Omykiss", "Chinook"] 
+CLASS_NAMES = ["Chinook", "Omykiss"]
 IMAGE_SIZE = (150, 150)
 IMAGE_EXTS = {'.jpg', '.jpeg', '.png'}
 
@@ -135,12 +136,16 @@ class VideoData:
 # Notes: N/A
 def main():
 
+    # Debug: Print paths
+    print(f"[INFO] Processing videos from: {VIDEO_FOLDER}")
+
     # Process all videos in folder
     all_tracks = []
     if SINGLE_VIDEO_FILE:
         # Process single video file
         video_path = SINGLE_VIDEO_FILE
         filename = os.path.basename(SINGLE_VIDEO_FILE)
+        print(f"[INFO] Processing: {filename}")
         video_tracks = run_video_tracker(video_path)
         for t in video_tracks:
             t["video_file"] = filename
@@ -148,25 +153,38 @@ def main():
     else:
         # Process all videos in folder
         video_extensions = ('.mp4', '.avi', '.mov', '.mkv', '.asf', '.wmv', '.flv', '.webm')
-        for filename in os.listdir(VIDEO_FOLDER):
+        files_in_folder = []
+        
+        try:
+            files_in_folder = os.listdir(VIDEO_FOLDER)
+            print(f"[INFO] Found {len(files_in_folder)} items in folder")
+        except Exception as e:
+            print(f"[ERROR] Failed to list VIDEO_FOLDER: {e}")
+            return
+        
+        for filename in files_in_folder:
             item_path = os.path.join(VIDEO_FOLDER, filename)
             # Skip directories and non-video files
             if os.path.isfile(item_path) and filename.lower().endswith(video_extensions):
                 video_path = item_path
-                print(f"Processing: {filename}")
+                print(f"[INFO] Processing: {filename}")
                 video_tracks = run_video_tracker(video_path)
-                for t in video_tracks:
-                    t["video_file"] = filename
-                all_tracks.extend(video_tracks)
+                if video_tracks:
+                    for t in video_tracks:
+                        t["video_file"] = filename
+                    all_tracks.extend(video_tracks)
 
-    # Export CSV
-    if all_tracks:
+
+    # Export CSV - ALWAYS write, even if empty (to clear old data)
+    try:
         with open(OUTPUT_CSV, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=CSV_KEYS)
             writer.writeheader()
-            writer.writerows(all_tracks)
-
-    print(f"Exported {len(all_tracks)} tracked fish to {OUTPUT_CSV}")
+            if all_tracks:
+                writer.writerows(all_tracks)
+        print(f"[SUCCESS] Exported {len(all_tracks)} fish tracks to {OUTPUT_CSV}")
+    except Exception as e:
+        print(f"[ERROR] Failed to write CSV: {e}")
 
 # ****************************************************************
 # Function: enhance_image
@@ -209,13 +227,34 @@ def run_video_tracker(video_path):
     # Initialize frameData to avoid UnboundLocalError if video fails early
     frameData = None
 
+    # Debug: Check file before attempting to open
+    if not os.path.exists(video_path):
+        print(f"[ERROR] File does not exist: {video_path}")
+        return []
+    
+
+
     # Open video, determine FPS, and read first frame
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        print(f"Error: Could not open video: {video_path}")
+        print(f"[ERROR] Could not open video with cv2.VideoCapture: {video_path}")
+        print(f"[DEBUG] This usually means the video codec is not supported or file is corrupted")
         return []
+    
     vidData.v_fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
+    
+    # Get frame dimensions
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    
+    # Store frame width in VideoData for later use
+    vidData.frame_width = frame_width
+    
     ret, frame = cap.read()
+    if not ret:
+        print(f"[ERROR] Could not read first frame from video: {video_path}")
+        cap.release()
+        return []
 
     # Cycle through video frames until end of video
     while ret:
@@ -247,8 +286,11 @@ def run_video_tracker(video_path):
 
     cap.release()
 
+    print(f"[INFO] Processed {vidData.v_total_frames} frames, found {len(vidData.v_finished_tracks)} fish tracks")
+
     # Skip export if fish was not detected in video
     if not vidData.v_found_fish:
+        print(f"[INFO] No fish detected in {vidData.v_filename}")
         no_fish_found(video_path, vidData.v_filename)
         return []
 
@@ -274,19 +316,22 @@ def run_video_tracker(video_path):
 # Notes: Vars modified: found_fish (frame, video), detections(frame), frames with/without fish (video)
 def analyze_yolo_detections(frame, model, frameData, vidData):
 
-    # Run YOLO on frame
-    results = model.predict(source=frame, verbose=False, stream=False, save=False)
+    # Run YOLO on frame with adjustable confidence threshold
+    results = model.predict(source=frame, verbose=False, stream=False, save=False, conf=YOLO_CONFIDENCE_THRESHOLD)
 
     # Begin YOLO post-analysis
     if results:
         r = results[0]
+        detection_count = 0
         for box in r.boxes:
             x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
             conf_arr = box.conf.cpu().numpy()
             conf = float(conf_arr[0]) if conf_arr.size > 0 and conf_arr[0] is not None else 0.0
             cls_arr = box.cls.cpu().numpy()
             cls_id = int(cls_arr[0]) if cls_arr.size > 0 and cls_arr[0] is not None else -1
-            if (x2 - x1)*(y2 - y1) < 100:
+            box_area = (x2 - x1) * (y2 - y1)
+            
+            if box_area < 100:
                 continue
 
             # Mark if YOLO detected a fish in frame.
@@ -296,7 +341,10 @@ def analyze_yolo_detections(frame, model, frameData, vidData):
                 cls_name = str(cls_id)
             if "fish" in cls_name:
                 frameData.f_found_fish = True
+                detection_count += 1
             frameData.f_detections.append([x1, y1, x2, y2, conf, cls_id])
+        
+
     
     # Increment video-level stats based on frame-level results
     vidData.v_found_fish = vidData.v_found_fish or frameData.f_found_fish
@@ -334,7 +382,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
     # Use the tracker's default iou threshold (tuned in the tracker)
     frameData.f_detections = tracker.filterOverlaps(frameData.f_detections)
     tracked_objects = tracker.update(frameData.f_detections, frame)
-
+    
     for obj in tracked_objects:
         trackId = obj["trackId"]
         vidData.v_current_track_ids.add(trackId)
@@ -343,18 +391,21 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         is_new_track = trackId not in vidData.v_active_tracks
 
         if is_new_track:
+            x1, y1, x2, y2 = obj["bbox"]
+            entry_x = (x1 + x2) / 2  # Center x-position at entry
             vidData.v_active_tracks[trackId] = {
                 "start_frame": frameData.f_index,
                 "confidences": [],
                 "directions": [],
                 "best_conf": -1.0,
                 "best_crop": None,
-                "video_timestamp": None 
+                "video_timestamp": None,
+                "entry_x": entry_x,
+                "last_x": entry_x
             }
             
             # Extract timestamp once, when track is first created
-            print(f"  New fish detected (Track {trackId}) at frame {frameData.f_index}")
-            timestamp = extractTimestamFromFrame(frame, False)
+            timestamp = extractTimestampFromFrame(frame, False)
             
             if timestamp:
                 vidData.v_active_tracks[trackId]["video_timestamp"] = timestamp
@@ -372,6 +423,8 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         vidData.v_active_tracks[trackId]["directions"].append(obj["direction"])
 
         x1, y1, x2, y2 = obj["bbox"]
+        exit_x = (x1 + x2) / 2  # Center x-position at current frame
+        vidData.v_active_tracks[trackId]["last_x"] = exit_x
         
         # Add 30% margin around the bounding box for zoomed-out view
         h, w = frame.shape[:2]
@@ -407,13 +460,13 @@ def finalize_tracks(frameData, vidData, termination_reason):
         disappeared_ids = set(vidData.v_active_tracks.keys()) - vidData.v_current_track_ids 
         for tid in disappeared_ids:
             track_data = vidData.v_active_tracks.pop(tid)
-            track_dict = build_track_summary(tid, track_data, frameData, vidData, None)
+            track_dict = build_track_summary(tid, track_data, frameData, vidData, None, frame_width=getattr(vidData, 'frame_width', 640))
             if track_dict:
                 vidData.v_finished_tracks.append(track_dict)
 
     elif termination_reason == "forced":
         for tid, track_data in vidData.v_active_tracks.items():
-            track_dict = build_track_summary(tid, track_data, frameData, vidData, None)
+            track_dict = build_track_summary(tid, track_data, frameData, vidData, None, frame_width=getattr(vidData, 'frame_width', 640))
             if track_dict:
                 vidData.v_finished_tracks.append(track_dict)
 
@@ -422,7 +475,7 @@ def finalize_tracks(frameData, vidData, termination_reason):
 # Function: build_track_summary
 # Description: Helper function for finalizing track data.
 # Notes: N/A
-def build_track_summary(trackId, track_data, frameData, vidData, image_path=None):
+def build_track_summary(trackId, track_data, frameData, vidData, image_path=None, frame_width=640):
     duration_sec = (frameData.f_index - track_data["start_frame"]) / vidData.v_fps
     if duration_sec < 1.0:
         return None
@@ -435,18 +488,32 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     best_conf = track_data.get("best_conf", 0.0)
     best_conf_pct = best_conf * 100 if best_conf <= 1.0 else best_conf
     
-    # Calculate overall direction
-    directions = track_data["directions"]
-    overall_direction = "unknown"
-    if directions:
-        upstream_count = directions.count("upstream")
-        downstream_count = directions.count("downstream")
-        if upstream_count > downstream_count:
-            overall_direction = "upstream"
-        elif downstream_count > upstream_count:
-            overall_direction = "downstream"
-        else:
-            overall_direction = directions[-1]
+    # Calculate overall direction based on entry and exit positions
+    entry_x = track_data.get("entry_x", 0)
+    exit_x = track_data.get("last_x", 0)
+    
+    # Determine if entry and exit are on same side of frame
+    # Left side: x < frame_width/2, Right side: x >= frame_width/2
+    entry_side = "left" if entry_x < frame_width / 2 else "right"
+    exit_side = "left" if exit_x < frame_width / 2 else "right"
+    
+    # Determine direction
+    if entry_side == exit_side:
+        # Fish entered and exited from same side - indecisive
+        overall_direction = "indecisive"
+    else:
+        # Fish crossed from one side to other - use direction counts
+        directions = track_data["directions"]
+        overall_direction = "unknown"
+        if directions:
+            upstream_count = directions.count("upstream")
+            downstream_count = directions.count("downstream")
+            if upstream_count > downstream_count:
+                overall_direction = "upstream"
+            elif downstream_count > upstream_count:
+                overall_direction = "downstream"
+            else:
+                overall_direction = directions[-1]
     
     species_data = classify_image(image_path) if image_path else ("No image", 0.0)
     
@@ -455,8 +522,8 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         "likely_class": vidData.v_most_common_class,
         "confidence": f"{best_conf_pct:.2f}%" if best_conf_pct > 0 else f"{vidData.v_avg_confidence_YL:.2f}%",
         "avg_confidence": f"{best_conf_pct:.2f}%" if best_conf_pct > 0 else f"{avg_conf_DS:.2f}%",
-        "start_time_sec": track_data["start_frame"] / vidData.v_fps,
-        "end_time_sec": frameData.f_index / vidData.v_fps,
+        "start_time_sec": f"{track_data['start_frame'] / vidData.v_fps:.2f}",
+        "end_time_sec": f"{frameData.f_index / vidData.v_fps:.2f}",
         "direction": overall_direction,
         "best_crop": track_data.get("best_crop"),
         "species": species_data[0] if species_data else "No data",

@@ -55,11 +55,27 @@ namespace FishLens_App
             _pathResolver = pathresolver ?? throw new ArgumentNullException(nameof(pathresolver));
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
             InitializeComponent();
+            
             LoadAll();
         }
         #endregion
 
         #region Event Handlers
+
+        // ****************************************************************
+        // Function: ScrollViewer_PreviewMouseWheel
+        // Description: Slows down and smooths scrolling speed
+        // Notes: Reduces scroll delta to make scrolling less snappy
+        private void ScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            var scrollViewer = sender as ScrollViewer;
+            if (scrollViewer != null)
+            {
+                // Scroll slower - reduce delta by 75% (multiply by 0.25)
+                scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset - (e.Delta * 0.25));
+                e.Handled = true;
+            }
+        }
 
         // ****************************************************************
         // Function: CreateUserClick
@@ -277,6 +293,7 @@ namespace FishLens_App
                 CreateUserText.Visibility = Visibility.Collapsed;
             }
         }
+
         // ****************************************************************
         // Function: LoadUsers
         // Description: Loads the users for the Manage users card
@@ -326,7 +343,6 @@ namespace FishLens_App
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("LoadUsers error: " + ex.Message);
                 MessageBox.Show("Failed to load users.");
             }
         }

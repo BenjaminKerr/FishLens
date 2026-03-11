@@ -136,10 +136,35 @@ namespace FishLens_App.Services
                     video.AvgConfidence = d;
                 }
             }
+            else            
+            {
+                video.AvgConfidence = 0.0;
+            }
 
             video.Direction = columns.Length > 8 ? columns[8].Trim() : "Unknown";
             video.Species = columns.Length > 9 ? columns[9].Trim() : string.Empty;
-            video.SpeciesConfidence = columns.Length > 10 ? columns[10].Trim() : string.Empty;
+            
+            // Parse species confidence as double, removing % sign if present
+            // Normalize to decimal range (0-1) if stored as percentage (0-100)
+            if (columns.Length > 10)
+            {
+                var speciesConfStr = columns[10].Trim().TrimEnd('%');
+                if (double.TryParse(speciesConfStr, out var speciesConfValue))
+                {
+                    // If value is > 1, it's already a percentage, normalize to decimal
+                    if (speciesConfValue > 1) speciesConfValue = speciesConfValue / 100.0;
+                    video.SpeciesConfidence = speciesConfValue;
+                }
+                else
+                {
+                    video.SpeciesConfidence = 0.0;
+                }
+            }
+            else
+            {
+                video.SpeciesConfidence = 0.0;
+            }
+            
             video.Date = columns.Length > 11 ? columns[11].Trim() : string.Empty;
             video.Time = columns.Length > 12 ? columns[12].Trim() : string.Empty;
 
@@ -165,7 +190,7 @@ namespace FishLens_App.Services
                 AvgConfidence = 0.0,
                 Direction = "Unknown",
                 Species = string.Empty,
-                SpeciesConfidence = string.Empty
+                SpeciesConfidence = 0.0
             };
         }
     }

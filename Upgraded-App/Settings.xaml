@@ -22,7 +22,9 @@
 
         <ScrollViewer Grid.Row="1" 
                       VerticalScrollBarVisibility="Auto"
-                      Padding="30">
+                      CanContentScroll="False"
+                      Padding="30"
+                      PreviewMouseWheel="ScrollViewer_PreviewMouseWheel">
             <StackPanel MaxWidth="800" HorizontalAlignment="Center">
 
                 <TextBlock Text="Analysis" 
@@ -63,6 +65,7 @@
                                     Value="75"
                                     TickFrequency="5"
                                     IsSnapToTickEnabled="True"
+                                    IsMoveToPointEnabled="True"
                                     VerticalAlignment="Center"
                                     Margin="0,0,15,0"
                                     ValueChanged="ConfidenceThreshold_ValueChanged"/>

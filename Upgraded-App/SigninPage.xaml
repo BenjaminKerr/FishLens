@@ -62,7 +62,9 @@
                              Height="36"
                              Padding="8"
                              FontSize="{DynamicResource BaseFontSize}"
-                             Margin="0,5,0,15"/>
+                             Margin="0,5,0,15"
+                             TabIndex="0"
+                             KeyDown="TextBox_KeyDown"/>
 
                     <TextBlock Text="Password"
                                FontSize="{DynamicResource BaseFontSize}"
@@ -72,10 +74,13 @@
                                  Height="36"
                                  Padding="8"
                                  FontSize="{DynamicResource BaseFontSize}"
-                                 Margin="0,5,0,20"/>
+                                 Margin="0,5,0,20"
+                                 TabIndex="1"
+                                 KeyDown="PasswordBox_KeyDown"/>
 
                     <!-- Sign In Button -->
-                    <Button Content="Sign In"
+                    <Button x:Name="SignInButton"
+                            Content="Sign In"
                             Width="140"
                             Padding="10,6"
                             Background="{DynamicResource HeaderBackground}"
@@ -85,6 +90,7 @@
                             BorderThickness="0"
                             HorizontalAlignment="Center"
                             Cursor="Hand"
+                            TabIndex="2"
                             Click="SigninButtonClick">
 
                         <Button.Style>
