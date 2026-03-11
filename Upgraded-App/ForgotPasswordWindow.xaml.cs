@@ -195,8 +195,10 @@ namespace FishLens_App
                                     }
 
                                     MessageBox.Show("Password reset successfully! You can now sign in.");
+                                    SigninPage signin = new SigninPage();
+                                    signin.Show();
                                     this.Close();
-                                }
+                            }
                                 else
                                 {
                                     MessageBox.Show("Invalid or expired code. Please try again.");
