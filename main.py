@@ -13,6 +13,7 @@ import csv
 import cv2
 import subprocess
 from contextlib import contextmanager
+import tempfile
 import numpy as np
 from ultralytics import YOLO
 import shutil
@@ -81,7 +82,6 @@ FPS_DEFAULT = 30
 MAX_EXPORT_PER_VIDEO = 5  
 OUTPUT_CSV = os.path.join(PROJECT_ROOT, "fish_summary.csv")
 FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
-CONVERTED_VIDEO_DIR = os.path.join(PROJECT_ROOT, "converted_mp4")
 
 # Performance tuning (set via env vars when needed)
 FAST_MODE = os.getenv("FISHLENS_FAST_MODE", "1") == "1"
@@ -104,7 +104,6 @@ IMAGE_EXTS = {'.jpg', '.jpeg', '.png'}
 os.makedirs(VIDEO_FOLDER, exist_ok=True)
 os.makedirs(NO_FISH, exist_ok=True)
 os.makedirs(FISH_IMAGE_DIR, exist_ok=True)
-os.makedirs(CONVERTED_VIDEO_DIR, exist_ok=True)
 
 @dataclass
 class FrameData:
@@ -174,9 +173,13 @@ def main():
     print(f"Performance: FAST_MODE={FAST_MODE}, FRAME_STRIDE={FRAME_STRIDE}, YOLO_IMGSZ={YOLO_IMGSZ}")
     if SINGLE_VIDEO_FILE:
         # Process single video file
-        video_path = convert_asf_to_mp4(SINGLE_VIDEO_FILE)
+        video_path, is_temp = convert_asf_to_mp4(SINGLE_VIDEO_FILE)
         filename = os.path.basename(SINGLE_VIDEO_FILE)
-        video_tracks = run_video_tracker(video_path, SINGLE_VIDEO_FILE)
+        try:
+            video_tracks = run_video_tracker(video_path, SINGLE_VIDEO_FILE)
+        finally:
+            if is_temp:
+                _cleanup_temp(video_path)
         for t in video_tracks:
             t["video_file"] = filename
         all_tracks.extend(video_tracks)
@@ -187,9 +190,13 @@ def main():
             item_path = os.path.join(VIDEO_FOLDER, filename)
             # Skip directories and non-video files
             if os.path.isfile(item_path) and filename.lower().endswith(video_extensions):
-                video_path = convert_asf_to_mp4(item_path)
+                video_path, is_temp = convert_asf_to_mp4(item_path)
                 print(f"Processing: {filename}")
-                video_tracks = run_video_tracker(video_path, item_path)
+                try:
+                    video_tracks = run_video_tracker(video_path, item_path)
+                finally:
+                    if is_temp:
+                        _cleanup_temp(video_path)
                 for t in video_tracks:
                     t["video_file"] = filename
                 all_tracks.extend(video_tracks)
@@ -237,22 +244,14 @@ def enhance_image(crop):
 
 # ****************************************************************
 # Function: convert_asf_to_mp4
-# Description: Convert ASF video to MP4 to improve decode reliability.
-# Notes: Returns original path if conversion fails.
+# Description: Convert ASF video to a temporary MP4 to improve decode reliability.
+# Notes: Returns (path, is_temp). Caller is responsible for deleting the temp file.
 def convert_asf_to_mp4(video_path):
     if not video_path.lower().endswith('.asf'):
-        return video_path
+        return video_path, False
 
-    base_name = os.path.splitext(os.path.basename(video_path))[0]
-    output_path = os.path.join(CONVERTED_VIDEO_DIR, f"{base_name}.mp4")
-
-    # Reuse existing converted file when it is up to date.
-    if os.path.exists(output_path):
-        try:
-            if os.path.getmtime(output_path) >= os.path.getmtime(video_path):
-                return output_path
-        except OSError:
-            pass
+    fd, output_path = tempfile.mkstemp(suffix='.mp4')
+    os.close(fd)
 
     # Prefer ffmpeg CLI conversion when available to avoid noisy OpenCV decode warnings.
     ffmpeg_path = shutil.which("ffmpeg")
@@ -272,8 +271,8 @@ def convert_asf_to_mp4(video_path):
         try:
             result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, check=False)
             if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                print(f"Converted ASF to MP4 via ffmpeg: {os.path.basename(video_path)} -> {output_path}")
-                return output_path
+                print(f"Converted ASF to MP4 (temp): {os.path.basename(video_path)}")
+                return output_path, True
             else:
                 print("Warning: ffmpeg conversion failed, falling back to OpenCV conversion.")
         except Exception:
@@ -282,7 +281,8 @@ def convert_asf_to_mp4(video_path):
     cap = _video_capture_open(video_path)
     if not cap.isOpened():
         print(f"Warning: Could not open ASF for conversion: {video_path}")
-        return video_path
+        _cleanup_temp(output_path)
+        return video_path, False
 
     fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
     if fps <= 0:
@@ -296,7 +296,8 @@ def convert_asf_to_mp4(video_path):
         if not ret or first_frame is None:
             cap.release()
             print(f"Warning: ASF conversion failed (no readable frames): {video_path}")
-            return video_path
+            _cleanup_temp(output_path)
+            return video_path, False
         height, width = first_frame.shape[:2]
         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
@@ -310,7 +311,8 @@ def convert_asf_to_mp4(video_path):
     if not writer.isOpened():
         cap.release()
         print(f"Warning: Could not create MP4 writer for: {video_path}")
-        return video_path
+        _cleanup_temp(output_path)
+        return video_path, False
 
     frame_count = 0
     while True:
@@ -324,16 +326,20 @@ def convert_asf_to_mp4(video_path):
     writer.release()
 
     if frame_count == 0:
-        try:
-            if os.path.exists(output_path):
-                os.remove(output_path)
-        except OSError:
-            pass
         print(f"Warning: ASF conversion produced zero frames: {video_path}")
-        return video_path
+        _cleanup_temp(output_path)
+        return video_path, False
 
-    print(f"Converted ASF to MP4: {os.path.basename(video_path)} -> {output_path}")
-    return output_path
+    print(f"Converted ASF to MP4 (temp): {os.path.basename(video_path)}")
+    return output_path, True
+
+
+def _cleanup_temp(path):
+    try:
+        if path and os.path.exists(path):
+            os.remove(path)
+    except OSError:
+        pass
 
 # ****************************************************************
 # Function: run_video_tracker
@@ -414,6 +420,9 @@ def run_video_tracker(video_path, source_video_path=None):
     # Remove duplicate tracks that share the exact same timestamp.
     # Keep the one with higher confidence.
     vidData.v_finished_tracks = dedupe_tracks_by_timestamp(vidData.v_finished_tracks)
+
+    # Merge likely fragmented/split tracks of the same fish.
+    vidData.v_finished_tracks = dedupe_fragmented_tracks(vidData.v_finished_tracks)
 
     # Save the best detection per video for analysis. TODO: Refactor based on edge cases (multiple fish?) and confidence threshold adjustments.
     if MAX_EXPORT_PER_VIDEO and len(vidData.v_finished_tracks) > MAX_EXPORT_PER_VIDEO:
@@ -662,6 +671,87 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         "timestamp_confidence": timestamp_confidence,
         "best_frame": vidData.v_active_tracks.get(trackId, {}).get("best_frame") if trackId in vidData.v_active_tracks else None
     }
+
+
+# ****************************************************************
+# Function: dedupe_fragmented_tracks
+# Description: Merge likely duplicate tracks caused by tracker ID splits.
+# Notes: Conservative heuristic to reduce false double-fish reports.
+def dedupe_fragmented_tracks(finished_tracks):
+    if not finished_tracks:
+        return finished_tracks
+
+    def _pct(track):
+        value = track.get("avg_confidence") or track.get("confidence") or "0%"
+        try:
+            return float(str(value).replace("%", "").strip())
+        except Exception:
+            return 0.0
+
+    def _duration(track):
+        try:
+            start = float(track.get("start_time_sec", 0.0))
+            end = float(track.get("end_time_sec", 0.0))
+            return max(0.0, end - start)
+        except Exception:
+            return 0.0
+
+    def _score(track):
+        # Confidence-first score with a small duration bonus.
+        return _pct(track) + min(_duration(track), 10.0)
+
+    def _same_or_unknown_direction(a, b):
+        da = str(a.get("direction", "unknown")).lower()
+        db = str(b.get("direction", "unknown")).lower()
+        if da == "unknown" or db == "unknown" or da == "stationary" or db == "stationary":
+            return True
+        return da == db
+
+    def _is_likely_duplicate(a, b):
+        # Must be same class and compatible direction.
+        if str(a.get("likely_class", "")).lower() != str(b.get("likely_class", "")).lower():
+            return False
+        if not _same_or_unknown_direction(a, b):
+            return False
+
+        a_start = float(a.get("start_time_sec", 0.0))
+        a_end = float(a.get("end_time_sec", 0.0))
+        b_start = float(b.get("start_time_sec", 0.0))
+        b_end = float(b.get("end_time_sec", 0.0))
+
+        overlap = max(0.0, min(a_end, b_end) - max(a_start, b_start))
+        shorter = max(0.001, min(_duration(a), _duration(b)))
+        overlap_ratio = overlap / shorter
+        gap = min(abs(a_start - b_end), abs(b_start - a_end))
+
+        # Temporal relationship expected for split IDs.
+        temporal_match = (overlap_ratio >= 0.75) or (gap <= 0.35)
+        if not temporal_match:
+            return False
+
+        # Prefer merging only when one track is clearly weaker/shorter.
+        pa = _pct(a)
+        pb = _pct(b)
+        conf_gap = abs(pa - pb)
+        dur_ratio = min(_duration(a), _duration(b)) / max(0.001, max(_duration(a), _duration(b)))
+
+        return conf_gap >= 8.0 or dur_ratio <= 0.45
+
+    ordered = sorted(finished_tracks, key=lambda t: float(t.get("start_time_sec", 0.0)))
+    kept = []
+
+    for track in ordered:
+        merged = False
+        for i, existing in enumerate(kept):
+            if _is_likely_duplicate(existing, track):
+                if _score(track) > _score(existing):
+                    kept[i] = track
+                merged = True
+                break
+        if not merged:
+            kept.append(track)
+
+    return kept
 
 
 # ***************************************************************
