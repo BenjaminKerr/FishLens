@@ -1,2 +1,22 @@
 video_file,trackId,image_path,likely_class,confidence,start_time_sec,end_time_sec,avg_confidence,direction,species,species_confidence,video_timestamp
-00000004.ASF,1,fish_images\Chinook\00000004_track_1.jpg,fish,94.01%,35.0,517.125,94.01%,upstream,Chinook,72.76%,2026/10/01 19:07:44
+00000007.ASF,1,fish_images\Chinook\00000007_track_1.jpg,fish,91.35%,30.5,512.0,91.35%,upstream,Chinook,61.47%,2026/09/27 00:36:21
+00000009.ASF,4,fish_images\Chinook\00000009_track_4.jpg,fish,93.31%,33.5,511.25,93.31%,downstream,Chinook,62.94%,2026/09/27 01:47:36
+00000013.ASF,1,fish_images\Chinook\00000013_track_1.jpg,fish,91.77%,29.5,513.0,91.77%,upstream,Chinook,64.31%,2026/09/27 21:26:32
+00000014.ASF,2,fish_images\Chinook\00000014_track_2.jpg,fish,92.49%,34.25,512.0,92.49%,downstream,Chinook,58.23%,2026/09/27 21:42:10
+00000015.ASF,2,fish_images\Chinook\00000015_track_2.jpg,fish,92.34%,33.0,105.0,92.34%,downstream,Chinook,67.49%,2026/09/27 21:56:01
+00000016.ASF,1,fish_images\Chinook\00000016_track_1.jpg,fish,90.86%,30.75,512.25,90.86%,upstream,Chinook,65.95%,2026/09/27 22:32:06
+00000017.ASF,1,fish_images\Chinook\00000017_track_1.jpg,fish,91.75%,2.25,514.0,91.75%,upstream,Chinook,68.03%,2026/09/27 22:34:37
+00000018.ASF,3,fish_images\Chinook\00000018_track_3.jpg,fish,90.33%,38.0,513.75,90.33%,upstream,Chinook,57.79%,2026/09/27 22:48:56
+00000019.ASF,1,fish_images\Chinook\00000019_track_1.jpg,fish,91.66%,29.5,513.5,91.66%,upstream,Chinook,61.38%,2026/09/27 22:59:38
+00000020.ASF,2,fish_images\Chinook\00000020_track_2.jpg,fish,93.56%,38.0,513.75,93.56%,upstream,Chinook,70.55%,Not detected
+00000021.ASF,1,fish_images\Chinook\00000021_track_1.jpg,fish,93.24%,34.25,516.5,93.24%,upstream,Chinook,66.90%,2026/09/28 01:09:23
+00000023.ASF,2,fish_images\Chinook\00000023_track_2.jpg,fish,93.68%,339.75,514.75,93.68%,upstream,Chinook,63.81%,2026/09/28 01:24:57
+00000024.ASF,3,fish_images\Chinook\00000024_track_3.jpg,fish,93.72%,35.25,397.5,93.72%,downstream,Chinook,65.60%,2026/09/28 02:09:23
+00000027.ASF,2,fish_images\Chinook\00000027_track_2.jpg,fish,84.03%,38.0,517.25,84.03%,upstream,Chinook,61.53%,2026/09/28 16:18:49
+00000030.ASF,1,fish_images\Chinook\00000030_track_1.jpg,fish,88.27%,34.75,515.25,88.27%,upstream,Chinook,55.63%,2026/09/28 18:55:12
+00000031.ASF,1,fish_images\Chinook\00000031_track_1.jpg,fish,92.19%,32.5,526.75,92.19%,upstream,Chinook,58.41%,2026/09/28 20:57:23
+00000033.ASF,2,fish_images\Chinook\00000033_track_2.jpg,fish,91.20%,34.5,526.25,91.20%,downstream,Chinook,57.98%,2026/09/28 21:46:16
+00000002.ASF,1,fish_images\Chinook\00000002_track_1.jpg,fish,92.12%,29.5,509.75,92.12%,upstream,Chinook,57.71%,2026/09/26 23:02:19
+00000003.ASF,2,fish_images\Chinook\00000003_track_2.jpg,fish,92.99%,34.25,510.25,92.99%,upstream,Chinook,62.33%,2026/09/26 23:06:21
+00000004.ASF,2,fish_images\Chinook\00000004_track_2.jpg,fish,93.41%,39.0,517.0,93.41%,upstream,Chinook,74.65%,2026/10/01 19:07:34
+00000006.ASF,1,fish_images\Chinook\00000006_track_1.jpg,fish,91.96%,29.5,514.25,91.96%,upstream,Chinook,56.41%,2026/09/26 23:46:22
