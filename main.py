@@ -11,6 +11,9 @@ from fileinput import filename
 import os
 import csv
 import cv2
+import subprocess
+from contextlib import contextmanager
+import tempfile
 import numpy as np
 from ultralytics import YOLO
 import shutil
@@ -24,27 +27,16 @@ from keras.models import load_model
 from dataclasses import dataclass, field
 from typing import List
 from keras.preprocessing.image import load_img, img_to_array
-import pytesseract
-import re
-from dateutil import parser as date_parser
-from extract_timestamp import extractTimestampFromFrame, parseTimestamp
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Update this path if Tesseract is installed elsewhere
+from extract_timestamp import extractTimestamFromFrame, check_tesseract, probe_video_timestamp, dedupe_tracks_by_timestamp
 
-
-# ****************************************************************
-# Function: check_tesseract
-# Description: Check if Tesseract OCR is available and accessible.
-# Notes: N/A
-def check_tesseract():
+# Keep OpenCV logging quieter (FFmpeg decode warnings can be very noisy on damaged ASF streams).
+try:
+    cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_ERROR)
+except Exception:
     try:
-        version = pytesseract.get_tesseract_version()
-        print(f"Tesseract OCR detected: v{version}")
-        return True
-    except Exception as e:
-        print(f"    WARNING: Tesseract OCR not found or not configured")
-        print(f"   Timestamp extraction will be disabled")
-        print(f"   Error: {e}")
-        return False
+        cv2.setLogLevel(cv2.LOG_LEVEL_ERROR)
+    except Exception:
+        pass
 
 # Suppress deprecation warning from pkg_resources
 warnings.filterwarnings(
@@ -84,13 +76,22 @@ TESSERACT_AVAILABLE = check_tesseract()
 # Constants--YOLO
 MODEL = YOLO("models/fish_detector2.pt")
 YOLO_CONFIDENCE_THRESHOLD = 0.25  # Adjustable: lower = detects more fish (but more false positives), higher = more selective
-NO_FISH = "no_fish"
+NO_FISH = os.path.join(PROJECT_ROOT, "no_fish")
 
 # Constants--DeepSort
 FPS_DEFAULT = 30 
 MAX_EXPORT_PER_VIDEO = 5  
-OUTPUT_CSV = "fish_summary.csv"
-FISH_IMAGE_DIR = "fish_images"
+OUTPUT_CSV = os.path.join(PROJECT_ROOT, "fish_summary.csv")
+FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
+
+# Performance tuning (set via env vars when needed)
+FAST_MODE = os.getenv("FISHLENS_FAST_MODE", "1") == "1"
+FRAME_STRIDE = max(1, int(os.getenv("FISHLENS_FRAME_STRIDE", "2" if FAST_MODE else "1")))
+YOLO_IMGSZ = max(320, int(os.getenv("FISHLENS_YOLO_IMGSZ", "448" if FAST_MODE else "512")))
+SAVE_TIMESTAMP_DEBUG_FRAMES = os.getenv("FISHLENS_SAVE_TIMESTAMP_DEBUG", "0") == "1"
+TIMESTAMP_MAX_ATTEMPTS = max(1, int(os.getenv("FISHLENS_TIMESTAMP_MAX_ATTEMPTS", "4" if FAST_MODE else "8")))
+SUPPRESS_CODEC_WARNINGS = os.getenv("FISHLENS_SUPPRESS_CODEC_WARNINGS", "1") == "1"
+VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRAMES", "6" if FAST_MODE else "12")))
 
 # Constants--Classifier
 CLASSIFIER_MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "fish_classifier_model.h5")
@@ -130,6 +131,38 @@ class VideoData:
         self.v_video_timestamp = None
 
 
+@contextmanager
+def _suppress_stderr(enabled=True):
+    if not enabled:
+        yield
+        return
+
+    try:
+        stderr_fd = sys.stderr.fileno()
+        saved_stderr_fd = os.dup(stderr_fd)
+        devnull_fd = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull_fd, stderr_fd)
+        try:
+            yield
+        finally:
+            os.dup2(saved_stderr_fd, stderr_fd)
+            os.close(saved_stderr_fd)
+            os.close(devnull_fd)
+    except Exception:
+        # If redirection is not supported in this runtime, continue normally.
+        yield
+
+
+def _video_capture_open(video_path):
+    with _suppress_stderr(SUPPRESS_CODEC_WARNINGS):
+        return cv2.VideoCapture(video_path)
+
+
+def _video_capture_read(cap):
+    with _suppress_stderr(SUPPRESS_CODEC_WARNINGS):
+        return cap.read()
+
+
 # ****************************************************************
 # Function: main
 # Description: Process all videos and export data as a CSV.
@@ -141,15 +174,19 @@ def main():
 
     # Process all videos in folder
     all_tracks = []
+    print(f"Performance: FAST_MODE={FAST_MODE}, FRAME_STRIDE={FRAME_STRIDE}, YOLO_IMGSZ={YOLO_IMGSZ}")
     if SINGLE_VIDEO_FILE:
         # Process single video file
-        video_path = SINGLE_VIDEO_FILE
+        video_path, is_temp = convert_asf_to_mp4(SINGLE_VIDEO_FILE)
         filename = os.path.basename(SINGLE_VIDEO_FILE)
-        print(f"[INFO] Processing: {filename}")
-        video_tracks = run_video_tracker(video_path)
-        for t in video_tracks:
-            t["video_file"] = filename
-        all_tracks.extend(video_tracks)
+        try:
+            video_tracks = run_video_tracker(video_path, SINGLE_VIDEO_FILE)
+        finally:
+            if is_temp:
+                _cleanup_temp(video_path)
+            for t in video_tracks:
+                t["video_file"] = filename
+            all_tracks.extend(video_tracks)
     else:
         # Process all videos in folder
         video_extensions = ('.mp4', '.avi', '.mov', '.mkv', '.asf', '.wmv', '.flv', '.webm')
@@ -166,17 +203,19 @@ def main():
             item_path = os.path.join(VIDEO_FOLDER, filename)
             # Skip directories and non-video files
             if os.path.isfile(item_path) and filename.lower().endswith(video_extensions):
-                video_path = item_path
-                print(f"[INFO] Processing: {filename}")
-                video_tracks = run_video_tracker(video_path)
-                if video_tracks:
-                    for t in video_tracks:
-                        t["video_file"] = filename
-                    all_tracks.extend(video_tracks)
+                video_path, is_temp = convert_asf_to_mp4(item_path)
+                print(f"Processing: {filename}")
+                try:
+                    video_tracks = run_video_tracker(video_path, item_path)
+                finally:
+                    if is_temp:
+                        _cleanup_temp(video_path)
+                for t in video_tracks:
+                    t["video_file"] = filename
+                all_tracks.extend(video_tracks)
 
-
-    # Export CSV - ALWAYS write, even if empty (to clear old data)
-    try:
+    # Export CSV
+    if all_tracks:
         with open(OUTPUT_CSV, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=CSV_KEYS)
             writer.writeheader()
@@ -212,15 +251,116 @@ def enhance_image(crop):
     
     return crop
 
+
+# ****************************************************************
+# Function: convert_asf_to_mp4
+# Description: Convert ASF video to a temporary MP4 to improve decode reliability.
+# Notes: Returns (path, is_temp). Caller is responsible for deleting the temp file.
+def convert_asf_to_mp4(video_path):
+    if not video_path.lower().endswith('.asf'):
+        return video_path, False
+
+    fd, output_path = tempfile.mkstemp(suffix='.mp4')
+    os.close(fd)
+
+    # Prefer ffmpeg CLI conversion when available to avoid noisy OpenCV decode warnings.
+    ffmpeg_path = shutil.which("ffmpeg")
+    if ffmpeg_path:
+        ffmpeg_cmd = [
+            ffmpeg_path,
+            "-hide_banner",
+            "-loglevel", "error",
+            "-y",
+            "-i", video_path,
+            "-an",
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "23",
+            output_path
+        ]
+        try:
+            result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, check=False)
+            if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                print(f"Converted ASF to MP4 (temp): {os.path.basename(video_path)}")
+                return output_path, True
+            else:
+                print("Warning: ffmpeg conversion failed, falling back to OpenCV conversion.")
+        except Exception:
+            print("Warning: ffmpeg invocation failed, falling back to OpenCV conversion.")
+
+    cap = _video_capture_open(video_path)
+    if not cap.isOpened():
+        print(f"Warning: Could not open ASF for conversion: {video_path}")
+        _cleanup_temp(output_path)
+        return video_path, False
+
+    fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
+    if fps <= 0:
+        fps = FPS_DEFAULT
+
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    if width <= 0 or height <= 0:
+        ret, first_frame = _video_capture_read(cap)
+        if not ret or first_frame is None:
+            cap.release()
+            print(f"Warning: ASF conversion failed (no readable frames): {video_path}")
+            _cleanup_temp(output_path)
+            return video_path, False
+        height, width = first_frame.shape[:2]
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+    writer = cv2.VideoWriter(
+        output_path,
+        cv2.VideoWriter_fourcc(*'mp4v'),
+        fps,
+        (width, height)
+    )
+
+    if not writer.isOpened():
+        cap.release()
+        print(f"Warning: Could not create MP4 writer for: {video_path}")
+        _cleanup_temp(output_path)
+        return video_path, False
+
+    frame_count = 0
+    while True:
+        ret, frame = _video_capture_read(cap)
+        if not ret or frame is None:
+            break
+        writer.write(frame)
+        frame_count += 1
+
+    cap.release()
+    writer.release()
+
+    if frame_count == 0:
+        print(f"Warning: ASF conversion produced zero frames: {video_path}")
+        _cleanup_temp(output_path)
+        return video_path, False
+
+    print(f"Converted ASF to MP4 (temp): {os.path.basename(video_path)}")
+    return output_path, True
+
+
+def _cleanup_temp(path):
+    try:
+        if path and os.path.exists(path):
+            os.remove(path)
+    except OSError:
+        pass
+
 # ****************************************************************
 # Function: run_video_tracker
 # Description: Process a single video through both YOLO and DeepSort;
 # return tracked fish data.
 # Notes: N/A
-def run_video_tracker(video_path):
+def run_video_tracker(video_path, source_video_path=None):
 
     # Initialize new VideoData and DeepSort tracker for each video
     vidData = VideoData()
+    source_video_path = source_video_path or video_path
     vidData.v_filename = os.path.basename(video_path)
     tracker = DeepSortTracker()
     
@@ -235,29 +375,34 @@ def run_video_tracker(video_path):
 
 
     # Open video, determine FPS, and read first frame
-    cap = cv2.VideoCapture(video_path)
+    cap = _video_capture_open(video_path)
     if not cap.isOpened():
         print(f"[ERROR] Could not open video with cv2.VideoCapture: {video_path}")
         print(f"[DEBUG] This usually means the video codec is not supported or file is corrupted")
         return []
     
     vidData.v_fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
-    
-    # Get frame dimensions
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    
-    # Store frame width in VideoData for later use
-    vidData.frame_width = frame_width
-    
-    ret, frame = cap.read()
-    if not ret:
-        print(f"[ERROR] Could not read first frame from video: {video_path}")
-        cap.release()
-        return []
+    ret, frame = _video_capture_read(cap)
+
+    # Pre-compute a video-level timestamp fallback from early frames.
+    if ret and frame is not None:
+        vidData.v_video_timestamp = probe_video_timestamp(
+            cap,
+            frame,
+            probe_frames=VIDEO_TIMESTAMP_PROBE_FRAMES,
+            read_frame_fn=_video_capture_read
+        )
+        ret, frame = _video_capture_read(cap)
 
     # Cycle through video frames until end of video
     while ret:
+
+        # Speed mode: process every Nth frame
+        if FRAME_STRIDE > 1 and (vidData.v_frame_index % FRAME_STRIDE) != 0:
+            vidData.v_frame_index += 1
+            vidData.v_total_frames += 1
+            ret, frame = _video_capture_read(cap)
+            continue
 
         # Initialize new FrameData object each frame
         frameData = FrameData(f_index=vidData.v_frame_index)
@@ -278,7 +423,7 @@ def run_video_tracker(video_path):
         # Increment frame index and read next frame
         vidData.v_frame_index += 1
         vidData.v_total_frames += 1
-        ret, frame = cap.read()
+        ret, frame = _video_capture_read(cap)
 
     # Finalize forced tracks (detections that were still active at the end of the video)
     if frameData is not None:
@@ -294,6 +439,13 @@ def run_video_tracker(video_path):
         no_fish_found(video_path, vidData.v_filename)
         return []
 
+    # Remove duplicate tracks that share the exact same timestamp.
+    # Keep the one with higher confidence.
+    vidData.v_finished_tracks = dedupe_tracks_by_timestamp(vidData.v_finished_tracks)
+
+    # Merge likely fragmented/split tracks of the same fish.
+    vidData.v_finished_tracks = dedupe_fragmented_tracks(vidData.v_finished_tracks)
+
     # Save the best detection per video for analysis. TODO: Refactor based on edge cases (multiple fish?) and confidence threshold adjustments.
     if MAX_EXPORT_PER_VIDEO and len(vidData.v_finished_tracks) > MAX_EXPORT_PER_VIDEO:
         vidData.v_finished_tracks.sort(
@@ -306,6 +458,9 @@ def run_video_tracker(video_path):
 
     # Save the best image from each video for analysis.
     save_best_image(vidData.v_finished_tracks, vidData.v_filename)
+    
+    # Save frames for uncertain timestamps
+    save_uncertain_timestamp_frames(vidData.v_finished_tracks, source_video_path)
 
     return vidData.v_finished_tracks
 
@@ -316,8 +471,14 @@ def run_video_tracker(video_path):
 # Notes: Vars modified: found_fish (frame, video), detections(frame), frames with/without fish (video)
 def analyze_yolo_detections(frame, model, frameData, vidData):
 
-    # Run YOLO on frame with adjustable confidence threshold
-    results = model.predict(source=frame, verbose=False, stream=False, save=False, conf=YOLO_CONFIDENCE_THRESHOLD)
+    # Run YOLO on frame
+    results = model.predict(
+        source=frame,
+        verbose=False,
+        stream=False,
+        save=False,
+        imgsz=YOLO_IMGSZ
+    )
 
     # Begin YOLO post-analysis
     if results:
@@ -391,32 +552,45 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         is_new_track = trackId not in vidData.v_active_tracks
 
         if is_new_track:
-            x1, y1, x2, y2 = obj["bbox"]
-            entry_x = (x1 + x2) / 2  # Center x-position at entry
+            initial_conf = "LOW" if (vidData.v_video_timestamp and vidData.v_video_timestamp != "Not detected") else None
             vidData.v_active_tracks[trackId] = {
                 "start_frame": frameData.f_index,
                 "confidences": [],
                 "directions": [],
                 "best_conf": -1.0,
                 "best_crop": None,
-                "video_timestamp": None,
-                "entry_x": entry_x,
-                "last_x": entry_x
+                "video_timestamp": vidData.v_video_timestamp or "Not detected",
+                "timestamp_confidence": initial_conf,
+                "timestamp_attempts": 0
             }
             
-            # Extract timestamp once, when track is first created
-            timestamp = extractTimestampFromFrame(frame, False)
-            
-            if timestamp:
-                vidData.v_active_tracks[trackId]["video_timestamp"] = timestamp
-                #print(f"    Timestamp: {timestamp}")
-            else:
-                vidData.v_active_tracks[trackId]["video_timestamp"] = "Not detected"
-                print(f"    Could not extract timestamp")
+            # Track created; timestamp OCR will be retried for several frames if needed.
+            print(f"  New fish detected (Track {trackId}) at frame {frameData.f_index} - initial ts_conf={initial_conf}")
 
-                debug_frame_path = f"debug_full_frame_track_{trackId}.jpg"
-                cv2.imwrite(debug_frame_path, frame)
-                print(f"    Saved full frame to: {debug_frame_path}")
+        # Retry timestamp OCR on early frames of each track until one succeeds.
+        track_data = vidData.v_active_tracks[trackId]
+        current_confidence = track_data.get("timestamp_confidence")
+        current_ts = track_data.get("video_timestamp", "Not detected")
+        
+        # Keep trying to get direct OCR if we only have LOW confidence (from probe) or no timestamp at all
+        if current_confidence in (None, "LOW"):
+            attempts = track_data.get("timestamp_attempts", 0)
+            if attempts < TIMESTAMP_MAX_ATTEMPTS:
+                result = extractTimestamFromFrame(frame, False)
+                track_data["timestamp_attempts"] = attempts + 1
+
+                if result and result[0]:  # result is (timestamp, confidence) tuple
+                    old_ts = current_ts
+                    old_conf = current_confidence
+                    track_data["video_timestamp"] = result[0]
+                    track_data["timestamp_confidence"] = result[1]
+                    print(f"    Track {trackId}: Updated ts from '{old_ts}' ({old_conf}) to '{result[0]}' ({result[1]})")
+                elif track_data["timestamp_attempts"] == TIMESTAMP_MAX_ATTEMPTS and current_confidence is None:
+                    print(f"    Could not extract timestamp after {TIMESTAMP_MAX_ATTEMPTS} attempts")
+                    if SAVE_TIMESTAMP_DEBUG_FRAMES:
+                        debug_frame_path = f"debug_full_frame_track_{trackId}.jpg"
+                        cv2.imwrite(debug_frame_path, frame)
+                        print(f"    Saved full frame to: {debug_frame_path}")
 
         # Update track data per-frame
         vidData.v_active_tracks[trackId]["confidences"].append(obj["confidence"])
@@ -443,6 +617,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
             if conf > vidData.v_active_tracks[trackId]["best_conf"]:
                 vidData.v_active_tracks[trackId]["best_conf"] = conf
                 vidData.v_active_tracks[trackId]["best_crop"] = crop.copy()
+                vidData.v_active_tracks[trackId]["best_frame"] = frame.copy()
 
 
 # ****************************************************************
@@ -517,6 +692,14 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     
     species_data = classify_image(image_path) if image_path else ("No image", 0.0)
     
+    # Handle timestamp with confidence flag
+    video_timestamp = track_data.get("video_timestamp") or vidData.v_video_timestamp or "Not detected"
+    timestamp_confidence = track_data.get("timestamp_confidence")
+    
+    # Add * only if timestamp is LOW confidence
+    if timestamp_confidence and timestamp_confidence == "LOW":
+        video_timestamp = f"{video_timestamp}*"
+    
     return {
         "trackId": trackId,
         "likely_class": vidData.v_most_common_class,
@@ -528,8 +711,91 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         "best_crop": track_data.get("best_crop"),
         "species": species_data[0] if species_data else "No data",
         "species_confidence": f"{species_data[1]:.2f}%" if species_data else "No data",
-        "video_timestamp": track_data.get("video_timestamp", "Not detected")
+        "video_timestamp": video_timestamp,
+        "timestamp_confidence": timestamp_confidence,
+        "best_frame": vidData.v_active_tracks.get(trackId, {}).get("best_frame") if trackId in vidData.v_active_tracks else None
     }
+
+
+# ****************************************************************
+# Function: dedupe_fragmented_tracks
+# Description: Merge likely duplicate tracks caused by tracker ID splits.
+# Notes: Conservative heuristic to reduce false double-fish reports.
+def dedupe_fragmented_tracks(finished_tracks):
+    if not finished_tracks:
+        return finished_tracks
+
+    def _pct(track):
+        value = track.get("avg_confidence") or track.get("confidence") or "0%"
+        try:
+            return float(str(value).replace("%", "").strip())
+        except Exception:
+            return 0.0
+
+    def _duration(track):
+        try:
+            start = float(track.get("start_time_sec", 0.0))
+            end = float(track.get("end_time_sec", 0.0))
+            return max(0.0, end - start)
+        except Exception:
+            return 0.0
+
+    def _score(track):
+        # Confidence-first score with a small duration bonus.
+        return _pct(track) + min(_duration(track), 10.0)
+
+    def _same_or_unknown_direction(a, b):
+        da = str(a.get("direction", "unknown")).lower()
+        db = str(b.get("direction", "unknown")).lower()
+        if da == "unknown" or db == "unknown" or da == "stationary" or db == "stationary":
+            return True
+        return da == db
+
+    def _is_likely_duplicate(a, b):
+        # Must be same class and compatible direction.
+        if str(a.get("likely_class", "")).lower() != str(b.get("likely_class", "")).lower():
+            return False
+        if not _same_or_unknown_direction(a, b):
+            return False
+
+        a_start = float(a.get("start_time_sec", 0.0))
+        a_end = float(a.get("end_time_sec", 0.0))
+        b_start = float(b.get("start_time_sec", 0.0))
+        b_end = float(b.get("end_time_sec", 0.0))
+
+        overlap = max(0.0, min(a_end, b_end) - max(a_start, b_start))
+        shorter = max(0.001, min(_duration(a), _duration(b)))
+        overlap_ratio = overlap / shorter
+        gap = min(abs(a_start - b_end), abs(b_start - a_end))
+
+        # Temporal relationship expected for split IDs.
+        temporal_match = (overlap_ratio >= 0.75) or (gap <= 0.35)
+        if not temporal_match:
+            return False
+
+        # Prefer merging only when one track is clearly weaker/shorter.
+        pa = _pct(a)
+        pb = _pct(b)
+        conf_gap = abs(pa - pb)
+        dur_ratio = min(_duration(a), _duration(b)) / max(0.001, max(_duration(a), _duration(b)))
+
+        return conf_gap >= 8.0 or dur_ratio <= 0.45
+
+    ordered = sorted(finished_tracks, key=lambda t: float(t.get("start_time_sec", 0.0)))
+    kept = []
+
+    for track in ordered:
+        merged = False
+        for i, existing in enumerate(kept):
+            if _is_likely_duplicate(existing, track):
+                if _score(track) > _score(existing):
+                    kept[i] = track
+                merged = True
+                break
+        if not merged:
+            kept.append(track)
+
+    return kept
 
 
 # ***************************************************************
@@ -542,7 +808,7 @@ def no_fish_found(video_path, filename): # TODO: Change function name?
     print("***************************************************************")
 
     # Copy video to no_fish folder
-    no_fish_path = os.path.join("no_fish", filename)
+    no_fish_path = os.path.join(NO_FISH, filename)
     try:
         shutil.copy2(video_path, no_fish_path)
     except Exception as e:
@@ -563,7 +829,14 @@ def save_best_image(finished_tracks, filename):
                 # Classify the image first to determine species folder
                 temp_image_name = f"{os.path.splitext(filename)[0]}_track_{track['trackId']}.jpg"
                 temp_image_path = os.path.join(FISH_IMAGE_DIR, temp_image_name)
-                cv2.imwrite(temp_image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                write_ok = cv2.imwrite(temp_image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                if not write_ok:
+                    print(f"Failed to write image at {temp_image_path}. Skipping classification.")
+                    track["species"] = "No data"
+                    track["species_confidence"] = "No data"
+                    track["image_path"] = None
+                    track.pop("best_crop", None)
+                    continue
                 
                 # Classify the saved image
                 species_data = classify_image(temp_image_path)
@@ -589,6 +862,64 @@ def save_best_image(finished_tracks, filename):
             
             # Remove best_crop from track dict (no need to export it)
             track.pop("best_crop", None)
+
+
+# ****************************************************************
+# Function: _safe_path_component
+# Description: Convert arbitrary text into a filesystem-safe path segment.
+# Notes: N/A
+def _safe_path_component(value, default="unknown"):
+    text = str(value).strip() if value is not None else ""
+    if not text:
+        return default
+
+    for ch in '<>:"/\\|?*':
+        text = text.replace(ch, "_")
+    return text or default
+
+
+# ****************************************************************
+# Function: _get_uncertain_timestamp_dir
+# Description: Build output directory for uncertain timestamp frames.
+# Notes: Format: results/uncertain_timestamps/<video_directory>
+def _get_uncertain_timestamp_dir(source_video_path):
+    video_dir = os.path.basename(os.path.dirname(source_video_path)) or "root"
+
+    return os.path.join(
+        PROJECT_ROOT,
+        "results",
+        "uncertain_timestamps",
+        _safe_path_component(video_dir, default="root")
+    )
+
+
+# ****************************************************************
+# Function: save_uncertain_timestamp_frames
+# Description: Save frame screenshots for tracks with uncertain (non-HIGH) timestamps.
+# Notes: Includes LOW confidence and failed timestamp extraction (None / Not detected).
+def save_uncertain_timestamp_frames(finished_tracks, source_video_path):
+    uncertain_dir = _get_uncertain_timestamp_dir(source_video_path)
+    os.makedirs(uncertain_dir, exist_ok=True)
+    
+    for track in finished_tracks:
+        timestamp_confidence = track.get("timestamp_confidence")
+        best_frame = track.get("best_frame")
+        
+        # Save frame when timestamp is uncertain or not extracted.
+        if timestamp_confidence != "HIGH" and best_frame is not None:
+            video_name = os.path.splitext(os.path.basename(source_video_path))[0] or "unknown_video"
+            safe_video_name = _safe_path_component(video_name, default="unknown_video")
+            frame_filename = f"{safe_video_name}.png"
+            frame_path = os.path.join(uncertain_dir, frame_filename)
+            
+            try:
+                cv2.imwrite(frame_path, best_frame)
+                print(f"Saved uncertain timestamp frame: {frame_path}")
+            except Exception as e:
+                print(f"Error saving uncertain timestamp frame: {e}")
+        
+        # Remove best_frame from track dict (no need to export it)
+        track.pop("best_frame", None)
 
 
 # ****************************************************************
