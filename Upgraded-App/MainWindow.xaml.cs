@@ -7,6 +7,7 @@
 // ***********************************
 // **************************************************
 
+using DocumentFormat.OpenXml.Spreadsheet;
 using FishLens_App.Interfaces;
 using FishLens_App.Models;
 using FishLens_App.Services;
@@ -192,8 +193,19 @@ namespace FishLens_App
         // **************************************************
         private void HomeButtonClick(object sender, RoutedEventArgs e)
         {
-            ExpandSidebar();
-            MainFrame.Visibility = Visibility.Collapsed;            
+            if (IsCurrentPageSettings())
+            {
+                if (CheckForUnsavedChanges())
+                {
+                    ExpandSidebar();
+                    MainFrame.Visibility = Visibility.Collapsed;
+                }
+            }
+            else
+            {
+                ExpandSidebar();
+                MainFrame.Visibility = Visibility.Collapsed;
+            }
         }
 
         // **************************************************
@@ -202,8 +214,19 @@ namespace FishLens_App
         // **************************************************
         private void HistoryButtonClick(object sender, RoutedEventArgs e)
         {
-            CollapseSidebar();
-            NavigateToPage(new History(_pathResolver, _fileSystemManager, _logger), "History");
+            if (IsCurrentPageSettings())
+            {
+                if (CheckForUnsavedChanges())
+                {
+                    CollapseSidebar();
+                    NavigateToPage(new History(_pathResolver, _fileSystemManager, _logger), "History");
+                }
+            }
+            else
+            {
+                CollapseSidebar();
+                NavigateToPage(new History(_pathResolver, _fileSystemManager, _logger), "History");
+            }
         }
 
         // **************************************************
@@ -212,8 +235,24 @@ namespace FishLens_App
         // **************************************************
         private void SettingsButtonClick(object sender, RoutedEventArgs e)
         {
-            CollapseSidebar();
-            NavigateToPage(new Settings(_pathResolver, _fileSystemManager, _logger), "Settings");
+            if (IsCurrentPageSettings())
+            {
+                if (CheckForUnsavedChanges())
+                {
+                    // Already on settings page, just need to refresh with current config
+                    NavigateToPage(new Settings(_pathResolver, _fileSystemManager, _logger), "Settings");
+                }
+            }
+            else
+            {
+                CollapseSidebar();
+                NavigateToPage(new Settings(_pathResolver, _fileSystemManager, _logger), "Settings");
+            }
+        }
+
+        public bool IsCurrentPageSettings()
+        {
+            return MainFrame.Content is Settings;
         }
 
         // **************************************************
@@ -227,13 +266,42 @@ namespace FishLens_App
 
             try
             {
-                MainFrame.Navigate(page);                
+                MainFrame.Navigate(page);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to navigate to {PageName}", pageName);
                 _uiDialogService.ShowMessage($"Navigation Error: {ex.Message}", "Navigation Failed", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        public bool CheckForUnsavedChanges()
+        {
+            var page = MainFrame.Content as Settings;
+            if (page == null)
+                return false;
+
+            var (confidence, hideOutput, hideErrors, highContrast, largeText) = page.GetCurrentValues();
+
+            bool hasUnsavedChanges =
+                confidence != _config.ConfidenceThreshold ||
+                hideOutput != _config.OutputBox ||
+                hideErrors != _config.ErrorBox ||
+                highContrast != _config.HighContrastMode ||
+                largeText != _config.LargeText;
+
+            if (hasUnsavedChanges)
+            {
+                var result = MessageBox.Show(
+                    "Unsaved settings changes. Do you want to stay on the page?",
+                    "Settings",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+
+                return result == MessageBoxResult.Yes;
+            }
+
+            return false;
         }
 
         #endregion
@@ -1139,7 +1207,7 @@ namespace FishLens_App
                 EasingFunction = new System.Windows.Media.Animation.CubicEase()
             };
 
-            SideBar.BeginAnimation(Border.WidthProperty, animation);
+            SideBar.BeginAnimation(System.Windows.Controls.Border.WidthProperty, animation);
 
             videoList.Visibility = Visibility.Collapsed;
             deleteSelectedVideos.Visibility = Visibility.Collapsed;
@@ -1172,7 +1240,7 @@ namespace FishLens_App
                 EasingFunction = new System.Windows.Media.Animation.CubicEase()
             };
 
-            SideBar.BeginAnimation(Border.WidthProperty, animation);
+            SideBar.BeginAnimation(System.Windows.Controls.Border.WidthProperty, animation);
 
             // Show video list
             videoList.Visibility = Visibility.Visible;
@@ -1258,7 +1326,7 @@ namespace FishLens_App
             // Folder name
             TextBox textBox = new TextBox();
             textBox.Text = _currentFolderName;
-            textBox.Foreground = new SolidColorBrush(Colors.White);
+            textBox.Foreground = new SolidColorBrush(System.Windows.Media.Colors.White);
             textBox.Background = Brushes.Transparent;
             textBox.BorderThickness = new Thickness(0);
             textBox.IsReadOnly = true;
@@ -1429,16 +1497,16 @@ namespace FishLens_App
         {
             style.Setters.Add(new Setter(Button.BackgroundProperty,
                 isLowConfidence
-                    ? new SolidColorBrush(Color.FromRgb(254, 242, 242))
-                    : new SolidColorBrush(Color.FromRgb(249, 250, 251))));
+                    ? new SolidColorBrush(System.Windows.Media.Color.FromRgb(254, 242, 242))
+                    : new SolidColorBrush(System.Windows.Media.Color.FromRgb(249, 250, 251))));
 
             style.Setters.Add(new Setter(Button.ForegroundProperty,
                 isLowConfidence
-                    ? new SolidColorBrush(Color.FromRgb(185, 28, 28))
-                    : new SolidColorBrush(Color.FromRgb(55, 65, 81))));
+                    ? new SolidColorBrush(System.Windows.Media.Color.FromRgb(185, 28, 28))
+                    : new SolidColorBrush(System.Windows.Media.Color.FromRgb(55, 65, 81))));
 
             style.Setters.Add(new Setter(Button.BorderBrushProperty,
-                new SolidColorBrush(Color.FromRgb(229, 231, 235))));
+                new SolidColorBrush(System.Windows.Media.Color.FromRgb(229, 231, 235))));
         }
 
         // **************************************************
@@ -1463,12 +1531,12 @@ namespace FishLens_App
         // **************************************************
         private FrameworkElementFactory CreateButtonBorder()
         {
-            var border = new FrameworkElementFactory(typeof(Border));
+            var border = new FrameworkElementFactory(typeof(System.Windows.Controls.Border));
             border.Name = "border";
-            border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
-            border.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
-            border.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
-            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(BUTTON_CORNER_RADIUS));
+            border.SetValue(System.Windows.Controls.Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
+            border.SetValue(System.Windows.Controls.Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
+            border.SetValue(System.Windows.Controls.Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
+            border.SetValue(System.Windows.Controls.Border.CornerRadiusProperty, new CornerRadius(BUTTON_CORNER_RADIUS));
 
             var contentPresenter = CreateContentPresenter();
             border.AppendChild(contentPresenter);
@@ -1514,13 +1582,13 @@ namespace FishLens_App
 
             trigger.Setters.Add(new Setter(Button.BackgroundProperty,
                 isLowConfidence
-                    ? new SolidColorBrush(Color.FromRgb(239, 68, 68))
-                    : new SolidColorBrush(Color.FromRgb(243, 244, 246)), "border"));
+                    ? new SolidColorBrush(System.Windows.Media.Color.FromRgb(239, 68, 68))
+                    : new SolidColorBrush(System.Windows.Media.Color.FromRgb(243, 244, 246)), "border"));
 
             trigger.Setters.Add(new Setter(Button.ForegroundProperty,
                 isLowConfidence
-                    ? new SolidColorBrush(Colors.White)
-                    : new SolidColorBrush(Color.FromRgb(17, 24, 39))));
+                    ? new SolidColorBrush(System.Windows.Media.Colors.White)
+                    : new SolidColorBrush(System.Windows.Media.Color.FromRgb(17, 24, 39))));
 
             return trigger;
         }
@@ -1535,8 +1603,8 @@ namespace FishLens_App
 
             trigger.Setters.Add(new Setter(Button.BackgroundProperty,
                 isLowConfidence
-                    ? new SolidColorBrush(Color.FromRgb(220, 38, 38))
-                    : new SolidColorBrush(Color.FromRgb(229, 231, 235)), "border"));
+                    ? new SolidColorBrush(System.Windows.Media.Color.FromRgb(220, 38, 38))
+                    : new SolidColorBrush(System.Windows.Media.Color.FromRgb(229, 231, 235)), "border"));
 
             return trigger;
         }

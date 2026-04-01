@@ -51,6 +51,21 @@ namespace FishLens_App
         }
         #endregion
 
+        #region Properties
+
+        public (double Confidence, bool? HideOutput, bool? HideErrors, bool? HighContrast, bool? LargeText) GetCurrentValues()
+        {
+            return (
+                confidenceThreshold.Value,
+                hideOutput.IsChecked,
+                hideErrors.IsChecked,
+                highContrastMode.IsChecked,
+                largeText.IsChecked
+            );
+        }
+
+        #endregion
+
         #region Event Handlers
         private void ConfidenceThreshold_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
         {

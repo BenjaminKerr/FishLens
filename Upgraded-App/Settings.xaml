@@ -23,7 +23,7 @@
         <ScrollViewer Grid.Row="1" 
                       VerticalScrollBarVisibility="Auto"
                       Padding="30">
-            <StackPanel MaxWidth="800" HorizontalAlignment="Center">
+            <StackPanel x:Name="ContentPanel" MaxWidth="800" HorizontalAlignment="Center">
 
                 <TextBlock Text="Analysis" 
                            FontSize="{DynamicResource LargeHeaderFontSize}"
@@ -61,8 +61,7 @@
                                     Minimum="0"
                                     Maximum="100"
                                     Value="75"
-                                    TickFrequency="5"
-                                    IsSnapToTickEnabled="True"
+                                    IsMoveToPointEnabled="True"
                                     VerticalAlignment="Center"
                                     Margin="0,0,15,0"
                                     ValueChanged="ConfidenceThreshold_ValueChanged"/>
