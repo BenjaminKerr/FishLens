@@ -293,7 +293,7 @@ namespace FishLens_App
             if (hasUnsavedChanges)
             {
                 var result = MessageBox.Show(
-                    "Unsaved settings changes. Do you want to stay on the page?",
+                    "Unsaved settings changes. Do you want to leave the page?",
                     "Settings",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Warning);
