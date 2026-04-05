@@ -395,10 +395,14 @@ def _cleanup_temp(path):
 # Description: Process a single video through both YOLO and DeepSort;
 # return tracked fish data.
 # Notes: N/A
-def run_video_tracker(video_path, source_video_path=None):
+def run_video_tracker(video_path, source_video_path=None, allow_recovery=True, force_precise=False):
 
     # Initialize new VideoData and DeepSort tracker for each video
     vidData = VideoData()
+    frame_stride = 1 if force_precise else FRAME_STRIDE
+    yolo_imgsz = max(512, YOLO_IMGSZ) if force_precise else YOLO_IMGSZ
+    timestamp_max_attempts = max(8, TIMESTAMP_MAX_ATTEMPTS) if force_precise else TIMESTAMP_MAX_ATTEMPTS
+    video_ts_probe_frames = max(12, VIDEO_TIMESTAMP_PROBE_FRAMES) if force_precise else VIDEO_TIMESTAMP_PROBE_FRAMES
     source_video_path = source_video_path or video_path
     vidData.v_filename = os.path.basename(video_path)
     tracker = DeepSortTracker()
@@ -419,6 +423,13 @@ def run_video_tracker(video_path, source_video_path=None):
         print(f"[ERROR] Could not open video with cv2.VideoCapture: {video_path}")
         print(f"[DEBUG] This usually means the video codec is not supported or file is corrupted")
         return []
+
+    if force_precise:
+        print(
+            f"[INFO] Precision pass enabled: FRAME_STRIDE={frame_stride}, "
+            f"YOLO_IMGSZ={yolo_imgsz}, TIMESTAMP_MAX_ATTEMPTS={timestamp_max_attempts}, "
+            f"VIDEO_TS_PROBE_FRAMES={video_ts_probe_frames}"
+        )
     
     vidData.v_fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
     ret, frame = _video_capture_read(cap)
@@ -428,16 +439,17 @@ def run_video_tracker(video_path, source_video_path=None):
         vidData.v_video_timestamp = probe_video_timestamp(
             cap,
             frame,
-            probe_frames=VIDEO_TIMESTAMP_PROBE_FRAMES,
+            probe_frames=video_ts_probe_frames,
             read_frame_fn=_video_capture_read
         )
         ret, frame = _video_capture_read(cap)
 
     # Cycle through video frames until end of video
     while ret:
+        vidData.v_current_track_ids = set()
 
         # Speed mode: process every Nth frame
-        if FRAME_STRIDE > 1 and (vidData.v_frame_index % FRAME_STRIDE) != 0:
+        if frame_stride > 1 and (vidData.v_frame_index % frame_stride) != 0:
             vidData.v_frame_index += 1
             vidData.v_total_frames += 1
             ret, frame = _video_capture_read(cap)
@@ -448,13 +460,13 @@ def run_video_tracker(video_path, source_video_path=None):
         frameData.f_detections = []
 
         # Determine most common class per-frame
-        analyze_yolo_detections(frame, MODEL, frameData, vidData)
+        analyze_yolo_detections(frame, MODEL, frameData, vidData, yolo_imgsz)
 
         # YOLO Post-Processing. TODO: Move this farther down. Currently doesn't produce accurate results because it's running too early.
         process_yolo_results(frameData, vidData, MODEL)
 
         # DeepSort Tracking
-        deepsort_analysis(tracker, frame, frameData, vidData) 
+        deepsort_analysis(tracker, frame, frameData, vidData, timestamp_max_attempts) 
 
         # Finalize disappeared tracks (detections that ended before the video ended)
         finalize_tracks(frameData, vidData, termination_reason="disappeared")
@@ -474,6 +486,14 @@ def run_video_tracker(video_path, source_video_path=None):
 
     # Skip export if fish was not detected in video
     if not vidData.v_found_fish:
+        if FAST_MODE and allow_recovery and not force_precise:
+            print("[INFO] Fast pass found no fish; retrying this video with precision settings...")
+            return run_video_tracker(
+                video_path,
+                source_video_path=source_video_path,
+                allow_recovery=False,
+                force_precise=True
+            )
         print(f"[INFO] No fish detected in {vidData.v_filename}")
         no_fish_found(video_path, vidData.v_filename)
         return []
@@ -508,7 +528,7 @@ def run_video_tracker(video_path, source_video_path=None):
 # Function: analyse_yolo_detections
 # Description: Analyze YOLO detections to determine most common class of frame.
 # Notes: Vars modified: found_fish (frame, video), detections(frame), frames with/without fish (video)
-def analyze_yolo_detections(frame, model, frameData, vidData):
+def analyze_yolo_detections(frame, model, frameData, vidData, yolo_imgsz):
 
     # Run YOLO on frame
     results = model.predict(
@@ -516,7 +536,7 @@ def analyze_yolo_detections(frame, model, frameData, vidData):
         verbose=False,
         stream=False,
         save=False,
-        imgsz=YOLO_IMGSZ
+        imgsz=yolo_imgsz
     )
 
     # Begin YOLO post-analysis
@@ -531,7 +551,7 @@ def analyze_yolo_detections(frame, model, frameData, vidData):
             cls_id = int(cls_arr[0]) if cls_arr.size > 0 and cls_arr[0] is not None else -1
             box_area = (x2 - x1) * (y2 - y1)
             
-            if box_area < 100:
+            if box_area < 100 or conf < YOLO_CONFIDENCE_THRESHOLD:
                 continue
 
             # Mark if YOLO detected a fish in frame.
@@ -577,7 +597,7 @@ def process_yolo_results(frameData, vidData, model):
 # Function: deepsort_analysis
 # Description: Run video through DeepSort and return track data.
 # Notes: N/A
-def deepsort_analysis(tracker, frame, frameData, vidData):
+def deepsort_analysis(tracker, frame, frameData, vidData, timestamp_max_attempts):
 
     # Use the tracker's default iou threshold (tuned in the tracker)
     frameData.f_detections = tracker.filterOverlaps(frameData.f_detections)
@@ -614,7 +634,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         # Keep trying to get direct OCR if we only have LOW confidence (from probe) or no timestamp at all
         if current_confidence in (None, "LOW"):
             attempts = track_data.get("timestamp_attempts", 0)
-            if attempts < TIMESTAMP_MAX_ATTEMPTS:
+            if attempts < timestamp_max_attempts:
                 result = extractTimestamFromFrame(frame, False)
                 track_data["timestamp_attempts"] = attempts + 1
 
@@ -624,8 +644,8 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                     track_data["video_timestamp"] = result[0]
                     track_data["timestamp_confidence"] = result[1]
                     print(f"    Track {trackId}: Updated ts from '{old_ts}' ({old_conf}) to '{result[0]}' ({result[1]})")
-                elif track_data["timestamp_attempts"] == TIMESTAMP_MAX_ATTEMPTS and current_confidence is None:
-                    print(f"    Could not extract timestamp after {TIMESTAMP_MAX_ATTEMPTS} attempts")
+                elif track_data["timestamp_attempts"] == timestamp_max_attempts and current_confidence is None:
+                    print(f"    Could not extract timestamp after {timestamp_max_attempts} attempts")
                     if SAVE_TIMESTAMP_DEBUG_FRAMES:
                         debug_frame_path = f"debug_full_frame_track_{trackId}.jpg"
                         cv2.imwrite(debug_frame_path, frame)

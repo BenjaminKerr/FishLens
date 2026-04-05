@@ -19,8 +19,8 @@ class DeepSortTracker:
     MIN_CONFIDENCE = 0.5
     MIN_MOVE_THRESHOLD = 5
     MAX_TRACK_HISTORY = 50
-    MIN_FRAMES_FOR_SUMMARY = 10
-    DEFAULT_NMS_IOU_THRESHOLD = 0.7
+    MIN_FRAMES_FOR_SUMMARY = 3
+    DEFAULT_NMS_IOU_THRESHOLD = 0.5
     MIN_POSITIONS_FOR_DIRECTION = 2
     
     # ******************************
@@ -30,9 +30,9 @@ class DeepSortTracker:
 
     def __init__(self) -> None:
         self.tracker = DeepSort(
-            max_age=50,
-            n_init=10,
-            max_iou_distance=0.6,
+            max_age=60,
+            n_init=3,
+            max_iou_distance=0.7,
             max_cosine_distance=0.4
         )
 
