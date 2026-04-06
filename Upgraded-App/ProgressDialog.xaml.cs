@@ -28,5 +28,31 @@ namespace FishLens_App
         {
             Dispatcher.Invoke(() => messageText.Text = message);
         }
+
+        public void UpdateProgress(string videoStatus, string frameStatus)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                messageText.Text = videoStatus;
+                frameText.Text = frameStatus;
+            });
+        }
+
+        public void SetProgressBar(int value, int max)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (max > 0)
+                {
+                    progressBar.IsIndeterminate = false;
+                    progressBar.Maximum = max;
+                    progressBar.Value = value;
+                }
+                else
+                {
+                    progressBar.IsIndeterminate = true;
+                }
+            });
+        }
     }
 }

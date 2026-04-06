@@ -386,17 +386,66 @@ namespace FishLens_App
             {
                 using (Process process = Process.Start(processInfo))
                 {
-                    var outputTask = Task.Run(() => process.StandardOutput.ReadToEnd());
                     var errorTask = Task.Run(() => process.StandardError.ReadToEnd());
+                    var outputBuilder = new System.Text.StringBuilder();
+
+                    int totalVideos = 0;
+                    string currentVideoStatus = "Processing videos, please wait...";
+
+                    string line;
+                    while ((line = process.StandardOutput.ReadLine()) != null)
+                    {
+                        if (!line.StartsWith("[PROGRESS]"))
+                            outputBuilder.AppendLine(line);
+
+                        if (line.StartsWith("[PROGRESS] TOTAL:") &&
+                            int.TryParse(line.Substring("[PROGRESS] TOTAL:".Length), out int total))
+                        {
+                            totalVideos = total;
+                            Dispatcher.Invoke(() => progressDialog.SetProgressBar(0, total));
+                        }
+                        else if (line.StartsWith("[PROGRESS] VIDEO:"))
+                        {
+                            // Format: VIDEO:i/n|filename
+                            string payload = line.Substring("[PROGRESS] VIDEO:".Length);
+                            int sep = payload.IndexOf('|');
+                            string fraction = sep >= 0 ? payload.Substring(0, sep) : payload;
+                            string filename = sep >= 0 ? payload.Substring(sep + 1) : string.Empty;
+                            var parts = fraction.Split('/');
+                            if (parts.Length == 2 && int.TryParse(parts[0], out int current))
+                            {
+                                currentVideoStatus = $"Processing video {fraction} — {filename}";
+                                int capturedCurrent = current;
+                                int capturedTotal = totalVideos;
+                                Dispatcher.Invoke(() =>
+                                {
+                                    progressDialog.UpdateProgress(currentVideoStatus, string.Empty);
+                                    progressDialog.SetProgressBar(capturedCurrent - 1, capturedTotal);
+                                });
+                            }
+                        }
+                        else if (line.StartsWith("[PROGRESS] FRAME:"))
+                        {
+                            // Format: FRAME:x/n  or  FRAME:x/? when total is unknown
+                            string payload = line.Substring("[PROGRESS] FRAME:".Length);
+                            var parts = payload.Split('/');
+                            if (parts.Length == 2)
+                            {
+                                string frameStatus = parts[1] == "?" 
+                                    ? $"Frame {parts[0]}" 
+                                    : $"Frame {parts[0]} / {parts[1]}";
+                                string capturedVideoStatus = currentVideoStatus;
+                                Dispatcher.Invoke(() => progressDialog.UpdateProgress(capturedVideoStatus, frameStatus));
+                            }
+                        }
+                    }
 
                     process.WaitForExit();
-
-                    string output = outputTask.Result;
+                    string output = outputBuilder.ToString();
                     string error = errorTask.Result;
 
                     Dispatcher.Invoke(() => progressDialog.Close());
 
-                    // Display only if checkbox is enabled
                     if (_checkBoxes.OutputBox || _checkBoxes.ErrorBox)
                     {
                         DisplayProcessOutputIfNeeded(output, error);

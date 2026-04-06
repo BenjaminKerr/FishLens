@@ -213,8 +213,10 @@ def main():
     print(f"Performance: FAST_MODE={FAST_MODE}, FRAME_STRIDE={FRAME_STRIDE}, YOLO_IMGSZ={YOLO_IMGSZ}")
     if SINGLE_VIDEO_FILE:
         # Process single video file
+        print(f"[PROGRESS] TOTAL:1", flush=True)
         video_path, is_temp = convert_asf_to_mp4(SINGLE_VIDEO_FILE)
         filename = os.path.basename(SINGLE_VIDEO_FILE)
+        print(f"[PROGRESS] VIDEO:1/1|{filename}", flush=True)
         try:
             video_tracks = run_video_tracker(video_path, SINGLE_VIDEO_FILE)
         finally:
@@ -236,20 +238,26 @@ def main():
             print(f"[ERROR] Failed to list VIDEO_FOLDER: {e}")
             return
         
-        for filename in files_in_folder:
+        video_files = [
+            f for f in files_in_folder
+            if os.path.isfile(os.path.join(VIDEO_FOLDER, f)) and f.lower().endswith(video_extensions)
+        ]
+        video_count = len(video_files)
+        print(f"[PROGRESS] TOTAL:{video_count}", flush=True)
+
+        for video_index, filename in enumerate(video_files, start=1):
             item_path = os.path.join(VIDEO_FOLDER, filename)
-            # Skip directories and non-video files
-            if os.path.isfile(item_path) and filename.lower().endswith(video_extensions):
-                video_path, is_temp = convert_asf_to_mp4(item_path)
-                print(f"Processing: {filename}")
-                try:
-                    video_tracks = run_video_tracker(video_path, item_path)
-                finally:
-                    if is_temp:
-                        _cleanup_temp(video_path)
-                for t in video_tracks:
-                    t["video_file"] = filename
-                all_tracks.extend(video_tracks)
+            print(f"[PROGRESS] VIDEO:{video_index}/{video_count}|{filename}", flush=True)
+            video_path, is_temp = convert_asf_to_mp4(item_path)
+            print(f"Processing: {filename}")
+            try:
+                video_tracks = run_video_tracker(video_path, item_path)
+            finally:
+                if is_temp:
+                    _cleanup_temp(video_path)
+            for t in video_tracks:
+                t["video_file"] = filename
+            all_tracks.extend(video_tracks)
 
     # Export CSV
     if all_tracks:
@@ -421,6 +429,7 @@ def run_video_tracker(video_path, source_video_path=None):
         return []
     
     vidData.v_fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
     ret, frame = _video_capture_read(cap)
 
     # Pre-compute a video-level timestamp fallback from early frames.
@@ -459,6 +468,9 @@ def run_video_tracker(video_path, source_video_path=None):
         # Finalize disappeared tracks (detections that ended before the video ended)
         finalize_tracks(frameData, vidData, termination_reason="disappeared")
 
+        if vidData.v_frame_index % 100 == 0:
+            total_display = str(total_frames) if total_frames > 0 else "?"
+            print(f"[PROGRESS] FRAME:{vidData.v_frame_index}/{total_display}", flush=True)
         # Increment frame index and read next frame
         vidData.v_frame_index += 1
         vidData.v_total_frames += 1
