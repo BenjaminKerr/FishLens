@@ -1,4 +1,5 @@
-﻿using Org.BouncyCastle.Asn1.Cmp;
+﻿using Microsoft.Identity.Client;
+using Org.BouncyCastle.Asn1.Cmp;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -20,9 +21,15 @@ namespace FishLens_App
     /// </summary>
     public partial class ProgressDialog : Window
     {
+        private bool _ProcessingFinished = false;
         public ProgressDialog()
         {
             InitializeComponent();
+        }
+
+        public void ProcessingFinished()
+        {
+            _ProcessingFinished = true;
         }
 
         public void UpdateMessage(string message)
@@ -32,15 +39,18 @@ namespace FishLens_App
 
         private void ProcessingClosing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            var result = MessageBox.Show(
-                "Stop processing videos?",
-                "Confirm Exit",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-
-            if (result == MessageBoxResult.No)
+            if (!_ProcessingFinished)
             {
-                e.Cancel = true;
+                var result = MessageBox.Show(
+                    "Stop processing videos?",
+                    "Confirm Exit",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+
+                if (result == MessageBoxResult.No)
+                {
+                    e.Cancel = true;
+                }
             }
         }
     }

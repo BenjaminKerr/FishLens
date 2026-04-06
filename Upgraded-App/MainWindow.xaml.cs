@@ -33,6 +33,7 @@ namespace FishLens_App
 
         // Application settings
         private const double DEFAULT_CONFIDENCE_THRESHOLD = 0.7;
+        private bool _isProcessing = false;
 
         // UI constants - Video buttons
         private const int BUTTON_HEIGHT = 45;
@@ -339,6 +340,7 @@ namespace FishLens_App
             _logger.LogInformation("Working Directory: {WorkingDir}", processInfo.WorkingDirectory);
 
             ProgressDialog progressDialog = new ProgressDialog();
+            _isProcessing = true;
             progressDialog.Show();
             await Task.Delay(100);
 
@@ -394,6 +396,7 @@ namespace FishLens_App
                     string output = outputTask.Result;
                     string error = errorTask.Result;
 
+                    progressDialog.ProcessingFinished();
                     Dispatcher.Invoke(() => progressDialog.Close());
 
                     // Display only if checkbox is enabled
