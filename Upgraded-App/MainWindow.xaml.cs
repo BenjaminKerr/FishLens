@@ -52,6 +52,7 @@ namespace FishLens_App
         // State
         private string _currentFolderName = string.Empty;
 
+        private Process _yoloProcess;
         #endregion
 
         #region Fields
@@ -386,12 +387,12 @@ namespace FishLens_App
         {
             await Task.Run(() =>
             {
-                using (Process process = Process.Start(processInfo))
+                using (_yoloProcess = Process.Start(processInfo))
                 {
-                    var outputTask = Task.Run(() => process.StandardOutput.ReadToEnd());
-                    var errorTask = Task.Run(() => process.StandardError.ReadToEnd());
+                    var outputTask = Task.Run(() => _yoloProcess.StandardOutput.ReadToEnd());
+                    var errorTask = Task.Run(() => _yoloProcess.StandardError.ReadToEnd());
 
-                    process.WaitForExit();
+                    _yoloProcess.WaitForExit();
 
                     string output = outputTask.Result;
                     string error = errorTask.Result;
