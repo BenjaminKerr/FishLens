@@ -437,12 +437,12 @@ namespace FishLens_App
         private async void OpenFolderClick(object sender, RoutedEventArgs e)
         {
             string sourceFolderPath = _pathResolver.ResolveSourceFolder();
-            _currentFolderName = Path.GetFileName(sourceFolderPath);
             if (string.IsNullOrEmpty(sourceFolderPath))
                 return;
 
-            string saveDirectory = Path.Combine(_pathResolver.ResolveProjectRoot(), SAVED_VIDEOS_FOLDER);
-            await ProcessVideos(sourceFolderPath, saveDirectory);
+            _currentFolderName = Path.GetFileName(sourceFolderPath);
+
+            await ProcessVideos(sourceFolderPath);
 
             exportData.Visibility = Visibility.Visible;
         }
@@ -451,54 +451,38 @@ namespace FishLens_App
         // Function: ProcessVideos
         // Description: Orchestrates complete video processing workflow
         // **************************************************
-        private async Task ProcessVideos(string inputFolder, string outputDirectory)
+        private async Task ProcessVideos(string inputFolder)
         {
-            MakeDirectoryIfNotExists(outputDirectory);
-
-            // Step 1: copy videos
-            EnterDataInFile(inputFolder, outputDirectory);
-
-            // Verify that videos were copied
-            var copiedFiles = Directory.GetFiles(outputDirectory);
-            var videoFiles = copiedFiles.Where(f => 
-                f.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
-                f.EndsWith(".avi", StringComparison.OrdinalIgnoreCase) ||
-                f.EndsWith(".mov", StringComparison.OrdinalIgnoreCase) ||
-                f.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase) ||
-                f.EndsWith(".asf", StringComparison.OrdinalIgnoreCase) ||
-                f.EndsWith(".wmv", StringComparison.OrdinalIgnoreCase) ||
-                f.EndsWith(".flv", StringComparison.OrdinalIgnoreCase) ||
-                f.EndsWith(".webm", StringComparison.OrdinalIgnoreCase)
-            ).ToList();
+            // Verify video files exist in the selected folder
+            var videoFiles = Directory.GetFiles(inputFolder)
+                .Where(f => VideoExtensions.Contains(Path.GetExtension(f)))
+                .ToList();
 
             if (videoFiles.Count == 0)
             {
-                MessageBox.Show("No video files were found or copied to SavedVids folder.", 
+                MessageBox.Show("No video files were found in the selected folder.",
                     "No Videos", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            _logger.LogInformation("Copied {Count} video files to {Directory}", videoFiles.Count, outputDirectory);
+            _logger.LogInformation("Found {Count} video files in {Directory}", videoFiles.Count, inputFolder);
 
-            // Step 2: run YOLO to generate CSV
-            await RunYolo(outputDirectory);
+            // Step 1: run YOLO directly on the source folder
+            await RunYolo(inputFolder);
 
-            // Step 3: read CSV now that it exists
-            List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList = CreateSortedListOfVideos(outputDirectory);
+            // Step 2: read CSV now that it exists
+            List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList = CreateSortedListOfVideos(inputFolder);
 
-            //var allRows = File.ReadAllLines(_pathResolver.ResolveCsvScriptPath());
-            //MessageBox.Show(string.Join("\n", allRows));
-
-            // Step 4: update UI with first video
+            // Step 3: update UI with first video
             if (videoDataList.Count > 0)
             {
                 DisplayDataInUi(videoDataList[0].vid.Name);
             }
 
-            // Step 5: create sidebar buttons
+            // Step 4: create sidebar buttons
             CreateVideoButtonsList(videoDataList);
 
-            // Optional: auto-load first video into player
+            // Step 5: auto-load first video into player
             if (videoDataList.Count > 0)
             {
                 var firstVideoPath = videoDataList[0].vid.FullName;
@@ -507,45 +491,10 @@ namespace FishLens_App
         }
 
 
-        // **************************************************
-        // Function: EnterDataInFile
-        // Description: Copies video files from input folder to output directory
-        // **************************************************
-        private void EnterDataInFile(string inputFolder, string outputDirectory)
+        private static readonly HashSet<string> VideoExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            DirectoryInfo dirInfo = new DirectoryInfo(inputFolder);
-            FileInfo[] files = dirInfo.GetFiles("*");
-
-            foreach (FileInfo file in files)
-            {
-                CopyFileToDestination(file, outputDirectory);
-            }
-        }
-
-        // **************************************************
-        // Function: CopyFileToDestination
-        // Description: Copies single file to destination with error handling
-        // **************************************************
-        private void CopyFileToDestination(FileInfo file, string outputDirectory)
-        {
-            string fileName = Path.GetFileName(file.FullName);
-            string destinationPath = Path.Combine(outputDirectory, fileName);
-
-            try
-            {
-                File.Copy(file.FullName, destinationPath, overwrite: true);
-            }
-            catch (IOException ex)
-            {
-                MessageBox.Show($"Error Saving File: {ex.Message}", "Save Error",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            catch (SecurityException)
-            {
-                MessageBox.Show("Insufficient permissions to copy the file.", "Permission Error",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
+            ".mp4", ".avi", ".mov", ".mkv", ".asf", ".wmv", ".flv", ".webm"
+        };
 
         #endregion
 
