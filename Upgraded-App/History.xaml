@@ -206,6 +206,7 @@
                         </Grid>
 
                         <TextBlock Text="Filter detections below this confidence level" 
+                                   TextWrapping="Wrap"
                                    FontSize="{DynamicResource BaseFontSize}"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    Margin="0,0,0,20"/>
