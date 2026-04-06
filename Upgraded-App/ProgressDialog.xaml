@@ -6,7 +6,8 @@
         Width="400"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
-        WindowStyle="SingleBorderWindow">
+        WindowStyle="SingleBorderWindow"
+        Closing="ProcessingClosing">
     <Grid Margin="20">
         <StackPanel>
             <TextBlock x:Name="messageText" 
