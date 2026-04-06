@@ -8,10 +8,175 @@ import cv2
 import numpy as np
 import pytesseract
 import re
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
 from collections import Counter
 
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
+DIGIT_TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "ocr_digit_templates")
+AMBIGUOUS_DIGITS = {"5", "6"}
+TEMPLATE_SIZE = (20, 32)
+TEMPLATE_SINGLE_MAX_DIFF = float(os.getenv("FISHLENS_DIGIT_TEMPLATE_MAX_DIFF", "35"))
+TEMPLATE_SWITCH_MARGIN = float(os.getenv("FISHLENS_DIGIT_TEMPLATE_SWITCH_MARGIN", "6"))
+_DIGIT_TEMPLATE_CACHE = None
+_DIGIT_TEMPLATE_CACHE_MTIMES = None
+
+
+def _normalize_digit_patch(patch):
+    if patch is None or patch.size == 0:
+        return None
+    if len(patch.shape) == 3 and patch.shape[2] > 1:
+        patch = cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY)
+    elif len(patch.shape) == 3 and patch.shape[2] == 1:
+        patch = patch[:, :, 0]
+    patch = cv2.resize(patch, TEMPLATE_SIZE, interpolation=cv2.INTER_AREA)
+    _, patch = cv2.threshold(patch, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return patch
+
+
+def _load_digit_templates():
+    global _DIGIT_TEMPLATE_CACHE, _DIGIT_TEMPLATE_CACHE_MTIMES
+    if _DIGIT_TEMPLATE_CACHE is not None and _DIGIT_TEMPLATE_CACHE_MTIMES is not None:
+        # If template files have not changed, reuse cache.
+        unchanged = True
+        for digit in AMBIGUOUS_DIGITS:
+            found_path = None
+            for ext in ("png", "PNG", "jpg", "JPG", "jpeg", "JPEG"):
+                p = os.path.join(DIGIT_TEMPLATE_DIR, f"{digit}.{ext}")
+                if os.path.exists(p):
+                    found_path = p
+                    break
+
+            prev = _DIGIT_TEMPLATE_CACHE_MTIMES.get(digit)
+            cur = os.path.getmtime(found_path) if found_path and os.path.exists(found_path) else None
+            if prev != cur:
+                unchanged = False
+                break
+
+        if unchanged:
+            return _DIGIT_TEMPLATE_CACHE
+
+    # Rebuild cache when first loading or when template files changed.
+    if _DIGIT_TEMPLATE_CACHE is not None:
+        _DIGIT_TEMPLATE_CACHE = None
+        _DIGIT_TEMPLATE_CACHE_MTIMES = None
+
+    if _DIGIT_TEMPLATE_CACHE is not None:
+        return _DIGIT_TEMPLATE_CACHE
+
+    templates = {}
+    mtimes = {}
+    for digit in AMBIGUOUS_DIGITS:
+        path = None
+        for ext in ("png", "PNG", "jpg", "JPG", "jpeg", "JPEG"):
+            candidate = os.path.join(DIGIT_TEMPLATE_DIR, f"{digit}.{ext}")
+            if os.path.exists(candidate):
+                path = candidate
+                break
+
+        if not path:
+            continue
+
+        img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            continue
+
+        normalized = _normalize_digit_patch(img)
+        if normalized is not None:
+            templates[digit] = normalized
+            mtimes[digit] = os.path.getmtime(path)
+
+    _DIGIT_TEMPLATE_CACHE = templates
+    _DIGIT_TEMPLATE_CACHE_MTIMES = mtimes
+    return _DIGIT_TEMPLATE_CACHE
+
+
+def _resolve_ambiguous_digit(char_img, raw_char):
+    templates = _load_digit_templates()
+    if raw_char not in AMBIGUOUS_DIGITS or not templates:
+        return raw_char
+
+    normalized = _normalize_digit_patch(char_img)
+    if normalized is None:
+        return raw_char
+
+    scores = {}
+    for digit, template in templates.items():
+        diff = cv2.absdiff(normalized, template)
+        scores[digit] = float(np.mean(diff))
+
+    if not scores:
+        return raw_char
+
+    if len(scores) == 1:
+        only_digit, only_score = next(iter(scores.items()))
+        # With only one template present, never force-convert to the other digit.
+        # This avoids cases where missing 5.png causes 5 -> 6 flips.
+        if only_digit == raw_char and only_score <= TEMPLATE_SINGLE_MAX_DIFF:
+            return raw_char
+        return raw_char
+
+    best_digit = min(scores, key=scores.get)
+    best_score = scores[best_digit]
+    raw_score = scores.get(raw_char)
+
+    # If the best template match is still poor, keep Tesseract's original digit.
+    if best_score > TEMPLATE_SINGLE_MAX_DIFF:
+        return raw_char
+
+    # Keep original when it is already the best match.
+    if best_digit == raw_char:
+        return raw_char
+
+    # Only switch digits when the winning template is clearly better.
+    if raw_score is None or (raw_score - best_score) < TEMPLATE_SWITCH_MARGIN:
+        return raw_char
+
+    return best_digit
+
+
+def _extract_text_from_boxes(processed, custom_config):
+    """
+    Build OCR text from per-character boxes and apply optional 5/6 disambiguation
+    using user-supplied templates in ocr_digit_templates/5.png and 6.png.
+    """
+    try:
+        boxes = pytesseract.image_to_boxes(processed, config=custom_config)
+    except Exception:
+        return ""
+
+    if not boxes:
+        return ""
+
+    h, _ = processed.shape[:2]
+    chars = []
+
+    for line in boxes.splitlines():
+        parts = line.strip().split()
+        if len(parts) < 5:
+            continue
+
+        raw_char = parts[0]
+        if not raw_char:
+            continue
+        raw_char = raw_char[0]
+
+        try:
+            x1, y1, x2, y2 = map(int, parts[1:5])
+        except Exception:
+            chars.append(raw_char)
+            continue
+
+        top = max(0, h - y2)
+        bottom = min(h, h - y1)
+        left = max(0, x1)
+        right = max(left + 1, x2)
+        char_img = processed[top:bottom, left:right]
+
+        chars.append(_resolve_ambiguous_digit(char_img, raw_char))
+
+    return "".join(chars).strip()
 
 
 # ****************************************************************
@@ -216,7 +381,26 @@ def parseTimestamp(text):
                 0 <= minute <= 59 and
                 0 <= second <= 59):
                 # Format properly: YYYY/MM/DD HH:MM:SS
-                return f"{year}/{month:02d}/{day:02d} {hour:02d}:{minute:02d}:{second:02d}"
+                normalized = f"{year}/{month:02d}/{day:02d} {hour:02d}:{minute:02d}:{second:02d}"
+
+                # Future-date sanity check for common OCR confusion 5 <-> 6 in year.
+                # If OCR yields a timestamp significantly in the future, prefer year-1
+                # when it produces a plausible non-future date.
+                try:
+                    parsed_dt = datetime.strptime(normalized, "%Y/%m/%d %H:%M:%S")
+                    now = datetime.now()
+                    future_grace = now + timedelta(days=2)
+
+                    yi = int(year)
+                    if parsed_dt > future_grace and yi - 1 >= 2020:
+                        corrected = f"{yi - 1:04d}/{month:02d}/{day:02d} {hour:02d}:{minute:02d}:{second:02d}"
+                        corrected_dt = datetime.strptime(corrected, "%Y/%m/%d %H:%M:%S")
+                        if corrected_dt <= future_grace:
+                            return corrected
+                except Exception:
+                    pass
+
+                return normalized
     
     return None
 
@@ -259,15 +443,60 @@ def extractTimestamFromFrame(frame, debug=False):
         # Perform OCR
         text = pytesseract.image_to_string(processed, config=custom_config)
         text = text.strip()
+        box_text = _extract_text_from_boxes(processed, custom_config)
         
         if debug:
             print(f"  OCR raw output: '{text}'")
+            if box_text:
+                print(f"  OCR box output: '{box_text}'")
         
-        if len(text) < 15:  # Timestamp should be at least 15 chars
+        # Prefer per-character boxes first because they pass through 5/6 template
+        # disambiguation (_resolve_ambiguous_digit).
+        candidates = [t for t in [box_text, text] if t]
+        if not candidates:
             return None, None
-        
-        # Parse the timestamp - gets (timestamp, confidence) tuple
-        result = _parseTimestampWithConfidence(text)
+
+        # Parse all OCR candidates, then choose best using conservative tie-breakers.
+        parsed_results = []
+        for idx, candidate in enumerate(candidates):
+            if len(candidate) < 15:  # Timestamp should be at least 15 chars
+                continue
+            parsed = _parseTimestampWithConfidence(candidate)
+            if parsed:
+                parsed_results.append((idx, candidate, parsed[0], parsed[1]))
+
+        if not parsed_results:
+            return None, None
+
+        # Keep earliest candidate by default (boxes first, then raw OCR).
+        result = (parsed_results[0][2], parsed_results[0][3])
+
+        # If both candidates parsed and differ only by year, keep smaller year.
+        # This directly addresses persistent 5->6 year flips (e.g., 2025 vs 2026)
+        # while preserving month/day/time agreement.
+        if len(parsed_results) >= 2:
+            ts_values = [r[2] for r in parsed_results]
+            unique_ts = list(dict.fromkeys(ts_values))
+            if len(unique_ts) >= 2:
+                try:
+                    parts = []
+                    for ts in unique_ts[:2]:
+                        d, t = ts.split(" ", 1)
+                        y, m, day = d.split("/")
+                        parts.append((int(y), m, day, t, ts))
+
+                    a, b = parts[0], parts[1]
+                    if a[1] == b[1] and a[2] == b[2] and a[3] == b[3] and abs(a[0] - b[0]) == 1:
+                        chosen_ts = a[4] if a[0] < b[0] else b[4]
+                        chosen_conf = None
+                        for r in parsed_results:
+                            if r[2] == chosen_ts:
+                                chosen_conf = r[3]
+                                break
+                        if chosen_conf is not None:
+                            result = (chosen_ts, chosen_conf)
+                except Exception:
+                    pass
         
         if result and result[0] and debug:
             print(f"  Parsed timestamp: {result[0]} (confidence: {result[1]})")

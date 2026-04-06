@@ -639,11 +639,28 @@ def deepsort_analysis(tracker, frame, frameData, vidData, timestamp_max_attempts
                 track_data["timestamp_attempts"] = attempts + 1
 
                 if result and result[0]:  # result is (timestamp, confidence) tuple
+                    parsed_ts = result[0]
+                    parsed_conf = result[1]
+
+                    # Keep video-level date stable when direct OCR drifts by year/day.
+                    # Example: video probe found 2025/09/27, direct OCR returns 2026/09/27.
+                    base_ts = vidData.v_video_timestamp
+                    if base_ts and base_ts != "Not detected" and " " in base_ts and " " in parsed_ts:
+                        try:
+                            base_date, _ = base_ts.split(" ", 1)
+                            cand_date, cand_time = parsed_ts.split(" ", 1)
+                            if cand_date != base_date:
+                                parsed_ts = f"{base_date} {cand_time}"
+                                # Mark as at most MEDIUM confidence because a correction was applied.
+                                parsed_conf = "MEDIUM" if parsed_conf == "HIGH" else parsed_conf
+                        except Exception:
+                            pass
+
                     old_ts = current_ts
                     old_conf = current_confidence
-                    track_data["video_timestamp"] = result[0]
-                    track_data["timestamp_confidence"] = result[1]
-                    print(f"    Track {trackId}: Updated ts from '{old_ts}' ({old_conf}) to '{result[0]}' ({result[1]})")
+                    track_data["video_timestamp"] = parsed_ts
+                    track_data["timestamp_confidence"] = parsed_conf
+                    print(f"    Track {trackId}: Updated ts from '{old_ts}' ({old_conf}) to '{parsed_ts}' ({parsed_conf})")
                 elif track_data["timestamp_attempts"] == timestamp_max_attempts and current_confidence is None:
                     print(f"    Could not extract timestamp after {timestamp_max_attempts} attempts")
                     if SAVE_TIMESTAMP_DEBUG_FRAMES:
