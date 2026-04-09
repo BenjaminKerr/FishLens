@@ -211,7 +211,7 @@ namespace FishLens_App
                 cmd.Parameters.AddWithValue("@expires", DateTime.Now.AddMinutes(15)); cmd.ExecuteNonQuery(); 
             }
 
-            bool sent = emailService.SendResetCode(email, code); 
+            bool sent = emailService.SendVerificationCode(email, code); 
             if (!sent) throw new Exception("Failed to send verification email.");
         }
 

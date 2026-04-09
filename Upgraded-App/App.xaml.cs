@@ -11,6 +11,12 @@ namespace FishLens_App
     {
         // Private sets so they aren't accidentally replaced with new instances
         public CheckBoxToggle CheckBoxes { get; private set; }
+
+        public string connectionString =
+        "server=aura.cset.oit.edu,5433; " +
+        "database=kaharra; " +
+        "UID=kaharra; " +
+        "password=kaharra";
         public AppConfiguration Configuration { get; private set; }
         public int CurrentUserId { get; set; }
         public string CurrentUsername { get; set; }

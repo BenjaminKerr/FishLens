@@ -30,10 +30,6 @@ namespace FishLens_App
 {
     public partial class SigninPage : Window
     {
-        private string connectionString = "server=aura.cset.oit.edu,5433; " +
-   "database=kaharra; " +
-   "UID=kaharra; " +
-   "password=kaharra";
 
         // ****************************************************************
         // Function: SigninPage
@@ -55,7 +51,9 @@ namespace FishLens_App
 
             try
             {
-                using (SqlConnection conn = new SqlConnection(connectionString))
+                var app = Application.Current as App;
+
+                using (SqlConnection conn = new SqlConnection(app.connectionString))
                 {
                     conn.Open();
 
@@ -85,7 +83,7 @@ namespace FishLens_App
                             {
                                 if (reader.Read())
                                 {
-                                    var app = Application.Current as App;
+                                    
                                     app.CurrentUserId = reader.GetInt32(0);
                                     app.CurrentUsername = reader.GetString(1);
                                     app.CurrentRoleId = reader.GetInt32(2);

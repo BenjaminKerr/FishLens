@@ -177,15 +177,28 @@
                  Padding="8"
                  FontSize="{DynamicResource BaseFontSize}"
                  Margin="0,5,0,15"/>
+                        <TextBlock x:Name="CreateUserUsernameError"
+                        FontSize="11" Foreground="#F44336"
+           TextWrapping="Wrap"
+           Visibility="Collapsed"
+           Margin="0,2,0,8"/>
+
                         <TextBlock Text="Email"
            FontSize="{DynamicResource BaseFontSize}"
            Foreground="{DynamicResource SecondaryText}"/>
+                        
 
                         <TextBox x:Name="NewUserEmail"
          Height="36"
          Padding="8"
          FontSize="{DynamicResource BaseFontSize}"
          Margin="0,5,0,15"/>
+                        <TextBlock x:Name="CreateUserEmailError"
+           FontSize="11" Foreground="#F44336"
+           TextWrapping="Wrap"
+           Visibility="Collapsed"
+           Margin="0,2,0,8"/>
+
 
 
                         <TextBlock Text="Password"
@@ -197,6 +210,12 @@
                      Padding="8"
                      FontSize="{DynamicResource BaseFontSize}"
                      Margin="0,5,0,20"/>
+                        <TextBlock x:Name="CreateUserPasswordError"
+           FontSize="11" Foreground="#F44336"
+           TextWrapping="Wrap"
+           Visibility="Collapsed"
+           Margin="0,2,0,8"/>
+
                         <TextBlock Text="Role"  
            FontSize="{DynamicResource BaseFontSize}"
            Foreground="{DynamicResource SecondaryText}"/>
@@ -259,6 +278,8 @@
                                                             </ToggleButton>
                                                         </Grid>
                                                     </Border>
+                                                  
+
 
                                                     <!-- Dropdown popup -->
                                                     <Popup IsOpen="{TemplateBinding IsDropDownOpen}"
@@ -324,6 +345,11 @@
                                 </Style>
                             </ComboBox.ItemContainerStyle>
                         </ComboBox>
+                        <TextBlock x:Name="CreateUserRoleError"
+  FontSize="11" Foreground="#F44336"
+  TextWrapping="Wrap"
+  Visibility="Collapsed"
+  Margin="0,2,0,8"/>
 
 
                         <Button Content="Create User"
@@ -360,6 +386,12 @@
                                 </Style>
                             </Button.Style>
                         </Button>
+                        <TextBlock x:Name="CreateUserSuccessMessage"
+           Text="User created successfully!"
+           FontSize="11" Foreground="#4CAF50"
+           Visibility="Collapsed"
+           Margin="0,5,0,0"/>
+
 
                     </StackPanel>
                 </Border>
@@ -720,7 +752,20 @@
                                     </Style>
                                 </Button.Style>
                             </Button>
+                           
+
+
                         </StackPanel>
+                        <TextBlock x:Name="SaveUsersError"
+FontSize="11" Foreground="#F44336"
+TextWrapping="Wrap"
+Visibility="Collapsed"
+Margin="0,5,0,0"/>
+                        <TextBlock x:Name="SaveUsersSuccess"
+FontSize="11" Foreground="#4CAF50"
+TextWrapping="Wrap"
+Visibility="Collapsed"
+Margin="0,5,0,0"/>
 
                     </StackPanel>
                 </Border>

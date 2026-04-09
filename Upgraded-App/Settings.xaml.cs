@@ -29,11 +29,7 @@ namespace FishLens_App
     public partial class Settings : System.Windows.Controls.Page
     {
         #region Fields
-        private string connectionString =
-        "server=aura.cset.oit.edu,5433; " +
-        "database=kaharra; " +
-        "UID=kaharra; " +
-        "password=kaharra";
+       
         private readonly IProjectPathResolver _pathResolver;
         private readonly IFileSystemManager _fileSystemManager;
         private readonly ILogger<MainWindow> _logger;
@@ -83,53 +79,84 @@ namespace FishLens_App
         // Notes: Temporary message boxes for debug
         public void CreateUserClick(object sender, RoutedEventArgs e)
         {
+            ClearCreateUserErrors();
+
             if (RoleComboBox.SelectedItem is not Role selectedRole)
             {
-                MessageBox.Show("Please select a role.");
+                ShowCreateUserError(CreateUserRoleError, "Please select a role.");
+                return;
+            }
+
+            string username = NewUsername.Text.Trim();
+            string password = NewPassword.Password;
+            string email = NewUserEmail.Text.Trim();
+
+            try
+            {
+                using (SqlConnection conn = new SqlConnection((Application.Current as App).connectionString))
+                {
+                    conn.Open();
+
+                    var result = UserValidationRules.ValidateCreateUser(conn, username, email, password);
+
+                    if (!result.IsValid)
+                    {
+                        ApplyCreateUserErrors(result);
+                        return;
+                    }
+                }
+            }
+            catch (SqlException ex)
+            {
+                Debug.WriteLine("SQL Exception: " + ex.Message);
+                ShowCreateUserError(CreateUserUsernameError, "Something went wrong. Please try again.");
+                return;
+            }
+
+            if (SignUp(username, email, password, selectedRole.ID))
+            {
+                NewUsername.Text = "";
+                NewPassword.Password = "";
+                RoleComboBox.SelectedIndex = -1;
+                NewUserEmail.Text = "";
+                CreateUserSuccessMessage.Visibility = Visibility.Visible;
+                LoadUsers();
             }
             else
             {
-                string username = NewUsername.Text.Trim();
-                string password = NewPassword.Password;
-                string email = NewUserEmail.Text.Trim();
-                string error = null;
-
-                if (string.IsNullOrWhiteSpace(username))
-                    error = "Please enter a username.";
-                else if (username.Length < 6)
-                    error = "Username must be at least 6 characters.";
-                else if (string.IsNullOrWhiteSpace(password))
-                    error = "Please enter a password.";
-                else if (password.Length < 6)
-                    error = "Password must be at least 6 characters.";
-                else if (string.IsNullOrWhiteSpace(email) || !email.Contains("@") || !email.Contains("."))
-                    error = "Please enter a valid email address";
-
-                if (error != null)
-                {
-                    MessageBox.Show(error);
-                }
-                else
-                {
-                    int roleId = selectedRole.ID;
-                    bool status = SignUp(username, email, password, roleId);
-
-                    if (status)
-                    {
-                        NewUsername.Text = "";
-                        NewPassword.Password = "";
-                        RoleComboBox.SelectedIndex = -1;
-                        NewUserEmail.Text = "";
-                        MessageBox.Show("User created successfully!");
-                        LoadUsers();
-                    }
-                    else
-                    {
-                        MessageBox.Show("Sign up unsuccessful, retry.");
-                    }
-                }
+                ShowCreateUserError(CreateUserUsernameError, "Sign up unsuccessful, please retry.");
             }
         }
+
+        private void ClearCreateUserErrors()
+        {
+            CreateUserRoleError.Visibility = Visibility.Collapsed;
+            CreateUserUsernameError.Visibility = Visibility.Collapsed;
+            CreateUserEmailError.Visibility = Visibility.Collapsed;
+            CreateUserPasswordError.Visibility = Visibility.Collapsed;
+            CreateUserSuccessMessage.Visibility = Visibility.Collapsed;
+            SaveUsersError.Visibility = Visibility.Collapsed;
+            SaveUsersSuccess.Visibility = Visibility.Collapsed;
+        }
+
+        private void ShowCreateUserError(TextBlock block, string message)
+        {
+            block.Text = message;
+            block.Visibility = Visibility.Visible;
+        }
+
+        private void ApplyCreateUserErrors(ValidationResult result)
+        {
+            if (result.HasErrorFor("username"))
+                ShowCreateUserError(CreateUserUsernameError, result.GetError("username"));
+            if (result.HasErrorFor("email"))
+                ShowCreateUserError(CreateUserEmailError, result.GetError("email"));
+            if (result.HasErrorFor("password"))
+                ShowCreateUserError(CreateUserPasswordError, result.GetError("password"));
+        }
+
+
+
 
 
 
@@ -233,7 +260,7 @@ namespace FishLens_App
             bool success = false;
             try
             {
-                using (SqlConnection conn = new SqlConnection(connectionString))
+                using (SqlConnection conn = new SqlConnection((Application.Current as App).connectionString))
                 {
                     conn.Open();
                     using (SqlCommand cmd = new SqlCommand("kaharra.AddUser", conn))
@@ -302,7 +329,7 @@ namespace FishLens_App
         {
             try
             {
-                using (SqlConnection conn = new SqlConnection(connectionString))
+                using (SqlConnection conn = new SqlConnection((Application.Current as App).connectionString))
                 {
                     conn.Open();
 
@@ -356,7 +383,7 @@ namespace FishLens_App
         {
             try
             {
-                using (SqlConnection conn = new SqlConnection(connectionString))
+                using (SqlConnection conn = new SqlConnection((Application.Current as App).connectionString))
                 {
                     conn.Open();
 
@@ -391,83 +418,88 @@ namespace FishLens_App
         // Notes: N/A
         private void SaveUserChanges_Click(object sender, RoutedEventArgs e)
         {
-            string error;
+            SaveUsersError.Visibility = Visibility.Collapsed;
+            SaveUsersSuccess.Visibility = Visibility.Collapsed;
 
             if (_users == null || _users.Count == 0)
             {
-                MessageBox.Show("No users to save.");
+                SaveUsersError.Text = "No users to save.";
+                SaveUsersError.Visibility = Visibility.Visible;
+                return;
             }
-            else
+
+            var changedUsers = _users.Where(u =>
             {
-                // Find only users that actually changed
-                var changedUsers = _users.Where(u =>
+                if (string.IsNullOrWhiteSpace(u.Username) || u.role == null) return false;
+                if (!_originalUserData.TryGetValue(u.Id, out var original)) return false;
+                return u.Username.Trim() != original.Username
+                    || u.role.ID != original.RoleId
+                    || u.Email?.Trim() != original.email;
+            }).ToList();
+
+            if (changedUsers.Count == 0)
+            {
+                SaveUsersError.Text = "No changes detected.";
+                SaveUsersError.Visibility = Visibility.Visible;
+                return;
+            }
+
+            try
+            {
+                using (SqlConnection conn = new SqlConnection((Application.Current as App).connectionString))
                 {
-                    bool Pass = true;
-                    if (string.IsNullOrWhiteSpace(u.Username) || u.role == null)
-                        Pass = false;
-
-                    if (!_originalUserData.TryGetValue(u.Id, out var original))
-                        Pass = false;
-
-                    if (Pass == true)
-                    {
-                        return u.Username.Trim() != original.Username || u.role.ID != original.RoleId || u.Email?.Trim() != original.email;
-                    }
-                    else
-                    {
-                        return Pass;
-                    }
-                }).ToList();
-
-                if (changedUsers.Count == 0)
-                {
-                    MessageBox.Show(
-                        "No changes detected.",
-                        "Nothing to Save",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
-
-                }
-                else
-                {
-                    int updated = 0;
-                    var updatedNames = new List<string>();
+                    conn.Open();
 
                     foreach (var u in changedUsers)
                     {
-                        if (UpdateUser(u.Id, u.Username.Trim(), u.role.ID, u.Email))
+                        var result = UserValidationRules.ValidateEditUser(
+                            conn, u.Id, u.Username.Trim(), u.Email?.Trim() ?? "");
+
+                        if (!result.IsValid)
                         {
-                            updated++;
-                            updatedNames.Add(u.Username.Trim());
+                            SaveUsersError.Text = $"{u.Username}: {result.GetError("email")}";
+                            SaveUsersError.Visibility = Visibility.Visible;
+                            return;
                         }
                     }
-
-                    if (updated > 0)
-                    {
-                        string names = string.Join(", ", updatedNames);
-                        string message = updated == 1
-                            ? $"Successfully updated {names}."
-                            : $"Successfully updated {updated} users: {names}.";
-
-                        MessageBox.Show(
-                            message,
-                            "Changes Saved ✓",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Information);
-                    }
-                    else
-                    {
-                        MessageBox.Show(
-                            "Something went wrong — no changes were saved. Please try again.",
-                            "Save Failed",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Warning);
-                    }
-
-                    LoadUsers();
                 }
             }
+            catch (SqlException ex)
+            {
+                Debug.WriteLine("SQL Exception: " + ex.Message);
+                SaveUsersError.Text = "Something went wrong. Please try again.";
+                SaveUsersError.Visibility = Visibility.Visible;
+                return;
+            }
+
+            int updated = 0;
+            var updatedNames = new List<string>();
+
+            foreach (var u in changedUsers)
+            {
+                if (UpdateUser(u.Id, u.Username.Trim(), u.role.ID, u.Email.Trim()))
+                {
+                    updated++;
+                    updatedNames.Add(u.Username.Trim());
+                }
+            }
+
+            if (updated > 0)
+            {
+                string names = string.Join(", ", updatedNames);
+                SaveUsersSuccess.Text = updated == 1
+                    ? $"Successfully updated {names}."
+                    : $"Successfully updated {updated} users: {names}.";
+                SaveUsersSuccess.Visibility = Visibility.Visible;
+                LoadUsers();
+            }
+            else
+            {
+                SaveUsersError.Text = "Something went wrong — no changes were saved.";
+                SaveUsersError.Visibility = Visibility.Visible;
+            }
         }
+
 
 
         private void RefreshUsers_Click(object sender, RoutedEventArgs e)
@@ -483,7 +515,7 @@ namespace FishLens_App
         {
             try
             {
-                using (SqlConnection conn = new SqlConnection(connectionString))
+                using (SqlConnection conn = new SqlConnection((Application.Current as App).connectionString))
                 {
                     conn.Open();
 

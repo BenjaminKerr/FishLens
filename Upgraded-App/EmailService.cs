@@ -50,6 +50,40 @@ namespace FishLens_App
                 return false;
             }
         }
+
+        public bool SendVerificationCode(string toEmail, string resetCode)
+        {
+            try
+            {
+                var message = new MimeMessage();
+                message.From.Add(new MailboxAddress("FishLens", fromEmail));
+                message.To.Add(new MailboxAddress("", toEmail));
+                message.Subject = "FishLens Email Verification";
+
+                message.Body = new TextPart("plain")
+                {
+                    Text = $"Welcome to FishLens!\n\n" +
+                    $"Your email verification code is: {resetCode}\n\n" +
+                           $"This code expires in 15 minutes.\n\n" +
+                           $"If you did not create a FishLens account, please ignore this email."
+                };
+
+                using (var client = new SmtpClient())
+                {
+                    client.Connect(smtpServer, smtpPort, false);
+                    client.Authenticate(fromEmail, fromPassword);
+                    client.Send(message);
+                    client.Disconnect(true);
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Email error: " + ex.Message);
+                return false;
+            }
+        }
     }
 
 }

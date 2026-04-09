@@ -23,11 +23,6 @@ namespace FishLens_App
 
     public partial class ForgotPasswordWindow : Window
     {
-        private string connectionString =
-         "server=aura.cset.oit.edu,5433; " +
-         "database=kaharra; " +
-         "UID=kaharra; " +
-         "password=kaharra";
 
         private EmailService emailService = new EmailService();
         private int currentUserId;
@@ -50,7 +45,7 @@ namespace FishLens_App
             {
                 try
                 {
-                    using (SqlConnection conn = new SqlConnection(connectionString))
+                    using (SqlConnection conn = new SqlConnection((Application.Current as App).connectionString))
                     {
                         conn.Open();
 
@@ -135,90 +130,109 @@ namespace FishLens_App
             string code = CodeBox.Text.Trim();
             string newPassword = NewPasswordBox.Password;
             string confirmPassword = ConfirmPasswordBox.Password;
-            bool pass = true;
-            string message = "";
 
-            if (newPassword != confirmPassword)
+            UpdatePasswordRequirements(newPassword, confirmPassword);
+            var results = UserValidationRules.ValidatePasswordReset(newPassword, confirmPassword);
+
+
+            if (!results.IsValid)
             {
-                message = "Passwords do not match.";
-                pass = false;
+                if (results.HasErrorFor("password")) 
+                    ReqNewPasswordLength.Text = "✗ " + results.GetError("password"); 
+                if (results.HasErrorFor("confirmPassword")) 
+                    ReqPasswordMatch.Text = "✗ " + results.GetError("confirmPassword"); 
             }
-            if (string.IsNullOrEmpty(newPassword))
+            else
             {
-                message = "Password cannot be empty.";
-                pass = false;
-            }
-                if (pass == true)
+                try
                 {
-                    try
+                    using (SqlConnection conn = new SqlConnection((Application.Current as App).connectionString))
                     {
-                        using (SqlConnection conn = new SqlConnection(connectionString))
-                        {
-                            conn.Open();
+                        conn.Open();
 
-                            // Verify the code is valid and not expired
-                            string checkSql = @"
+                        // Verify the code is valid and not expired
+                        string checkSql = @"
                     SELECT Id FROM [kaharra].[PasswordResetTokens]
                     WHERE UserId = @userId 
                       AND Token = @token 
                       AND ExpiresAt > GETDATE() 
                       AND Used = 0";
 
-                            using (SqlCommand cmd = new SqlCommand(checkSql, conn))
+                        using (SqlCommand cmd = new SqlCommand(checkSql, conn))
+                        {
+                            cmd.Parameters.AddWithValue("@userId", currentUserId);
+                            cmd.Parameters.AddWithValue("@token", code);
+
+                            object result = cmd.ExecuteScalar();
+
+                            if (result != null)
                             {
-                                cmd.Parameters.AddWithValue("@userId", currentUserId);
-                                cmd.Parameters.AddWithValue("@token", code);
+                                int tokenId = Convert.ToInt32(result);
 
-                                object result = cmd.ExecuteScalar();
-
-                                if (result != null)
-                                {
-                                    int tokenId = Convert.ToInt32(result);
-
-                                    // Mark token as used
-                                    string updateToken = @"UPDATE [kaharra].[PasswordResetTokens] 
+                                // Mark token as used
+                                string updateToken = @"UPDATE [kaharra].[PasswordResetTokens] 
                                                SET Used = 1 WHERE Id = @id";
-                                    using (SqlCommand updateCmd = new SqlCommand(updateToken, conn))
-                                    {
-                                        updateCmd.Parameters.AddWithValue("@id", tokenId);
-                                        updateCmd.ExecuteNonQuery();
-                                    }
-
-                                    // Reset the password using your stored procedure
-                                    using (SqlCommand resetCmd = new SqlCommand(
-                                        "kaharra.ResetPassword", conn))
-                                    {
-                                        resetCmd.CommandType = System.Data.CommandType.StoredProcedure;
-                                        resetCmd.Parameters.AddWithValue("@pUserId", currentUserId);
-                                        resetCmd.Parameters.AddWithValue("@pNewPassword", newPassword);
-                                        resetCmd.ExecuteNonQuery();
-                                    }
-
-                                    MessageBox.Show("Password reset successfully! You can now sign in.");
-                                    SigninPage signin = new SigninPage();
-                                    signin.Show();
-                                    this.Close();
-                            }
-                                else
+                                using (SqlCommand updateCmd = new SqlCommand(updateToken, conn))
                                 {
-                                    MessageBox.Show("Invalid or expired code. Please try again.");
+                                    updateCmd.Parameters.AddWithValue("@id", tokenId);
+                                    updateCmd.ExecuteNonQuery();
                                 }
+
+                                // Reset the password using your stored procedure
+                                using (SqlCommand resetCmd = new SqlCommand(
+                                    "kaharra.ResetPassword", conn))
+                                {
+                                    resetCmd.CommandType = System.Data.CommandType.StoredProcedure;
+                                    resetCmd.Parameters.AddWithValue("@pUserId", currentUserId);
+                                    resetCmd.Parameters.AddWithValue("@pNewPassword", newPassword);
+                                    resetCmd.ExecuteNonQuery();
+                                }
+
+                                MessageBox.Show("Password reset successfully! You can now sign in.");
+                                SigninPage signin = new SigninPage();
+                                signin.Show();
+                                this.Close();
+                            }
+                            else
+                            {
+                                MessageBox.Show("Invalid or expired code. Please try again.");
                             }
                         }
                     }
-                    catch (SqlException ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine("SQL Exception: " + ex.Message);
-                        MessageBox.Show("An error occurred. Please try again.");
-                    }
                 }
-            else
-            {
-                MessageBox.Show(message);
+                catch (SqlException ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("SQL Exception: " + ex.Message);
+                    MessageBox.Show("An error occurred. Please try again.");
+                }
             }
-
-
         }
+          
+
+
+        
+
+        // ****************************************************************
+        // Helper: UpdatePasswordRequirements
+        // Description: Colors requirement hints on the forgot password form
+        // ****************************************************************
+        private void UpdatePasswordRequirements(string password, string confirm)
+        {
+            var gray = new System.Windows.Media.SolidColorBrush(
+                (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#888888"));
+            var pass = new System.Windows.Media.SolidColorBrush(
+                (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#4CAF50"));
+            var fail = new System.Windows.Media.SolidColorBrush(
+                (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F44336"));
+
+            ReqNewPasswordLength.Foreground = UserValidationRules.IsValidPassword(password) ? pass : fail;
+
+            if (string.IsNullOrEmpty(password) && string.IsNullOrEmpty(confirm))
+                ReqPasswordMatch.Foreground = gray;
+            else
+                ReqPasswordMatch.Foreground = UserValidationRules.PasswordsMatch(password, confirm) ? pass : fail;
+        }
+
         private void BackToSignIn_Click(object sender, MouseButtonEventArgs e)
         {
             SigninPage signin = new SigninPage();
