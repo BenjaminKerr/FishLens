@@ -22,7 +22,14 @@
                        TextWrapping="Wrap"/>
             <ProgressBar x:Name="progressBar" 
                          Height="20" 
-                         IsIndeterminate="True"/>
+                         IsIndeterminate="True"
+                         Visibility="Visible"/>
+            <Border x:Name="frameSegmentContainer"
+                    Visibility="Collapsed"
+                    Height="20"
+                    Background="Transparent">
+                <UniformGrid x:Name="frameSegments" Rows="1"/>
+            </Border>
         </StackPanel>
     </Grid>
 </Window>

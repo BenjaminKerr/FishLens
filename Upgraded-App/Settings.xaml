@@ -120,6 +120,20 @@
                                Foreground="{DynamicResource SecondaryText}"
                                Margin="0,0,0,15"
                                TextWrapping="Wrap"/>
+
+                    <CheckBox x:Name="enableFastMode"
+                              Content="Enable Fast Mode"
+                              FontSize="{DynamicResource BaseFontSize}"
+                              Foreground="{DynamicResource PrimaryText}"
+                              Margin="0,0,0,0"
+                              IsChecked="False"
+                              Click="ToggleFastMode"/>
+
+                    <TextBlock Text="Process every other frame and use a lower YOLO resolution. Speeds up analysis but may reduce accuracy."
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"
+                               Margin="0,0,0,15"
+                               TextWrapping="Wrap"/>
                 </StackPanel>
 
                 <TextBlock Text="Accessibility" 

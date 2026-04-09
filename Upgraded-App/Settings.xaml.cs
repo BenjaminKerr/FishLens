@@ -174,6 +174,7 @@ namespace FishLens_App
                 // Ensure CheckBoxToggle is up to date
                 _checkBoxes.ErrorBox = hideErrors.IsChecked ?? false;
                 _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
+                _checkBoxes.FastMode = enableFastMode.IsChecked ?? false;
 
                 bool highContrast = highContrastMode.IsChecked ?? false;
                 bool largeTxt = largeText.IsChecked ?? false;
@@ -188,6 +189,7 @@ namespace FishLens_App
                     ConfidenceThreshold = _config.ConfidenceThreshold,
                     OutputBox = _checkBoxes.OutputBox,
                     ErrorBox = _checkBoxes.ErrorBox,
+                    FastMode = _checkBoxes.FastMode,
                     HighContrastMode = _config.HighContrastMode,
                     LargeText = _config.LargeText
                 };
@@ -218,6 +220,12 @@ namespace FishLens_App
         private void ToggleOutputMessages(object sender, RoutedEventArgs e)
         {
             _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
+        }
+
+        private void ToggleFastMode(object sender, RoutedEventArgs e)
+        {
+            _checkBoxes.FastMode = enableFastMode.IsChecked ?? false;
+            App.RaiseFastModeChanged();
         }
         #endregion
 
@@ -520,6 +528,7 @@ namespace FishLens_App
             confidenceValue.Text = $"{(int)Math.Round((_config?.ConfidenceThreshold ?? 0.7) * 100)}%";
             hideErrors.IsChecked = _checkBoxes.ErrorBox;
             hideOutput.IsChecked = _checkBoxes.OutputBox;
+            enableFastMode.IsChecked = _checkBoxes.FastMode;
 
             // Try to read persisted settings
             try
@@ -562,6 +571,12 @@ namespace FishLens_App
                 {
                     _config.LargeText = ltEl.GetBoolean();
                     largeText.IsChecked = _config.LargeText;
+                }
+
+                if (root.TryGetProperty("FastMode", out var fmEl) && (fmEl.ValueKind == JsonValueKind.True || fmEl.ValueKind == JsonValueKind.False))
+                {
+                    _checkBoxes.FastMode = fmEl.GetBoolean();
+                    enableFastMode.IsChecked = _checkBoxes.FastMode;
                 }
             }
             catch (Exception ex)

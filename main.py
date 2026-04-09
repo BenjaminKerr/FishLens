@@ -6,8 +6,10 @@
 # Notes: N/A
 # ****************************************************************
 
+import sys
+print("[PROGRESS] STARTUP", flush=True)
+
 import warnings
-from fileinput import filename
 import os
 import csv
 import cv2
@@ -17,11 +19,9 @@ from contextlib import contextmanager
 import tempfile
 import numpy as np
 import shutil
-import sys
 #from YOLO.detector import YoloDetector
 from tracking.deepsort_tracker import DeepSortTracker
 from collections import Counter
-from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List
 from extract_timestamp import extractTimestamFromFrame, check_tesseract, probe_video_timestamp, dedupe_tracks_by_timestamp
@@ -82,14 +82,7 @@ def _resolve_classifier_model_path():
 
 # Constants--Folders and Directories
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-INPUT_PATH = sys.argv[1] if len(sys.argv) > 1 else os.path.join(PROJECT_ROOT, "SavedVids")
-# Handle both directory and single file inputs
-if os.path.isfile(INPUT_PATH):
-    VIDEO_FOLDER = os.path.dirname(INPUT_PATH)
-    SINGLE_VIDEO_FILE = INPUT_PATH
-else:
-    VIDEO_FOLDER = INPUT_PATH
-    SINGLE_VIDEO_FILE = None 
+
 
 # Constants--General
 CSV_KEYS = [
@@ -119,8 +112,10 @@ MAX_EXPORT_PER_VIDEO = 5
 OUTPUT_CSV = os.path.join(PROJECT_ROOT, "fish_summary.csv")
 FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
 
-# Performance tuning (set via env vars when needed)
-FAST_MODE = os.getenv("FISHLENS_FAST_MODE", "1") == "1"
+# Performance tuning
+# FISHLENS_FAST_MODE is set by the app via the Fast Mode setting in Settings.
+# When enabled: skips every other frame and uses lower YOLO resolution.
+FAST_MODE = os.getenv("FISHLENS_FAST_MODE", "0") == "1"
 FRAME_STRIDE = max(1, int(os.getenv("FISHLENS_FRAME_STRIDE", "2" if FAST_MODE else "1")))
 YOLO_IMGSZ = max(320, int(os.getenv("FISHLENS_YOLO_IMGSZ", "448" if FAST_MODE else "512")))
 SAVE_TIMESTAMP_DEBUG_FRAMES = os.getenv("FISHLENS_SAVE_TIMESTAMP_DEBUG", "0") == "1"
@@ -132,15 +127,15 @@ VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRA
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
 CLASSIFIER_MODEL = _load_classifier_model(CLASSIFIER_MODEL_PATH)
 LOAD_IMG, IMG_TO_ARRAY = _load_keras_image_utils()
-CLASSIFIER_TARGET_FOLDER = "images"
 CLASS_NAMES = ["Chinook", "Omykiss"]
 IMAGE_SIZE = (150, 150)
-IMAGE_EXTS = {'.jpg', '.jpeg', '.png'}
 
 # Create and initialize folders
-os.makedirs(VIDEO_FOLDER, exist_ok=True)
 os.makedirs(NO_FISH, exist_ok=True)
 os.makedirs(FISH_IMAGE_DIR, exist_ok=True)
+
+# Signal to the host application that models are loaded and we are ready for work.
+print("[PROGRESS] READY", flush=True)
 
 @dataclass
 class FrameData:
@@ -165,6 +160,7 @@ class VideoData:
         self.v_confidence_sum = 0.0
         self.v_confidence_count = 0 
         self.v_video_timestamp = None
+        self.v_frame_width = 640
 
 
 @contextmanager
@@ -195,30 +191,40 @@ def _video_capture_open(video_path):
 
 
 def _video_capture_read(cap):
-    with _suppress_stderr(SUPPRESS_CODEC_WARNINGS):
-        return cap.read()
+    return cap.read()
 
 
 # ****************************************************************
 # Function: main
 # Description: Process all videos and export data as a CSV.
 # Notes: N/A
-def main():
+def main(input_path=None):
+    if input_path is None:
+        input_path = os.path.join(PROJECT_ROOT, "SavedVids")
+
+    if os.path.isfile(input_path):
+        video_folder = os.path.dirname(input_path)
+        single_video_file = input_path
+    else:
+        video_folder = input_path
+        single_video_file = None
+
+    os.makedirs(video_folder, exist_ok=True)
 
     # Debug: Print paths
-    print(f"[INFO] Processing videos from: {VIDEO_FOLDER}")
+    print(f"[INFO] Processing videos from: {video_folder}")
 
     # Process all videos in folder
     all_tracks = []
     print(f"Performance: FAST_MODE={FAST_MODE}, FRAME_STRIDE={FRAME_STRIDE}, YOLO_IMGSZ={YOLO_IMGSZ}")
-    if SINGLE_VIDEO_FILE:
+    if single_video_file:
         # Process single video file
         print(f"[PROGRESS] TOTAL:1", flush=True)
-        video_path, is_temp = convert_asf_to_mp4(SINGLE_VIDEO_FILE)
-        filename = os.path.basename(SINGLE_VIDEO_FILE)
+        video_path, is_temp = convert_asf_to_mp4(single_video_file)
+        filename = os.path.basename(single_video_file)
         print(f"[PROGRESS] VIDEO:1/1|{filename}", flush=True)
         try:
-            video_tracks = run_video_tracker(video_path, SINGLE_VIDEO_FILE)
+            video_tracks = run_video_tracker(video_path, single_video_file)
         finally:
             if is_temp:
                 _cleanup_temp(video_path)
@@ -232,21 +238,21 @@ def main():
         files_in_folder = []
         
         try:
-            files_in_folder = os.listdir(VIDEO_FOLDER)
+            files_in_folder = os.listdir(video_folder)
             print(f"[INFO] Found {len(files_in_folder)} items in folder")
         except Exception as e:
-            print(f"[ERROR] Failed to list VIDEO_FOLDER: {e}")
+            print(f"[ERROR] Failed to list video folder: {e}")
             return
         
         video_files = [
             f for f in files_in_folder
-            if os.path.isfile(os.path.join(VIDEO_FOLDER, f)) and f.lower().endswith(video_extensions)
+            if os.path.isfile(os.path.join(video_folder, f)) and f.lower().endswith(video_extensions)
         ]
         video_count = len(video_files)
         print(f"[PROGRESS] TOTAL:{video_count}", flush=True)
 
         for video_index, filename in enumerate(video_files, start=1):
-            item_path = os.path.join(VIDEO_FOLDER, filename)
+            item_path = os.path.join(video_folder, filename)
             print(f"[PROGRESS] VIDEO:{video_index}/{video_count}|{filename}", flush=True)
             video_path, is_temp = convert_asf_to_mp4(item_path)
             print(f"Processing: {filename}")
@@ -430,6 +436,9 @@ def run_video_tracker(video_path, source_video_path=None):
     
     vidData.v_fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+    frame_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    if frame_w > 0:
+        vidData.v_frame_width = frame_w
     ret, frame = _video_capture_read(cap)
 
     # Pre-compute a video-level timestamp fallback from early frames.
@@ -459,11 +468,14 @@ def run_video_tracker(video_path, source_video_path=None):
         # Determine most common class per-frame
         analyze_yolo_detections(frame, MODEL, frameData, vidData)
 
-        # YOLO Post-Processing. TODO: Move this farther down. Currently doesn't produce accurate results because it's running too early.
-        process_yolo_results(frameData, vidData, MODEL)
+        # Reset per-frame track set before DeepSort populates it
+        vidData.v_current_track_ids.clear()
 
         # DeepSort Tracking
-        deepsort_analysis(tracker, frame, frameData, vidData) 
+        deepsort_analysis(tracker, frame, frameData, vidData)
+
+        # YOLO post-processing runs after DeepSort overlap filtering
+        process_yolo_results(frameData, vidData, MODEL)
 
         # Finalize disappeared tracks (detections that ended before the video ended)
         finalize_tracks(frameData, vidData, termination_reason="disappeared")
@@ -603,6 +615,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         is_new_track = trackId not in vidData.v_active_tracks
 
         if is_new_track:
+            x1_e, y1_e, x2_e, y2_e = obj["bbox"]
             initial_conf = "LOW" if (vidData.v_video_timestamp and vidData.v_video_timestamp != "Not detected") else None
             vidData.v_active_tracks[trackId] = {
                 "start_frame": frameData.f_index,
@@ -610,6 +623,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                 "directions": [],
                 "best_conf": -1.0,
                 "best_crop": None,
+                "entry_x": (x1_e + x2_e) / 2,
                 "video_timestamp": vidData.v_video_timestamp or "Not detected",
                 "timestamp_confidence": initial_conf,
                 "timestamp_attempts": 0
@@ -686,13 +700,13 @@ def finalize_tracks(frameData, vidData, termination_reason):
         disappeared_ids = set(vidData.v_active_tracks.keys()) - vidData.v_current_track_ids 
         for tid in disappeared_ids:
             track_data = vidData.v_active_tracks.pop(tid)
-            track_dict = build_track_summary(tid, track_data, frameData, vidData, None, frame_width=getattr(vidData, 'frame_width', 640))
+            track_dict = build_track_summary(tid, track_data, frameData, vidData, None, frame_width=vidData.v_frame_width)
             if track_dict:
                 vidData.v_finished_tracks.append(track_dict)
 
     elif termination_reason == "forced":
         for tid, track_data in vidData.v_active_tracks.items():
-            track_dict = build_track_summary(tid, track_data, frameData, vidData, None, frame_width=getattr(vidData, 'frame_width', 640))
+            track_dict = build_track_summary(tid, track_data, frameData, vidData, None, frame_width=vidData.v_frame_width)
             if track_dict:
                 vidData.v_finished_tracks.append(track_dict)
 
@@ -741,8 +755,6 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
             else:
                 overall_direction = directions[-1]
     
-    species_data = classify_image(image_path) if image_path else ("No image", 0.0)
-    
     # Handle timestamp with confidence flag
     video_timestamp = track_data.get("video_timestamp") or vidData.v_video_timestamp or "Not detected"
     timestamp_confidence = track_data.get("timestamp_confidence")
@@ -760,8 +772,8 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         "end_time_sec": f"{frameData.f_index / vidData.v_fps:.2f}",
         "direction": overall_direction,
         "best_crop": track_data.get("best_crop"),
-        "species": species_data[0] if species_data else "No data",
-        "species_confidence": f"{species_data[1]:.2f}%" if species_data else "No data",
+        "species": "No data",
+        "species_confidence": "No data",
         "video_timestamp": video_timestamp,
         "timestamp_confidence": timestamp_confidence,
         "best_frame": vidData.v_active_tracks.get(trackId, {}).get("best_frame") if trackId in vidData.v_active_tracks else None
@@ -853,17 +865,17 @@ def dedupe_fragmented_tracks(finished_tracks):
 # Function: no_fish_found
 # Description: Moves video to no_fish if no fish detected. 
 # Notes:
-def no_fish_found(video_path, filename): # TODO: Change function name?
+def no_fish_found(video_path, filename):
     print("***************************************************************")
     print(f"No fish detected in {filename}. Skipping export.")
     print("***************************************************************")
 
-    # Copy video to no_fish folder
-    no_fish_path = os.path.join(NO_FISH, filename)
+    log_path = os.path.join(NO_FISH, "no_fish_log.txt")
     try:
-        shutil.copy2(video_path, no_fish_path)
+        with open(log_path, "a") as log_file:
+            log_file.write(f"{filename} | {video_path}\n")
     except Exception as e:
-        print(f"Error copying video to no_fish folder: {e}")
+        print(f"Error writing no-fish log: {e}")
 
 
 # ***************************************************************
@@ -1026,16 +1038,14 @@ def classify_image(image_path):
         return ("No data", 0.0)
 
 
-# ****************************************************************
-# Function: get_image_name
-# Description: Helper function for getting the image that deepsort
-#   saved for the classifier.
-# Notes: N/A
-def get_image_name() -> str:
-    p = Path(CLASSIFIER_TARGET_FOLDER)
-    images = [f for f in p.iterdir() if f.is_file() and f.suffix.lower() in IMAGE_EXTS]
-    if not images:
-        raise FileNotFoundError(f'No image found in {CLASSIFIER_TARGET_FOLDER}')
-    return images[0].name
-
-main()
+# Persistent server loop: accept one folder path per line from stdin, process it, signal done.
+for raw_line in sys.stdin:
+    input_path = raw_line.strip()
+    if input_path:
+        try:
+            main(input_path)
+        except Exception as e:
+            print(f"[ERROR] Unhandled exception during processing: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+        print("[PROGRESS] DONE", flush=True)

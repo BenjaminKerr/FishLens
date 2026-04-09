@@ -63,6 +63,18 @@ namespace FishLens_App
         // Stack of deletion batches for undo support
         private readonly Stack<DeletionBatch> _deletionHistory = new Stack<DeletionBatch>();
 
+        // Persistent Python process — models stay loaded between runs
+        private Process _yoloProcess;
+        private bool _yoloFastModeAtStart;
+        private TaskCompletionSource<bool> _processingTcs;
+        private TaskCompletionSource<bool> _yoloReadyTcs;
+        private int _totalVideos;
+        private readonly System.Text.StringBuilder _outputBuilder = new System.Text.StringBuilder();
+        private readonly System.Text.StringBuilder _errorBuilder = new System.Text.StringBuilder();
+        private string _currentVideoStatus = string.Empty;
+        private ProgressDialog _activeProgressDialog;
+        private bool _processingCancelled = false;
+
         #endregion
 
         #region Nested Classes
@@ -105,7 +117,13 @@ namespace FishLens_App
                     _config.HighContrastMode = false;
                     ThemeHelper.ApplyHighContrastMode(false);
                 }
-                // Otherwise, leave everything at default XAML values
+                EnsureYoloProcessRunning();
+                App.FastModeChanged += EnsureYoloProcessRunning;
+            };
+            Closing += (s, e) =>
+            {
+                if (_yoloProcess != null && !_yoloProcess.HasExited)
+                    try { _yoloProcess.Kill(); } catch { }
             };
         }
 
@@ -330,128 +348,203 @@ namespace FishLens_App
             // **************************************************
         private async Task RunYolo(string videoFolder)
         {
-            // Debug logging
             _logger.LogInformation("Starting YOLO process with videoFolder: {VideoFolder}", videoFolder);
-            
-            ProcessStartInfo processInfo = CreateYoloProcessStartInfo(videoFolder);
-            
-            _logger.LogInformation("Python Arguments: {Arguments}", processInfo.Arguments);
-            _logger.LogInformation("Working Directory: {WorkingDir}", processInfo.WorkingDirectory);
+            EnsureYoloProcessRunning();
 
-            ProgressDialog progressDialog = new ProgressDialog();
-            progressDialog.Show();
-            await Task.Delay(100);
+            // Show dialog early so the user sees feedback during any remaining warmup
+            _activeProgressDialog = new ProgressDialog();
+            _activeProgressDialog.Cancelled += OnProcessingCancelled;
+            _activeProgressDialog.Show();
+
+            // Wait for Python models to finish loading before sending work
+            if (_yoloReadyTcs != null)
+                await _yoloReadyTcs.Task;
+
+            _outputBuilder.Clear();
+            lock (_errorBuilder) _errorBuilder.Clear();
+            _currentVideoStatus = "Processing videos, please wait...";
+            _totalVideos = 0;
+            _processingCancelled = false;
+            _processingTcs = new TaskCompletionSource<bool>();
 
             try
             {
-                await ExecuteYoloProcess(processInfo, progressDialog);
+                _yoloProcess.StandardInput.WriteLine(videoFolder);
+                _yoloProcess.StandardInput.Flush();
+                await _processingTcs.Task;
+            }
+            catch (OperationCanceledException)
+            {
+                // User cancelled via dialog close — process already killed and restarting
+                _activeProgressDialog = null;
             }
             catch (Exception ex)
             {
-                progressDialog.Close();
+                _activeProgressDialog?.CloseWithoutCancel();
+                _activeProgressDialog = null;
                 MessageBox.Show(ex.Message, "Could not process videos.", MessageBoxButton.OK);
             }
         }
 
         // **************************************************
-        // Function: CreateYoloProcessStartInfo
-        // Description: Configures process start information for YOLO script execution
+        // Function: EnsureYoloProcessRunning
+        // Description: Starts or restarts the Python process (e.g. when Fast Mode changes)
         // **************************************************
-        private ProcessStartInfo CreateYoloProcessStartInfo(string dataPath)
+        private void EnsureYoloProcessRunning()
+        {
+            bool fastMode = _checkBoxes?.FastMode ?? false;
+            bool alreadyRunning = _yoloProcess != null && !_yoloProcess.HasExited;
+            if (!alreadyRunning || _yoloFastModeAtStart != fastMode)
+            {
+                if (alreadyRunning)
+                    try { _yoloProcess.Kill(); } catch { }
+
+                _yoloFastModeAtStart = fastMode;
+                StartYoloProcess();
+            }
+        }
+
+        // **************************************************
+        // Function: StartYoloProcess
+        // Description: Spawns the persistent Python process and begins the output reader loop
+        // **************************************************
+        private void StartYoloProcess()
         {
             string yoloScriptPath = _pathResolver.ResolveYoloScriptPath();
-            
-            // Use full path to Python in venv
             string pythonPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "venv", "Scripts", "python.exe");
 
-            return new ProcessStartInfo
+            var processInfo = new ProcessStartInfo
             {
                 FileName = pythonPath,
                 WorkingDirectory = _pathResolver.ResolveProjectRoot(),
-                Arguments = $"-u \"{yoloScriptPath}\" \"{dataPath}\"",
-                RedirectStandardError = true,
+                Arguments = $"-u \"{yoloScriptPath}\"",
+                RedirectStandardInput = true,
                 RedirectStandardOutput = true,
-                UseShellExecute = false
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
             };
-        }
-        
+            processInfo.Environment["FISHLENS_FAST_MODE"] = _yoloFastModeAtStart ? "1" : "0";
 
-        // **************************************************
-        // Function: ExecuteYoloProcess
-        // Description: Runs YOLO process and handles output
-        // **************************************************
-        private async Task ExecuteYoloProcess(ProcessStartInfo processInfo, ProgressDialog progressDialog)
-        {
-            await Task.Run(() =>
+            _yoloReadyTcs = new TaskCompletionSource<bool>();
+            _yoloProcess = Process.Start(processInfo);
+
+            // Consume stderr in background to prevent pipe deadlock
+            Task.Run(() =>
             {
-                using (Process process = Process.Start(processInfo))
+                string errLine;
+                while ((errLine = _yoloProcess.StandardError.ReadLine()) != null)
+                    lock (_errorBuilder) _errorBuilder.AppendLine(errLine);
+            });
+
+            // Start persistent stdout reader
+            Task.Run(ReadYoloOutputLoop);
+        }
+
+        // **************************************************
+        // Function: ReadYoloOutputLoop
+        // Description: Background loop that reads Python stdout for the lifetime of the process
+        // **************************************************
+        private void ReadYoloOutputLoop()
+        {
+            string line;
+            while ((line = _yoloProcess.StandardOutput.ReadLine()) != null)
+            {
+                if (!line.StartsWith("[PROGRESS]"))
+                    _outputBuilder.AppendLine(line);
+
+                if (line == "[PROGRESS] STARTUP")
                 {
-                    var errorTask = Task.Run(() => process.StandardError.ReadToEnd());
-                    var outputBuilder = new System.Text.StringBuilder();
-
-                    int totalVideos = 0;
-                    string currentVideoStatus = "Processing videos, please wait...";
-
-                    string line;
-                    while ((line = process.StandardOutput.ReadLine()) != null)
+                    Dispatcher.Invoke(() =>
+                        _activeProgressDialog?.UpdateProgress("Starting up, please wait...", string.Empty));
+                }
+                else if (line == "[PROGRESS] READY")
+                {
+                    _yoloReadyTcs?.TrySetResult(true);
+                }
+                else if (line.StartsWith("[PROGRESS] TOTAL:") &&
+                    int.TryParse(line.Substring("[PROGRESS] TOTAL:".Length), out int total))
+                {
+                    _totalVideos = total;
+                    Dispatcher.Invoke(() => _activeProgressDialog?.SetProgressBar(0, total));
+                }
+                else if (line.StartsWith("[PROGRESS] VIDEO:"))
+                {
+                    string payload = line.Substring("[PROGRESS] VIDEO:".Length);
+                    int sep = payload.IndexOf('|');
+                    string fraction = sep >= 0 ? payload.Substring(0, sep) : payload;
+                    string filename = sep >= 0 ? payload.Substring(sep + 1) : string.Empty;
+                    var parts = fraction.Split('/');
+                    if (parts.Length == 2 && int.TryParse(parts[0], out int current))
                     {
-                        if (!line.StartsWith("[PROGRESS]"))
-                            outputBuilder.AppendLine(line);
-
-                        if (line.StartsWith("[PROGRESS] TOTAL:") &&
-                            int.TryParse(line.Substring("[PROGRESS] TOTAL:".Length), out int total))
+                        _currentVideoStatus = $"Processing video {fraction} — {filename}";
+                        int capturedCurrent = current;
+                        int capturedTotal = _totalVideos;
+                        Dispatcher.Invoke(() =>
                         {
-                            totalVideos = total;
-                            Dispatcher.Invoke(() => progressDialog.SetProgressBar(0, total));
-                        }
-                        else if (line.StartsWith("[PROGRESS] VIDEO:"))
-                        {
-                            // Format: VIDEO:i/n|filename
-                            string payload = line.Substring("[PROGRESS] VIDEO:".Length);
-                            int sep = payload.IndexOf('|');
-                            string fraction = sep >= 0 ? payload.Substring(0, sep) : payload;
-                            string filename = sep >= 0 ? payload.Substring(sep + 1) : string.Empty;
-                            var parts = fraction.Split('/');
-                            if (parts.Length == 2 && int.TryParse(parts[0], out int current))
-                            {
-                                currentVideoStatus = $"Processing video {fraction} — {filename}";
-                                int capturedCurrent = current;
-                                int capturedTotal = totalVideos;
-                                Dispatcher.Invoke(() =>
-                                {
-                                    progressDialog.UpdateProgress(currentVideoStatus, string.Empty);
-                                    progressDialog.SetProgressBar(capturedCurrent - 1, capturedTotal);
-                                });
-                            }
-                        }
-                        else if (line.StartsWith("[PROGRESS] FRAME:"))
-                        {
-                            // Format: FRAME:x/n  or  FRAME:x/? when total is unknown
-                            string payload = line.Substring("[PROGRESS] FRAME:".Length);
-                            var parts = payload.Split('/');
-                            if (parts.Length == 2)
-                            {
-                                string frameStatus = parts[1] == "?" 
-                                    ? $"Frame {parts[0]}" 
-                                    : $"Frame {parts[0]} / {parts[1]}";
-                                string capturedVideoStatus = currentVideoStatus;
-                                Dispatcher.Invoke(() => progressDialog.UpdateProgress(capturedVideoStatus, frameStatus));
-                            }
-                        }
-                    }
-
-                    process.WaitForExit();
-                    string output = outputBuilder.ToString();
-                    string error = errorTask.Result;
-
-                    Dispatcher.Invoke(() => progressDialog.Close());
-
-                    if (_checkBoxes.OutputBox || _checkBoxes.ErrorBox)
-                    {
-                        DisplayProcessOutputIfNeeded(output, error);
+                            _activeProgressDialog?.UpdateProgress(_currentVideoStatus, string.Empty);
+                            _activeProgressDialog?.SetProgressBar(capturedCurrent - 1, capturedTotal);
+                            _activeProgressDialog?.ResetFrameBar();
+                        });
                     }
                 }
-            });
+                else if (line.StartsWith("[PROGRESS] FRAME:"))
+                {
+                    string payload = line.Substring("[PROGRESS] FRAME:".Length);
+                    var parts = payload.Split('/');
+                    if (parts.Length == 2)
+                    {
+                        string frameStatus = parts[1] == "?"
+                            ? $"Frame {parts[0]}"
+                            : $"Frame {parts[0]} / {parts[1]}";
+                        string capturedVideoStatus = _currentVideoStatus;
+                        int frameNum = 0, frameTot = 0;
+                        bool hasTotal = parts[1] != "?" &&
+                            int.TryParse(parts[0], out frameNum) &&
+                            int.TryParse(parts[1], out frameTot);
+                        Dispatcher.Invoke(() =>
+                        {
+                            _activeProgressDialog?.UpdateProgress(capturedVideoStatus, frameStatus);
+                            if (hasTotal)
+                                _activeProgressDialog?.SetFrameBar(frameNum, frameTot);
+                        });
+                    }
+                }
+                else if (line == "[PROGRESS] DONE")
+                {
+                    string output = _outputBuilder.ToString();
+                    _outputBuilder.Clear();
+                    string error;
+                    lock (_errorBuilder) { error = _errorBuilder.ToString(); _errorBuilder.Clear(); }
+                    Dispatcher.Invoke(() =>
+                    {
+                        _activeProgressDialog?.CloseWithoutCancel();
+                        _activeProgressDialog = null;
+                        if (_checkBoxes?.OutputBox == true || _checkBoxes?.ErrorBox == true)
+                            DisplayProcessOutputIfNeeded(output, error);
+                    });
+                    _processingTcs?.TrySetResult(true);
+                }
+            }
+
+            // Process exited — fail any pending run
+            _processingTcs?.TrySetException(new Exception("Python process exited unexpectedly."));
+        }
+
+        // **************************************************
+        // Function: OnProcessingCancelled
+        // Description: Called when the user closes the progress dialog mid-run
+        // **************************************************
+        private void OnProcessingCancelled()
+        {
+            _processingCancelled = true;
+            _activeProgressDialog = null;
+            _processingTcs?.TrySetCanceled();
+            if (_yoloProcess != null && !_yoloProcess.HasExited)
+                try { _yoloProcess.Kill(); } catch { }
+            _yoloProcess = null;
+            // Restart Python in the background so models are ready for the next run
+            EnsureYoloProcessRunning();
         }
 
         // **************************************************
@@ -486,14 +579,15 @@ namespace FishLens_App
         private async void OpenFolderClick(object sender, RoutedEventArgs e)
         {
             string sourceFolderPath = _pathResolver.ResolveSourceFolder();
-            if (string.IsNullOrEmpty(sourceFolderPath))
-                return;
+            if (!string.IsNullOrEmpty(sourceFolderPath))
+            {
+                _currentFolderName = Path.GetFileName(sourceFolderPath);
 
-            _currentFolderName = Path.GetFileName(sourceFolderPath);
+                await ProcessVideos(sourceFolderPath);
 
-            await ProcessVideos(sourceFolderPath);
-
-            exportData.Visibility = Visibility.Visible;
+                if (!_processingCancelled)
+                    exportData.Visibility = Visibility.Visible;
+            }
         }
 
         // **************************************************
@@ -511,31 +605,37 @@ namespace FishLens_App
             {
                 MessageBox.Show("No video files were found in the selected folder.",
                     "No Videos", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
             }
-
-            _logger.LogInformation("Found {Count} video files in {Directory}", videoFiles.Count, inputFolder);
-
-            // Step 1: run YOLO directly on the source folder
-            await RunYolo(inputFolder);
-
-            // Step 2: read CSV now that it exists
-            List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList = CreateSortedListOfVideos(inputFolder);
-
-            // Step 3: update UI with first video
-            if (videoDataList.Count > 0)
+            else
             {
-                DisplayDataInUi(videoDataList[0].vid.Name);
-            }
+                _logger.LogInformation("Found {Count} video files in {Directory}", videoFiles.Count, inputFolder);
 
-            // Step 4: create sidebar buttons
-            CreateVideoButtonsList(videoDataList);
+                // Step 1: run YOLO directly on the source folder
+                await RunYolo(inputFolder);
 
-            // Step 5: auto-load first video into player
-            if (videoDataList.Count > 0)
-            {
-                var firstVideoPath = videoDataList[0].vid.FullName;
-                Dispatcher.Invoke(() => LoadVideoInPlayer(firstVideoPath));
+                // If the user cancelled, do not populate the UI with partial results
+                if (!_processingCancelled)
+                {
+
+                    // Step 2: read CSV now that it exists
+                    List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList = CreateSortedListOfVideos(inputFolder);
+
+                    // Step 3: update UI with first video
+                    if (videoDataList.Count > 0)
+                    {
+                        DisplayDataInUi(videoDataList[0].vid.Name);
+                    }
+
+                    // Step 4: create sidebar buttons
+                    CreateVideoButtonsList(videoDataList);
+
+                    // Step 5: auto-load first video into player
+                    if (videoDataList.Count > 0)
+                    {
+                        var firstVideoPath = videoDataList[0].vid.FullName;
+                        Dispatcher.Invoke(() => LoadVideoInPlayer(firstVideoPath));
+                    }
+                }
             }
         }
 
@@ -555,18 +655,17 @@ namespace FishLens_App
             if (selected.Count == 0)
             {
                 MessageBox.Show("No videos selected for deletion.", "Delete Videos", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
             }
+            else if (ConfirmDelete(selected.Count))
+            {
+                string csvPath = _pathResolver.ResolveCsvScriptPath();
 
-            if (!ConfirmDelete(selected.Count)) return;
+                DeleteFilesAndCsvEntries(selected.Select(x => x.path).ToList(), csvPath);
 
-            string csvPath = _pathResolver.ResolveCsvScriptPath();
+                RemoveUiGrids(selected.Select(x => x.grid).ToList());
 
-            DeleteFilesAndCsvEntries(selected.Select(x => x.path).ToList(), csvPath);
-
-            RemoveUiGrids(selected.Select(x => x.grid).ToList());
-
-            MessageBox.Show($"Deleted {selected.Count} video(s).", "Delete Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show($"Deleted {selected.Count} video(s).", "Delete Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
         }
 
         // **************************************************
@@ -746,9 +845,9 @@ namespace FishLens_App
             if (_deletionHistory.Count == 0)
             {
                 MessageBox.Show("Nothing to undo.", "Undo", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
             }
-
+            else
+            {
             var batch = _deletionHistory.Pop();
             // restore files
             var restoredFiles = new List<string>();
@@ -792,6 +891,7 @@ namespace FishLens_App
             try { if (Directory.Exists(batch.TrashFolder)) Directory.Delete(batch.TrashFolder, recursive: true); } catch { }
 
             MessageBox.Show($"Restored {restoredFiles.Count} file(s).", "Undo Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
         }
 
         // **************************************************
@@ -924,14 +1024,15 @@ namespace FishLens_App
                 {
                     MessageBox.Show("No analysis data found to export.", "Export Error",
                         MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
                 }
-
-                SaveFileDialog saveFileDialog = CreateExportSaveDialog();
-
-                if (saveFileDialog.ShowDialog() == true)
+                else
                 {
-                    MakeExcelSheetAndInsertData(saveFileDialog, csvPath);
+                    SaveFileDialog saveFileDialog = CreateExportSaveDialog();
+
+                    if (saveFileDialog.ShowDialog() == true)
+                    {
+                        MakeExcelSheetAndInsertData(saveFileDialog, csvPath);
+                    }
                 }
             }
             catch (Exception ex)
@@ -1045,27 +1146,25 @@ namespace FishLens_App
             try
             {
                 string currentVideoName = videoName.Text;
+                string csvPath = _pathResolver.ResolveCsvScriptPath();
 
                 if (string.IsNullOrEmpty(currentVideoName) || currentVideoName == "--")
                 {
                     MessageBox.Show("No video selected to save changes for.", "Save Error",
                         MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
                 }
-
-                string csvPath = _pathResolver.ResolveCsvScriptPath();
-
-                if (!File.Exists(csvPath))
+                else if (!File.Exists(csvPath))
                 {
                     MessageBox.Show("CSV file not found.", "Save Error",
                         MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
                 }
+                else
+                {
+                    UpdateCsvFile(csvPath, currentVideoName);
 
-                UpdateCsvFile(csvPath, currentVideoName);
-
-                MessageBox.Show("Changes saved successfully!", "Save Successful",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show("Changes saved successfully!", "Save Successful",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                }
             }
             catch (Exception ex)
             {

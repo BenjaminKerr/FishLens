@@ -20,6 +20,10 @@ namespace FishLens_App
         public bool IsAdmin => CurrentRoleId == 1;
         public bool IsUser => CurrentRoleId == 2;
 
+        // Raised when the user toggles Fast Mode in Settings so MainWindow can restart Python
+        public static event Action FastModeChanged;
+        public static void RaiseFastModeChanged() => FastModeChanged?.Invoke();
+
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e); // Call the regular startup logic first
