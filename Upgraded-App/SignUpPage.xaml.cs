@@ -55,6 +55,7 @@ namespace FishLens_App
         // Notes: N/A
         private void CreateAccount_Click(object sender, RoutedEventArgs e)
         {
+            ClearAllFieldErrors();
             ErrorMessage.Visibility = Visibility.Collapsed;
 
             string orgName = OrgName.Text.Trim();
@@ -63,35 +64,59 @@ namespace FishLens_App
             string password = NewPassword.Password;
             string confirmPassword = ConfirmPassword.Password;
 
-            string error = null;
+            bool hasError = false;
 
-
-            //TODO: Make this a helper function
+            //Org Check
             if (string.IsNullOrWhiteSpace(orgName))
-                error = "Please enter an organization name.";
-            else if (string.IsNullOrWhiteSpace(email))
-                error = "Please enter an email address.";
-            else if (!IsValidEmailFormat(email))
-                error = "Please enter a valid email address.";
-            else if (!email.Contains("@") || !email.Contains("."))
-                error = "Please enter a valid email address.";
-            else if (string.IsNullOrWhiteSpace(username))
-                error = "Please enter a username.";
-            else if (username.Length < 6)
-                error = "Username must be at least 6 characters.";
-            else if (string.IsNullOrWhiteSpace(password))
-                error = "Please enter a password.";
-            else if (password.Length < 6)
-                error = "Password must be at least 6 characters.";
-            else if (password != confirmPassword)
-                error = "Passwords do not match.";
-
-            if (error != null)
             {
-                ShowError(error);
+                ShowFieldError(OrgNameError, "Please enter an organization name.");
+                hasError = true;
             }
-            else
+            //Email Check
+            if (string.IsNullOrWhiteSpace(email))
             {
+                ShowFieldError( EmailError, "Please enter an email address.");
+                hasError = true;
+            }
+            else if (!IsValidEmailFormat(email))
+            {
+                ShowFieldError(EmailError, "Please enter a valid email address.");
+                hasError = true;
+            }
+            //Username Check
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                ShowFieldError(UsernameError, "Please enter a username.");
+                hasError = true;
+            }
+            else if (username.Length < 6)
+            {
+                ShowFieldError(UsernameError, "Username must be at least 6 characters.");
+                hasError = true;
+            }
+            //Password Check
+            if (string.IsNullOrWhiteSpace(password))
+            {
+                ShowFieldError(PasswordError, "Please enter a password.");
+                hasError = true;
+            }
+            else if (password.Length < 6)
+            {
+                ShowFieldError(PasswordError, "Password must be at least 6 characters.");
+                hasError = true;
+            }
+            //Confirm Password Check
+            if (password != confirmPassword)
+            {
+                ShowFieldError(ConfirmPasswordError, "Passwords do not match.");
+                hasError = true;
+            }
+
+            UpdateRequirements(username, password, confirmPassword);
+
+            if(!hasError)
+            {
+              
                 try
                 {
                     bool canProceed = true;
@@ -109,7 +134,7 @@ namespace FishLens_App
                                 checkCmd.Parameters.AddWithValue("@name", orgName);
                                 if (Convert.ToInt32(checkCmd.ExecuteScalar()) > 0)
                                 {
-                                    ShowError("An organization with that name already exists.");
+                                    ShowFieldError(OrgNameError, "An organization with that name already exists.");
                                     canProceed = false;
                                 }
                             }
@@ -124,7 +149,7 @@ namespace FishLens_App
                                 checkCmd.Parameters.AddWithValue("@user", username);
                                 if (Convert.ToInt32(checkCmd.ExecuteScalar()) > 0)
                                 {
-                                    ShowError("That username is already taken.");
+                                    ShowFieldError(UsernameError, "That username is already taken.");
                                     canProceed = false;
                                 }
                             }
@@ -139,7 +164,7 @@ namespace FishLens_App
                                 checkCmd.Parameters.AddWithValue("@email", email);
                                 if (Convert.ToInt32(checkCmd.ExecuteScalar()) > 0)
                                 {
-                                    ShowError("That email is already in use.");
+                                    ShowFieldError(EmailError, "That email is already in use.");
                                     canProceed = false;
                                 }
                             }
@@ -306,6 +331,52 @@ namespace FishLens_App
             }
         }
 
+
+        // ****************************************************************
+        // Helper: ClearAllFieldErrors
+        // Description: Hides all inline field error messages before re-validating
+        // ****************************************************************
+        private void ClearAllFieldErrors()
+        {
+            OrgNameError.Visibility = Visibility.Collapsed;
+            EmailError.Visibility = Visibility.Collapsed;
+            UsernameError.Visibility = Visibility.Collapsed;
+            PasswordError.Visibility = Visibility.Collapsed;
+            ConfirmPasswordError.Visibility = Visibility.Collapsed;
+        }
+
+        // ****************************************************************
+        // Helper: ShowFieldError
+        // Description: Sets text and makes a specific field error visible
+        // ****************************************************************
+        private void ShowFieldError(TextBlock block, string message)
+        {
+            block.Text = message;
+            block.Visibility = Visibility.Visible;
+        }
+
+        // ****************************************************************
+        // Helper: UpdateRequirements
+        // Description: Colors requirement hints green/red on submit.
+        //              Password match stays gray when both boxes are empty.
+        // ****************************************************************
+        private void UpdateRequirements(string username, string password, string confirmPassword)
+        {
+            Brush gray = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#888888"));
+            Brush pass = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4CAF50"));
+            Brush fail = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F44336"));
+
+            ReqUsernameLength.Foreground = username.Length >= 6 ? pass : fail;
+            ReqPasswordLength.Foreground = password.Length >= 6 ? pass : fail;
+
+            // Stay gray when both are empty
+            if (string.IsNullOrEmpty(password) && string.IsNullOrEmpty(confirmPassword))
+                ReqPasswordMatch.Foreground = gray;
+            else
+                ReqPasswordMatch.Foreground = password == confirmPassword ? pass : fail;
+        }
+
+
         // ****************************************************************
         // Function: ResendCode_Click
         // Description: Issues a fresh code to the same email, same as
@@ -344,7 +415,6 @@ namespace FishLens_App
             SignUpStep.Visibility = Visibility.Visible;
             VerifyErrorMessage.Visibility = Visibility.Collapsed;
         }
-
 
 
 

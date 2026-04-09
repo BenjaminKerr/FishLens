@@ -38,7 +38,10 @@
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
 
-                <StackPanel>
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+
+                    <StackPanel>
 
                     <TextBlock Text="Create your account"
                                FontSize="{DynamicResource LargeHeaderFontSize}"
@@ -63,6 +66,13 @@
                              Padding="8"
                              FontSize="{DynamicResource BaseFontSize}"
                              Margin="0,5,0,15"/>
+                    <TextBlock x:Name="OrgNameError"
+               FontSize="11"
+               Foreground="#F44336"
+               TextWrapping="Wrap"
+               Visibility="Collapsed"
+               Margin="0,0,0,12"/>
+
                     <!-- Email -->
                     <TextBlock Text="Email"
            FontSize="{DynamicResource BaseFontSize}"
@@ -73,6 +83,20 @@
          Padding="8"
          FontSize="{DynamicResource BaseFontSize}"
          Margin="0,5,0,15"/>
+                    <!-- Email requirements -->
+                    <StackPanel Margin="0,0,0,10">
+                        <TextBlock Text="• Must be a valid address (e.g. name@gmail.com)"
+                   FontSize="11"
+                   Foreground="{DynamicResource SecondaryText}"/>
+                    </StackPanel>
+                    <TextBlock x:Name="EmailError"
+               FontSize="11"
+               Foreground="#F44336"
+               TextWrapping="Wrap"
+               Visibility="Collapsed"
+               Margin="0,0,0,12"/>
+
+
 
                     <!-- Username -->
                     <TextBlock Text="Username"
@@ -84,17 +108,48 @@
                              Padding="8"
                              FontSize="{DynamicResource BaseFontSize}"
                              Margin="0,5,0,15"/>
+                    <!-- Username requirements -->
+                    <StackPanel Margin="0,0,0,10">
+                        <TextBlock x:Name="ReqUsernameLength"
+                   Text="• At least 6 characters"
+                   FontSize="11"
+                   Foreground="{DynamicResource SecondaryText}"/>
+                    </StackPanel>
+                    <TextBlock x:Name="UsernameError"
+               FontSize="11"
+               Foreground="#F44336"
+               TextWrapping="Wrap"
+               Visibility="Collapsed"
+               Margin="0,0,0,12"/>
+
+
 
                     <!-- Password -->
                     <TextBlock Text="Password"
                                FontSize="{DynamicResource BaseFontSize}"
                                Foreground="{DynamicResource SecondaryText}"/>
+                 
+
 
                     <PasswordBox x:Name="NewPassword"
                                  Height="36"
                                  Padding="8"
                                  FontSize="{DynamicResource BaseFontSize}"
                                  Margin="0,5,0,15"/>
+                    <!-- Password requirements -->
+                    <StackPanel Margin="0,0,0,10">
+                        <TextBlock x:Name="ReqPasswordLength"
+                          Text="• At least 6 characters"
+                          FontSize="11"
+                          Foreground="{DynamicResource SecondaryText}"/>
+                    </StackPanel>
+                    <TextBlock x:Name="PasswordError"
+               FontSize="11"
+               Foreground="#F44336"
+               TextWrapping="Wrap"
+               Visibility="Collapsed"
+               Margin="0,0,0,12"/>
+
 
                     <!-- Confirm Password -->
                     <TextBlock Text="Confirm Password"
@@ -106,15 +161,31 @@
                                  Padding="8"
                                  FontSize="{DynamicResource BaseFontSize}"
                                  Margin="0,5,0,5"/>
+                    <!-- Confirm password requirements -->
+                    <StackPanel Margin="0,0,0,10">
+                        <TextBlock x:Name="ReqPasswordMatch"
+                   Text="• Passwords must match"
+                   FontSize="11"
+                   Foreground="{DynamicResource SecondaryText}"/>
+                    </StackPanel>
+                    <TextBlock x:Name="ConfirmPasswordError"
+               FontSize="11"
+               Foreground="#F44336"
+               TextWrapping="Wrap"
+               Visibility="Collapsed"
+               Margin="0,0,0,12"/>
+
 
                     <!-- Error message -->
                     <TextBlock x:Name="ErrorMessage"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               Foreground="#F44336"
-                               TextWrapping="Wrap"
-                               HorizontalAlignment="Center"
-                               Margin="0,0,0,10"
-                               Visibility="Collapsed"/>
+               FontSize="{DynamicResource BaseFontSize}"
+               Foreground="#F44336"
+               TextWrapping="Wrap"
+               HorizontalAlignment="Center"
+               Margin="0,0,0,10"
+               Visibility="Collapsed"/>
+
+
 
                     <!-- Sign Up Button -->
                     <Button Content="Create Account"
@@ -153,7 +224,10 @@
                     </Button>
 
                 </StackPanel>
+                </ScrollViewer>
             </Border>
+                
+                
             <!-- Email verification -->
 
             <Border x:Name="VerifyEmailStep"
