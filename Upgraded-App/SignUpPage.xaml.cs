@@ -1,8 +1,11 @@
-﻿using System;
+﻿using DocumentFormat.OpenXml.Drawing.Diagrams;
+using System;
 using System.Collections.Generic;
+using System.Data.SqlClient;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -13,7 +16,6 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
-using System.Data.SqlClient;
 
 namespace FishLens_App
 {
@@ -27,10 +29,23 @@ namespace FishLens_App
 
         // The RoleId that represents "Admin" in your Roles table
         private const int AdminRoleId = 1;
+        private EmailService emailService = new EmailService();
+
+        private string _pendingOrgName;
+        private string _pendingEmail;
+        private string _pendingUsername;
+        private string _pendingPassword;
 
         public SignUpPage()
         {
             InitializeComponent();
+        }
+
+        private bool IsValidEmailFormat(string email)
+        {
+            string pattern = @"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,10}$";
+            return Regex.IsMatch(email, pattern);
+
         }
 
         // ****************************************************************
@@ -56,6 +71,8 @@ namespace FishLens_App
                 error = "Please enter an organization name.";
             else if (string.IsNullOrWhiteSpace(email))
                 error = "Please enter an email address.";
+            else if (!IsValidEmailFormat(email))
+                error = "Please enter a valid email address.";
             else if (!email.Contains("@") || !email.Contains("."))
                 error = "Please enter a valid email address.";
             else if (string.IsNullOrWhiteSpace(username))
@@ -130,47 +147,23 @@ namespace FishLens_App
 
                         if (canProceed)
                         {
-                            using (SqlCommand cmd = new SqlCommand("kaharra.CreateOrganization", conn))
-                            {
-                                cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                            SendVerificationCode(conn, email);
 
-                                cmd.Parameters.AddWithValue("@pOrgName", orgName);
-                                cmd.Parameters.AddWithValue("@pUser", username);
-                                cmd.Parameters.AddWithValue("@pPassword", password);
-                                cmd.Parameters.AddWithValue("@pRoleId", AdminRoleId);
-                                cmd.Parameters.AddWithValue("@pEmail", email);
+                            // Cache form data in memory (same session, no security risk)
+                            _pendingOrgName = orgName;
+                            _pendingEmail = email;
+                            _pendingUsername = username;
+                            _pendingPassword = password;
 
-                                var orgIdParam = new SqlParameter("@pOrgId", System.Data.SqlDbType.Int)
-                                {
-                                    Direction = System.Data.ParameterDirection.Output
-                                };
-                                cmd.Parameters.Add(orgIdParam);
-
-                                var userIdParam = new SqlParameter("@pUserId", System.Data.SqlDbType.Int)
-                                {
-                                    Direction = System.Data.ParameterDirection.Output
-                                };
-                                cmd.Parameters.Add(userIdParam);
-
-                                cmd.ExecuteNonQuery();
-
-                                var app = Application.Current as App;
-                                app.CurrentUserId = (int)userIdParam.Value;
-                                app.CurrentUsername = username;
-                                app.CurrentRoleId = AdminRoleId;
-                                app.CurrentOrganizationId = (int)orgIdParam.Value;
-                            }
-
-                            MainWindow main = new MainWindow();
-                            main.Show();
-                            this.Close();
+                            SignUpStep.Visibility = Visibility.Collapsed;
+                            VerifyEmailStep.Visibility = Visibility.Visible;
                         }
                     }
                 }
                 catch (SqlException ex)
                 {
                     Debug.WriteLine("SQL Exception: " + ex.Message);
-                    ShowError("Something went wrong creating your account. Please try again.");
+                    ShowError("Something went wrong. Please try again.");
                 }
                 catch (Exception ex)
                 {
@@ -181,7 +174,180 @@ namespace FishLens_App
         }
 
 
+        private void SendVerificationCode(SqlConnection conn, string email)
+        {
+            string code = new Random().Next(100000, 999999).ToString();
+            string insertSql = @" INSERT INTO [kaharra].[SignupVerificationTokens] (Email, Token, ExpiresAt) VALUES (@email, @token, @expires)"; 
 
+            using (SqlCommand cmd = new SqlCommand(insertSql, conn)) 
+            { 
+                cmd.Parameters.AddWithValue("@email", email); 
+                cmd.Parameters.AddWithValue("@token", code); 
+                cmd.Parameters.AddWithValue("@expires", DateTime.Now.AddMinutes(15)); cmd.ExecuteNonQuery(); 
+            }
+
+            bool sent = emailService.SendResetCode(email, code); 
+            if (!sent) throw new Exception("Failed to send verification email.");
+        }
+
+
+        // ****************************************************************
+        // Function: VerifyCode_Click
+        // Description: Looks up the code in SignupVerificationTokens exactly
+        //              like ForgotPasswordWindow checks PasswordResetTokens,
+        //              then creates the account if valid
+        // ****************************************************************
+        private void VerifyCode_Click(object sender, RoutedEventArgs e)
+        {
+            VerifyErrorMessage.Visibility = Visibility.Collapsed;
+
+            string enteredCode = VerificationCodeBox.Text.Trim();
+
+            if (string.IsNullOrWhiteSpace(enteredCode))
+            {
+                ShowVerifyError("Please enter the verification code.");
+                return;
+            }
+
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(connectionString))
+                {
+                    conn.Open();
+
+                    // Verify the code is valid, not expired, and not already used
+                    string checkSql = @"
+                        SELECT Id FROM [kaharra].[SignupVerificationTokens]
+                        WHERE Email     = @email
+                          AND Token     = @token
+                          AND ExpiresAt > GETDATE()
+                          AND Used      = 0";
+
+                    using (SqlCommand cmd = new SqlCommand(checkSql, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@email", _pendingEmail);
+                        cmd.Parameters.AddWithValue("@token", enteredCode);
+
+                        object result = cmd.ExecuteScalar();
+
+                        if (result == null)
+                        {
+                            ShowVerifyError("Invalid or expired code. Please try again.");
+                            return;
+                        }
+
+                        int tokenId = Convert.ToInt32(result);
+
+                        // Mark token as used
+                        string markUsedSql = @"
+                            UPDATE [kaharra].[SignupVerificationTokens] 
+                            SET Used = 1 
+                            WHERE Id = @id";
+
+                        using (SqlCommand updateCmd = new SqlCommand(markUsedSql, conn))
+                        {
+                            updateCmd.Parameters.AddWithValue("@id", tokenId);
+                            updateCmd.ExecuteNonQuery();
+                        }
+
+                        // Create the org and account
+                        using (SqlCommand createCmd = new SqlCommand("kaharra.CreateOrganization", conn))
+                        {
+                            createCmd.CommandType = System.Data.CommandType.StoredProcedure;
+
+                            createCmd.Parameters.AddWithValue("@pOrgName", _pendingOrgName);
+                            createCmd.Parameters.AddWithValue("@pUser", _pendingUsername);
+                            createCmd.Parameters.AddWithValue("@pPassword", _pendingPassword);
+                            createCmd.Parameters.AddWithValue("@pRoleId", AdminRoleId);
+                            createCmd.Parameters.AddWithValue("@pEmail", _pendingEmail);
+
+                            var orgIdParam = new SqlParameter("@pOrgId", System.Data.SqlDbType.Int)
+                            {
+                                Direction = System.Data.ParameterDirection.Output
+                            };
+                            createCmd.Parameters.Add(orgIdParam);
+
+                            var userIdParam = new SqlParameter("@pUserId", System.Data.SqlDbType.Int)
+                            {
+                                Direction = System.Data.ParameterDirection.Output
+                            };
+                            createCmd.Parameters.Add(userIdParam);
+
+                            createCmd.ExecuteNonQuery();
+
+                            var app = Application.Current as App;
+                            app.CurrentUserId = (int)userIdParam.Value;
+                            app.CurrentUsername = _pendingUsername;
+                            app.CurrentRoleId = AdminRoleId;
+                            app.CurrentOrganizationId = (int)orgIdParam.Value;
+                        }
+                    }
+                }
+
+                MainWindow main = new MainWindow();
+                main.Show();
+                this.Close();
+            }
+            catch (SqlException ex)
+            {
+                Debug.WriteLine("SQL Exception: " + ex.Message);
+                ShowVerifyError("Something went wrong creating your account. Please try again.");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Exception: " + ex.Message);
+                ShowVerifyError("An unexpected error occurred. Please try again.");
+            }
+        }
+
+        // ****************************************************************
+        // Function: ResendCode_Click
+        // Description: Issues a fresh code to the same email, same as
+        //              re-triggering SendCode in ForgotPasswordWindow
+        // ****************************************************************
+        private void ResendCode_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(connectionString))
+                {
+                    conn.Open();
+                    SendVerificationCode(conn, _pendingEmail);
+                    ShowVerifyError("A new code has been sent to your email.");
+                }
+            }
+            catch (SqlException ex)
+            {
+                Debug.WriteLine("SQL Exception: " + ex.Message);
+                ShowVerifyError("Failed to resend. Please try again.");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Exception: " + ex.Message);
+                ShowVerifyError("Failed to resend. Please try again.");
+            }
+        }
+
+        // ****************************************************************
+        // Function: BackToSignUp_Click
+        // Description: Returns user to the sign-up form
+        // ****************************************************************
+        private void BackToSignUp_Click(object sender, RoutedEventArgs e)
+        {
+            VerifyEmailStep.Visibility = Visibility.Collapsed;
+            SignUpStep.Visibility = Visibility.Visible;
+            VerifyErrorMessage.Visibility = Visibility.Collapsed;
+        }
+
+
+
+
+
+        private void ShowVerifyError(string message)
+        { 
+            VerifyErrorMessage.Text = message; 
+            VerifyErrorMessage.Visibility = Visibility.Visible;
+        }
 
 
         private void ShowError(string message)

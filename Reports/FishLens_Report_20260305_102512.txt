@@ -1,0 +1,35 @@
+═══════════════════════════════════════════════════════
+              FISHLENS ANALYSIS REPORT
+═══════════════════════════════════════════════════════
+Generated: 2026-03-05 10:24:25
+Data Range: 2025-10-01 18:58:39 to 2026-10-02 14:10:09
+
+SUMMARY STATISTICS
+Total Detections: 6
+Fish: 6 (100.0%)
+Bird: 0 (0.0%)
+Average Confidence: 0.93
+High Confidence (≥80%): 6
+
+ENHANCED METRICS
+Fish Per Day: 1.50
+Estimated Upstream Total: ~0 fish
+Average Length: N/A
+
+MOVEMENT DIRECTION
+Upstream: 3 (50.0%)
+Downstream: 3 (50.0%)
+
+AI PERFORMANCE
+Average Confidence: 0.93%
+High Confidence Detections: 6 (100.0%)
+
+LOCATION BREAKDOWN
+Unknown Location: 6 detections (100.0%)
+
+TOP VIDEOS
+  FishTest1.mp4: 2 detections
+  FishTest2Fish.mp4: 2 detections
+  FishTest2.mp4: 1 detections
+  FishTest3.mp4: 1 detections
+═══════════════════════════════════════════════════════
