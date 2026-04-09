@@ -206,97 +206,103 @@ namespace FishLens_App
             if (string.IsNullOrWhiteSpace(enteredCode))
             {
                 ShowVerifyError("Please enter the verification code.");
-                return;
+
             }
-
-            try
+            else
             {
-                using (SqlConnection conn = new SqlConnection(connectionString))
-                {
-                    conn.Open();
 
-                    // Verify the code is valid, not expired, and not already used
-                    string checkSql = @"
+                try
+                {
+                    using (SqlConnection conn = new SqlConnection(connectionString))
+                    {
+                        conn.Open();
+
+                        // Verify the code is valid, not expired, and not already used
+                        string checkSql = @"
                         SELECT Id FROM [kaharra].[SignupVerificationTokens]
                         WHERE Email     = @email
                           AND Token     = @token
                           AND ExpiresAt > GETDATE()
                           AND Used      = 0";
 
-                    using (SqlCommand cmd = new SqlCommand(checkSql, conn))
-                    {
-                        cmd.Parameters.AddWithValue("@email", _pendingEmail);
-                        cmd.Parameters.AddWithValue("@token", enteredCode);
-
-                        object result = cmd.ExecuteScalar();
-
-                        if (result == null)
+                        using (SqlCommand cmd = new SqlCommand(checkSql, conn))
                         {
-                            ShowVerifyError("Invalid or expired code. Please try again.");
-                            return;
-                        }
+                            cmd.Parameters.AddWithValue("@email", _pendingEmail);
+                            cmd.Parameters.AddWithValue("@token", enteredCode);
 
-                        int tokenId = Convert.ToInt32(result);
+                            object result = cmd.ExecuteScalar();
 
-                        // Mark token as used
-                        string markUsedSql = @"
+                            if (result == null)
+                            {
+                                ShowVerifyError("Invalid or expired code. Please try again.");
+
+                            }
+                            else
+                            {
+                                int tokenId = Convert.ToInt32(result);
+
+                                // Mark token as used
+                                string markUsedSql = @"
                             UPDATE [kaharra].[SignupVerificationTokens] 
                             SET Used = 1 
                             WHERE Id = @id";
 
-                        using (SqlCommand updateCmd = new SqlCommand(markUsedSql, conn))
-                        {
-                            updateCmd.Parameters.AddWithValue("@id", tokenId);
-                            updateCmd.ExecuteNonQuery();
+                                using (SqlCommand updateCmd = new SqlCommand(markUsedSql, conn))
+                                {
+                                    updateCmd.Parameters.AddWithValue("@id", tokenId);
+                                    updateCmd.ExecuteNonQuery();
+                                }
+
+                                // Create the org and account
+                                using (SqlCommand createCmd = new SqlCommand("kaharra.CreateOrganization", conn))
+                                {
+                                    createCmd.CommandType = System.Data.CommandType.StoredProcedure;
+
+                                    createCmd.Parameters.AddWithValue("@pOrgName", _pendingOrgName);
+                                    createCmd.Parameters.AddWithValue("@pUser", _pendingUsername);
+                                    createCmd.Parameters.AddWithValue("@pPassword", _pendingPassword);
+                                    createCmd.Parameters.AddWithValue("@pRoleId", AdminRoleId);
+                                    createCmd.Parameters.AddWithValue("@pEmail", _pendingEmail);
+
+                                    var orgIdParam = new SqlParameter("@pOrgId", System.Data.SqlDbType.Int)
+                                    {
+                                        Direction = System.Data.ParameterDirection.Output
+                                    };
+                                    createCmd.Parameters.Add(orgIdParam);
+
+                                    var userIdParam = new SqlParameter("@pUserId", System.Data.SqlDbType.Int)
+                                    {
+                                        Direction = System.Data.ParameterDirection.Output
+                                    };
+                                    createCmd.Parameters.Add(userIdParam);
+
+                                    createCmd.ExecuteNonQuery();
+
+                                    var app = Application.Current as App;
+                                    app.CurrentUserId = (int)userIdParam.Value;
+                                    app.CurrentUsername = _pendingUsername;
+                                    app.CurrentRoleId = AdminRoleId;
+                                    app.CurrentOrganizationId = (int)orgIdParam.Value;
+                                }
+                            }
                         }
 
-                        // Create the org and account
-                        using (SqlCommand createCmd = new SqlCommand("kaharra.CreateOrganization", conn))
-                        {
-                            createCmd.CommandType = System.Data.CommandType.StoredProcedure;
-
-                            createCmd.Parameters.AddWithValue("@pOrgName", _pendingOrgName);
-                            createCmd.Parameters.AddWithValue("@pUser", _pendingUsername);
-                            createCmd.Parameters.AddWithValue("@pPassword", _pendingPassword);
-                            createCmd.Parameters.AddWithValue("@pRoleId", AdminRoleId);
-                            createCmd.Parameters.AddWithValue("@pEmail", _pendingEmail);
-
-                            var orgIdParam = new SqlParameter("@pOrgId", System.Data.SqlDbType.Int)
-                            {
-                                Direction = System.Data.ParameterDirection.Output
-                            };
-                            createCmd.Parameters.Add(orgIdParam);
-
-                            var userIdParam = new SqlParameter("@pUserId", System.Data.SqlDbType.Int)
-                            {
-                                Direction = System.Data.ParameterDirection.Output
-                            };
-                            createCmd.Parameters.Add(userIdParam);
-
-                            createCmd.ExecuteNonQuery();
-
-                            var app = Application.Current as App;
-                            app.CurrentUserId = (int)userIdParam.Value;
-                            app.CurrentUsername = _pendingUsername;
-                            app.CurrentRoleId = AdminRoleId;
-                            app.CurrentOrganizationId = (int)orgIdParam.Value;
-                        }
+                        MainWindow main = new MainWindow();
+                        main.Show();
+                        this.Close();
                     }
                 }
 
-                MainWindow main = new MainWindow();
-                main.Show();
-                this.Close();
-            }
-            catch (SqlException ex)
-            {
-                Debug.WriteLine("SQL Exception: " + ex.Message);
-                ShowVerifyError("Something went wrong creating your account. Please try again.");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("Exception: " + ex.Message);
-                ShowVerifyError("An unexpected error occurred. Please try again.");
+                catch (SqlException ex)
+                {
+                    Debug.WriteLine("SQL Exception: " + ex.Message);
+                    ShowVerifyError("Something went wrong creating your account. Please try again.");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("Exception: " + ex.Message);
+                    ShowVerifyError("An unexpected error occurred. Please try again.");
+                }
             }
         }
 
