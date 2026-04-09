@@ -700,13 +700,13 @@ def finalize_tracks(frameData, vidData, termination_reason):
         disappeared_ids = set(vidData.v_active_tracks.keys()) - vidData.v_current_track_ids 
         for tid in disappeared_ids:
             track_data = vidData.v_active_tracks.pop(tid)
-            track_dict = build_track_summary(tid, track_data, frameData, vidData, None, frame_width=vidData.v_frame_width)
+            track_dict = build_track_summary(tid, track_data, frameData, vidData, frame_width=vidData.v_frame_width)
             if track_dict:
                 vidData.v_finished_tracks.append(track_dict)
 
     elif termination_reason == "forced":
         for tid, track_data in vidData.v_active_tracks.items():
-            track_dict = build_track_summary(tid, track_data, frameData, vidData, None, frame_width=vidData.v_frame_width)
+            track_dict = build_track_summary(tid, track_data, frameData, vidData, frame_width=vidData.v_frame_width)
             if track_dict:
                 vidData.v_finished_tracks.append(track_dict)
 
@@ -728,32 +728,31 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     best_conf = track_data.get("best_conf", 0.0)
     best_conf_pct = best_conf * 100 if best_conf <= 1.0 else best_conf
     
-    # Calculate overall direction based on entry and exit positions
-    entry_x = track_data.get("entry_x", 0)
-    exit_x = track_data.get("last_x", 0)
-    
-    # Determine if entry and exit are on same side of frame
-    # Left side: x < frame_width/2, Right side: x >= frame_width/2
+    # Determine direction.
+    # First check entry/exit side: if the fish ended on the same side it entered from
+    # (e.g. swam in from the right, turned around, drifted back out right) it is indecisive
+    # regardless of direction counts. DeepSort dx is always relative to the first position,
+    # so a fish that swims partially back never flips its dx sign — counts alone can't detect this.
+    entry_x = track_data.get("entry_x", frame_width / 2)
+    exit_x = track_data.get("last_x", frame_width / 2)
     entry_side = "left" if entry_x < frame_width / 2 else "right"
     exit_side = "left" if exit_x < frame_width / 2 else "right"
-    
-    # Determine direction
-    if entry_side == exit_side:
-        # Fish entered and exited from same side - indecisive
+    directions = track_data["directions"]
+    upstream_count = directions.count("upstream")
+    downstream_count = directions.count("downstream")
+    if entry_side == exit_side and (upstream_count > 0 or downstream_count > 0):
+        # Fish entered and exited the same side — it turned around at some point.
         overall_direction = "indecisive"
+    elif upstream_count > downstream_count:
+        overall_direction = "upstream"
+    elif downstream_count > upstream_count:
+        overall_direction = "downstream"
+    elif upstream_count > 0 and downstream_count > 0:
+        overall_direction = "indecisive"
+    elif directions:
+        overall_direction = directions[-1]
     else:
-        # Fish crossed from one side to other - use direction counts
-        directions = track_data["directions"]
         overall_direction = "unknown"
-        if directions:
-            upstream_count = directions.count("upstream")
-            downstream_count = directions.count("downstream")
-            if upstream_count > downstream_count:
-                overall_direction = "upstream"
-            elif downstream_count > upstream_count:
-                overall_direction = "downstream"
-            else:
-                overall_direction = directions[-1]
     
     # Handle timestamp with confidence flag
     video_timestamp = track_data.get("video_timestamp") or vidData.v_video_timestamp or "Not detected"
@@ -810,7 +809,7 @@ def dedupe_fragmented_tracks(finished_tracks):
     def _same_or_unknown_direction(a, b):
         da = str(a.get("direction", "unknown")).lower()
         db = str(b.get("direction", "unknown")).lower()
-        if da == "unknown" or db == "unknown" or da == "stationary" or db == "stationary":
+        if da in ("unknown", "stationary", "indecisive") or db in ("unknown", "stationary", "indecisive"):
             return True
         return da == db
 
@@ -832,7 +831,9 @@ def dedupe_fragmented_tracks(finished_tracks):
         gap = min(abs(a_start - b_end), abs(b_start - a_end))
 
         # Temporal relationship expected for split IDs.
-        temporal_match = (overlap_ratio >= 0.75) or (gap <= 0.35)
+        # 0.25 overlap ratio catches heavily-overlapping duplicate tracks;
+        # 1.0s gap allows for brief detection dropout between the same fish.
+        temporal_match = (overlap_ratio >= 0.25) or (gap <= 1.0)
         if not temporal_match:
             return False
 

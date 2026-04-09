@@ -40,6 +40,7 @@ namespace FishLens_App
         private CheckBoxToggle _checkBoxes;
         private AppConfiguration _config;
         private Dictionary<int, (string Username, int RoleId, string email)> _originalUserData = new();
+        private bool _loadingSettings = false;
 
         public List<Role> Roles { get; set; } = new List<Role>();
         private List<User> _users = new List<User>();
@@ -174,6 +175,7 @@ namespace FishLens_App
                 // Ensure CheckBoxToggle is up to date
                 _checkBoxes.ErrorBox = hideErrors.IsChecked ?? false;
                 _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
+                bool prevFastMode = _checkBoxes.FastMode;
                 _checkBoxes.FastMode = enableFastMode.IsChecked ?? false;
 
                 bool highContrast = highContrastMode.IsChecked ?? false;
@@ -204,6 +206,10 @@ namespace FishLens_App
 
                 // Apply certain settings immediately to main window
                 ApplySettingsToMainWindow();
+
+                // Restart Python only if Fast Mode actually changed
+                if (_checkBoxes.FastMode != prevFastMode)
+                    App.RaiseFastModeChanged();
             }
             catch (Exception ex)
             {
@@ -224,8 +230,8 @@ namespace FishLens_App
 
         private void ToggleFastMode(object sender, RoutedEventArgs e)
         {
-            _checkBoxes.FastMode = enableFastMode.IsChecked ?? false;
-            App.RaiseFastModeChanged();
+            if (!_loadingSettings)
+                _checkBoxes.FastMode = enableFastMode.IsChecked ?? false;
         }
         #endregion
 
@@ -523,6 +529,9 @@ namespace FishLens_App
         }
         private void LoadSettings()
         {
+            _loadingSettings = true;
+            try
+            {
             // Set defaults from current runtime state
             confidenceThreshold.Value = Math.Round((_config?.ConfidenceThreshold ?? 0.7) * 100);
             confidenceValue.Text = $"{(int)Math.Round((_config?.ConfidenceThreshold ?? 0.7) * 100)}%";
@@ -582,6 +591,11 @@ namespace FishLens_App
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Could not parse settings file; using defaults");
+            }
+            }
+            finally
+            {
+                _loadingSettings = false;
             }
         }
 

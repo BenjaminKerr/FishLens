@@ -349,16 +349,25 @@ namespace FishLens_App
         private async Task RunYolo(string videoFolder)
         {
             _logger.LogInformation("Starting YOLO process with videoFolder: {VideoFolder}", videoFolder);
-            EnsureYoloProcessRunning();
+
+            // Only restart Python if it's not running at all (e.g. crashed between runs).
+            // If it's still in the middle of startup, leave it alone — await _yoloReadyTcs.Task
+            // will wait for the existing startup to finish without triggering a second launch.
+            if (_yoloProcess == null || _yoloProcess.HasExited)
+                EnsureYoloProcessRunning();
 
             // Show dialog early so the user sees feedback during any remaining warmup
             _activeProgressDialog = new ProgressDialog();
             _activeProgressDialog.Cancelled += OnProcessingCancelled;
             _activeProgressDialog.Show();
 
-            // Wait for Python models to finish loading before sending work
-            if (_yoloReadyTcs != null)
+            // Wait for Python models to finish loading before sending work.
+            // If STARTUP was already consumed before this dialog existed, show the message manually.
+            if (_yoloReadyTcs != null && !_yoloReadyTcs.Task.IsCompleted)
+            {
+                _activeProgressDialog.UpdateProgress("Starting up, please wait...", string.Empty);
                 await _yoloReadyTcs.Task;
+            }
 
             _outputBuilder.Clear();
             lock (_errorBuilder) _errorBuilder.Clear();
@@ -527,7 +536,8 @@ namespace FishLens_App
                 }
             }
 
-            // Process exited — fail any pending run
+            // Process exited — fail any pending run or startup wait
+            _yoloReadyTcs?.TrySetException(new Exception("Python process exited unexpectedly."));
             _processingTcs?.TrySetException(new Exception("Python process exited unexpectedly."));
         }
 
