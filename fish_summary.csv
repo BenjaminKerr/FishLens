@@ -1,2 +1,2 @@
 video_file,trackId,image_path,likely_class,confidence,start_time_sec,end_time_sec,avg_confidence,direction,species,species_confidence,video_timestamp
-00000009.ASF,1,C:\Users\aleks\source\repos\FishLens\fish_images\Chinook\tmp94tczqhf_track_1.jpg,fish,93.31%,26.75,52.75,93.31%,downstream,Chinook,99.99%,2025/09/27 01:47:44
+00000020.ASF,2,C:\Users\aleks\source\repos\FishLens\fish_images\Chinook\Spencer_1_09292025\00000020_track_2.jpg,fish,93.57%,36.00,46.50,93.57%,indecisive,Chinook,65.00%,2025/09/28 00:56:00

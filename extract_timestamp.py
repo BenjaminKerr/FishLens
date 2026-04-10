@@ -225,17 +225,36 @@ def probe_video_timestamp(cap, first_frame, probe_frames=12, read_frame_fn=None)
     if not parsed:
         return None
 
-    # Prefer the most common full timestamp.
-    full_counts = Counter(parsed)
+    # Prefer a stable date first, then choose the earliest parsed timestamp on that date.
+    # This mitigates persistent OCR 5/6 minute drift near the start of a video.
+    date_counts = Counter(ts.split(' ')[0] for ts in parsed if ' ' in ts)
+    best_date = date_counts.most_common(1)[0][0] if date_counts else None
+
+    filtered = [ts for ts in parsed if (best_date is None or ts.startswith(best_date + ' '))]
+    if not filtered:
+        filtered = parsed
+
+    parsed_datetimes = []
+    for ts in filtered:
+        try:
+            parsed_datetimes.append(datetime.strptime(ts, "%Y/%m/%d %H:%M:%S"))
+        except Exception:
+            continue
+
+    if parsed_datetimes:
+        return min(parsed_datetimes).strftime("%Y/%m/%d %H:%M:%S")
+
+    # Fallback to previous behavior when datetime parsing fails.
+    full_counts = Counter(filtered)
     most_common_full, full_count = full_counts.most_common(1)[0]
 
     # If there is no clear full-timestamp winner, stabilize by date part and then choose
     # the most common timestamp within that date.
-    if full_count == 1 and len(parsed) > 1:
-        date_counts = Counter(ts.split(' ')[0] for ts in parsed if ' ' in ts)
+    if full_count == 1 and len(filtered) > 1:
+        date_counts = Counter(ts.split(' ')[0] for ts in filtered if ' ' in ts)
         if date_counts:
             best_date = date_counts.most_common(1)[0][0]
-            same_date = [ts for ts in parsed if ts.startswith(best_date + ' ')]
+            same_date = [ts for ts in filtered if ts.startswith(best_date + ' ')]
             if same_date:
                 return Counter(same_date).most_common(1)[0][0]
 
@@ -428,31 +447,40 @@ def extractTimestamFromFrame(frame, debug=False):
         # Convert to grayscale
         gray = cv2.cvtColor(timestampRegion, cv2.COLOR_BGR2GRAY)
         
-        # White text on dark background - use binary threshold
+        # White text on dark background - use binary threshold.
         _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
-        
-        # Optional: Apply slight dilation to thicken text
+
+        # Build multiple OCR variants. Some overlays read better without dilation,
+        # while others benefit from slight thickening.
         kernel = np.ones((2, 2), np.uint8)
-        processed = cv2.dilate(thresh, kernel, iterations=1)
+        processed_variants = [
+            ("base", thresh),
+            ("dilate", cv2.dilate(thresh, kernel, iterations=1)),
+        ]
         
         
         # OCR configuration optimized for single-line timestamps
         # Whitelist only characters that appear in timestamps
         custom_config = r'--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789/:- '
         
-        # Perform OCR
-        text = pytesseract.image_to_string(processed, config=custom_config)
-        text = text.strip()
-        box_text = _extract_text_from_boxes(processed, custom_config)
+        candidate_texts = []
+        for variant_name, processed in processed_variants:
+            text = pytesseract.image_to_string(processed, config=custom_config).strip()
+            box_text = _extract_text_from_boxes(processed, custom_config)
+
+            # Prefer raw OCR first, then per-character boxes as fallback.
+            # Box-level template disambiguation can occasionally over-correct 5 -> 6 in
+            # minute fields for some camera overlays.
+            for candidate in (text, box_text):
+                if candidate:
+                    candidate_texts.append(candidate)
+
+            if debug:
+                print(f"  OCR raw output ({variant_name}): '{text}'")
+                if box_text:
+                    print(f"  OCR box output ({variant_name}): '{box_text}'")
         
-        if debug:
-            print(f"  OCR raw output: '{text}'")
-            if box_text:
-                print(f"  OCR box output: '{box_text}'")
-        
-        # Prefer per-character boxes first because they pass through 5/6 template
-        # disambiguation (_resolve_ambiguous_digit).
-        candidates = [t for t in [box_text, text] if t]
+        candidates = [t for t in dict.fromkeys(candidate_texts)]
         if not candidates:
             return None, None
 

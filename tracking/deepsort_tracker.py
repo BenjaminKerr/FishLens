@@ -122,9 +122,10 @@ class DeepSortTracker:
             and d[4] > self.MIN_CONFIDENCE
         ]
 
-        # Convert to DeepSORT format (bbox, conf, cls)
+        # Convert to DeepSORT format (bbox, conf, cls).
+        # deep_sort_realtime expects [left, top, width, height].
         formatted = [
-            ([x1, y1, x2, y2], conf, cls)
+            ([x1, y1, x2 - x1, y2 - y1], conf, cls)
             for x1, y1, x2, y2, conf, cls in detections
         ]
 
@@ -133,9 +134,12 @@ class DeepSortTracker:
         results = []
 
         for t in tracks:
-            if t.is_confirmed():
+            if t.is_confirmed() and getattr(t, "time_since_update", 1) == 0:
                 trackId = t.track_id
-                x1, y1, x2, y2 = map(int, t.to_ltrb())
+                bbox = t.to_ltrb(orig=True)
+                if bbox is None:
+                    bbox = t.to_ltrb()
+                x1, y1, x2, y2 = map(int, bbox)
                 centroid = ((x1 + x2) // 2, (y1 + y2) // 2)
 
                 direction = self.getDirection(trackId, centroid)
