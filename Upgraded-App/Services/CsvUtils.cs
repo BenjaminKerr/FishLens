@@ -25,7 +25,7 @@ namespace FishLens_App.Services
             {
                 var columns = lines[i].Split(',');
                 if (columns.Length == 0) continue;
-                if (!string.Equals(columns[0].Trim(), videoFileName, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(Path.GetFileName(columns[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase))
                 {
                     remaining.Add(lines[i]);
                 }
@@ -52,7 +52,7 @@ namespace FishLens_App.Services
             {
                 var cols = lines[i].Split(',');
                 if (cols.Length == 0) continue;
-                if (string.Equals(cols[0].Trim(), videoFileName, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(Path.GetFileName(cols[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase))
                 {
                     return ParseVideoFromColumns(cols);
                 }
@@ -75,7 +75,7 @@ namespace FishLens_App.Services
             for (int i = 1; i < lines.Count; i++)
             {
                 var cols = lines[i].Split(',');
-                if (cols.Length > 0 && string.Equals(cols[0].Trim(), videoFileName, StringComparison.OrdinalIgnoreCase))
+                if (cols.Length > 0 && string.Equals(Path.GetFileName(cols[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase))
                 {
                     updatedLines.Add(updatedRow);
                     found = true;
@@ -117,7 +117,11 @@ namespace FishLens_App.Services
         public static Video ParseVideoFromColumns(string[] columns)
         {
             var video = new Video();
-            video.Name = columns.Length > 0 ? columns[0].Trim() : string.Empty;
+            // col 0: full video file path
+            video.VideoFilePath = columns.Length > 0 ? columns[0].Trim() : string.Empty;
+            video.Name = !string.IsNullOrEmpty(video.VideoFilePath)
+                ? Path.GetFileName(video.VideoFilePath)
+                : string.Empty;
             video.TrackId = columns.Length > 1 ? columns[1].Trim() : "-1";
             video.LikelyClass = columns.Length > 3 ? columns[3].Trim() : "N/A";
             video.Confidence = columns.Length > 4 ? columns[4].Trim() : "00.00%";
@@ -145,13 +149,11 @@ namespace FishLens_App.Services
             video.Species = columns.Length > 9 ? columns[9].Trim() : string.Empty;
             
             // Parse species confidence as double, removing % sign if present
-            // Normalize to decimal range (0-1) if stored as percentage (0-100)
             if (columns.Length > 10)
             {
                 var speciesConfStr = columns[10].Trim().TrimEnd('%');
                 if (double.TryParse(speciesConfStr, out var speciesConfValue))
                 {
-                    // If value is > 1, it's already a percentage, normalize to decimal
                     if (speciesConfValue > 1) speciesConfValue = speciesConfValue / 100.0;
                     video.SpeciesConfidence = speciesConfValue;
                 }
@@ -164,16 +166,20 @@ namespace FishLens_App.Services
             {
                 video.SpeciesConfidence = 0.0;
             }
-            
-            video.Date = columns.Length > 11 ? columns[11].Trim() : string.Empty;
-            video.Time = columns.Length > 12 ? columns[12].Trim() : string.Empty;
 
-            // Try to parse combined date/time if available
-            if (!string.IsNullOrEmpty(video.Date) && !string.IsNullOrEmpty(video.Time))
+            // col 11: video_timestamp (full datetime string e.g. "2025/10/01 19:07:44")
+            string videoTimestamp = columns.Length > 11 ? columns[11].Trim() : string.Empty;
+            video.Date = videoTimestamp;
+            video.Time = string.Empty;
+            if (!string.IsNullOrEmpty(videoTimestamp))
             {
-                if (DateTime.TryParse($"{video.Date} {video.Time}", out var ts))
+                if (DateTime.TryParse(videoTimestamp, out var ts))
                     video.DetectionTimestamp = ts;
             }
+
+            // col 12: location
+            video.Location = columns.Length > 12 ? columns[12].Trim() : string.Empty;
+
             return video;
         }
 

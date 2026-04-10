@@ -1025,7 +1025,6 @@ namespace FishLens_App
                 return vid;
             }
         }
-        
 
         #endregion
 
@@ -1079,26 +1078,86 @@ namespace FishLens_App
 
         // **************************************************
         // Function: MakeExcelSheetAndInsertData
-        // Description: Creates Excel workbook and populates with CSV data
+        // Description: Creates Excel workbook with Fish Detected, No Fish Detected, and Run Summary sheets
         // Notes: Helper function for ExportDataClick
         // **************************************************
         private void MakeExcelSheetAndInsertData(SaveFileDialog saveFileDialog, string csvPath)
         {
             string excelPath = saveFileDialog.FileName;
-            string[] allLines = File.ReadAllLines(csvPath);
+            string[] fishLines = File.ReadAllLines(csvPath);
+
+            string noFishCsvPath = _pathResolver.ResolveNoFishCsvPath();
+            string[] noFishLines = File.Exists(noFishCsvPath)
+                ? File.ReadAllLines(noFishCsvPath)
+                : new[] { "video_file,location,video_timestamp" };
 
             using (var workbook = new ClosedXML.Excel.XLWorkbook())
             {
-                var worksheet = workbook.Worksheets.Add("Analysis Data");
+                // Sheet 1: Fish Detected
+                var fishSheet = workbook.Worksheets.Add("Fish Detected");
+                WriteDataToWorksheet(fishSheet, fishLines);
+                FormatWorksheet(fishSheet, fishLines);
 
-                WriteDataToWorksheet(worksheet, allLines);
-                FormatWorksheet(worksheet, allLines);
+                // Sheet 2: No Fish Detected
+                var noFishSheet = workbook.Worksheets.Add("No Fish Detected");
+                WriteDataToWorksheet(noFishSheet, noFishLines);
+                FormatWorksheet(noFishSheet, noFishLines);
+
+                // Sheet 3: Run Summary
+                var summarySheet = workbook.Worksheets.Add("Run Summary");
+                BuildRunSummarySheet(summarySheet, fishLines, noFishLines);
 
                 workbook.SaveAs(excelPath);
             }
 
             ShowExportSuccessMessage(excelPath);
             PromptToOpenExportedFile(excelPath);
+        }
+
+        // **************************************************
+        // Function: BuildRunSummarySheet
+        // Description: Populate the Run Summary sheet with fish tally and totals
+        // **************************************************
+        private void BuildRunSummarySheet(ClosedXML.Excel.IXLWorksheet sheet, string[] fishLines, string[] noFishLines)
+        {
+            int upstream = 0, downstream = 0, indecisive = 0;
+            // fishLines[0] is header — skip it
+            for (int i = 1; i < fishLines.Length; i++)
+            {
+                var cols = fishLines[i].Split(',');
+                string dir = cols.Length > 8 ? cols[8].Trim().ToLower() : string.Empty;
+                if (dir == "upstream") upstream++;
+                else if (dir == "downstream") downstream++;
+                else indecisive++;
+            }
+            int totalFish = fishLines.Length > 1 ? fishLines.Length - 1 : 0;
+            int totalNoFish = noFishLines.Length > 1 ? noFishLines.Length - 1 : 0;
+            int net = upstream - downstream;
+
+            var rows = new[]
+            {
+                new[] { "Metric", "Value" },
+                new[] { "Total Fish Detected",    totalFish.ToString() },
+                new[] { "Total No-Fish Videos",   totalNoFish.ToString() },
+                new[] { "Upstream",               upstream.ToString() },
+                new[] { "Downstream",              downstream.ToString() },
+                new[] { "Indecisive",              indecisive.ToString() },
+                new[] { "Net Upstream Count",      net.ToString() },
+                new[] { "Export Date",             DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") },
+            };
+
+            for (int r = 0; r < rows.Length; r++)
+            {
+                sheet.Cell(r + 1, 1).Value = rows[r][0];
+                sheet.Cell(r + 1, 2).Value = rows[r][1];
+            }
+
+            // Header styling
+            sheet.Row(1).Style.Font.Bold = true;
+            sheet.Row(1).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightBlue;
+            // Highlight net count row
+            sheet.Row(7).Style.Font.Bold = true;
+            sheet.Columns().AdjustToContents();
         }
 
         // **************************************************
@@ -1207,7 +1266,7 @@ namespace FishLens_App
             for (int i = 1; i < lines.Length; i++)
             {
                 var cols = lines[i].Split(',');
-                if (cols.Length > 0 && string.Equals(cols[0].Trim(), videoFileName, StringComparison.OrdinalIgnoreCase))
+                if (cols.Length > 0 && string.Equals(Path.GetFileName(cols[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase))
                 {
                     columns = cols;
                     break;
@@ -1234,7 +1293,7 @@ namespace FishLens_App
             string direction = GetTravelDirectionValue();
             string species = fishSpecies.Text.Trim();
 
-            // Keep original values for fields not editable in UI -- 12 columns total
+            // Keep original values for fields not editable in UI
             string videoFile = originalColumns[0].Trim();
             string trackId = originalColumns[1].Trim();
             string imagePath = originalColumns[2].Trim();
@@ -1243,7 +1302,8 @@ namespace FishLens_App
             string endTime = originalColumns[6].Trim();
             string avgConfidence = originalColumns[7].Trim();
             string species_confidence = originalColumns[10].Trim();
-            string vidTimeStamp = originalColumns[11].Trim();
+            string vidTimeStamp = originalColumns.Length > 11 ? originalColumns[11].Trim() : string.Empty;
+            string location = originalColumns.Length > 12 ? originalColumns[12].Trim() : string.Empty;
 
             // Read and validate confidence values from UI TextBoxes
             // fishPresentConfidence is displayed as percentage (e.g., "88.00%")
@@ -1282,7 +1342,7 @@ namespace FishLens_App
 
             // Build the CSV row
             
-            return $"{videoFile},{trackId},{imagePath},{likelyClass},{confidence},{startTime},{endTime},{avgConfidence},{direction},{species},{species_confidence},{vidTimeStamp}";
+            return $"{videoFile},{trackId},{imagePath},{likelyClass},{confidence},{startTime},{endTime},{avgConfidence},{direction},{species},{species_confidence},{vidTimeStamp},{location}";
         }
 
         // **************************************************

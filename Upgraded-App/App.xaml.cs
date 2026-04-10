@@ -50,6 +50,16 @@ namespace FishLens_App
                 }
             }
             catch { /* non-critical; defaults will be used */ }
+
+            // Ensure the All History folder exists for seasonal run archiving.
+            try
+            {
+                string projectRoot = Path.GetFullPath(
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", ".."));
+                string allHistoryDir = Path.Combine(projectRoot, "All History");
+                Directory.CreateDirectory(allHistoryDir);
+            }
+            catch { /* non-critical */ }
         }
     }
 }

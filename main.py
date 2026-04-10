@@ -97,8 +97,10 @@ CSV_KEYS = [
     "direction",
     "species",
     "species_confidence",
-    "video_timestamp"
+    "video_timestamp",
+    "location"
 ]
+NO_FISH_CSV_KEYS = ["video_file", "location", "video_timestamp"]
 TESSERACT_AVAILABLE = check_tesseract()
 
 # Constants--YOLO
@@ -110,6 +112,7 @@ NO_FISH = os.path.join(PROJECT_ROOT, "no_fish")
 FPS_DEFAULT = 30 
 MAX_EXPORT_PER_VIDEO = 5  
 OUTPUT_CSV = os.path.join(PROJECT_ROOT, "fish_summary.csv")
+NO_FISH_CSV = os.path.join(PROJECT_ROOT, "no_fish_summary.csv")
 FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
 
 # Performance tuning
@@ -122,6 +125,7 @@ SAVE_TIMESTAMP_DEBUG_FRAMES = os.getenv("FISHLENS_SAVE_TIMESTAMP_DEBUG", "0") ==
 TIMESTAMP_MAX_ATTEMPTS = max(1, int(os.getenv("FISHLENS_TIMESTAMP_MAX_ATTEMPTS", "4" if FAST_MODE else "8")))
 SUPPRESS_CODEC_WARNINGS = os.getenv("FISHLENS_SUPPRESS_CODEC_WARNINGS", "1") == "1"
 VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRAMES", "6" if FAST_MODE else "12")))
+FISHLENS_LOCATION = os.getenv("FISHLENS_LOCATION", "Unknown")
 
 # Constants--Classifier
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
@@ -214,6 +218,14 @@ def main(input_path=None):
     # Debug: Print paths
     print(f"[INFO] Processing videos from: {video_folder}")
 
+    # Clear no-fish CSV fresh for each run
+    try:
+        with open(NO_FISH_CSV, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=NO_FISH_CSV_KEYS)
+            writer.writeheader()
+    except Exception as e:
+        print(f"[WARNING] Could not initialize no-fish CSV: {e}")
+
     # Process all videos in folder
     all_tracks = []
     print(f"Performance: FAST_MODE={FAST_MODE}, FRAME_STRIDE={FRAME_STRIDE}, YOLO_IMGSZ={YOLO_IMGSZ}")
@@ -230,7 +242,8 @@ def main(input_path=None):
                 _cleanup_temp(video_path)
 
         for t in video_tracks:
-            t["video_file"] = filename
+            t["video_file"] = single_video_file
+            t["location"] = FISHLENS_LOCATION
         all_tracks.extend(video_tracks)
     else:
         # Process all videos in folder
@@ -262,7 +275,8 @@ def main(input_path=None):
                 if is_temp:
                     _cleanup_temp(video_path)
             for t in video_tracks:
-                t["video_file"] = filename
+                t["video_file"] = item_path
+                t["location"] = FISHLENS_LOCATION
             all_tracks.extend(video_tracks)
 
     # Export CSV
@@ -500,6 +514,7 @@ def run_video_tracker(video_path, source_video_path=None):
     if not vidData.v_found_fish:
         print(f"[INFO] No fish detected in {vidData.v_filename}")
         no_fish_found(video_path, vidData.v_filename)
+        _append_no_fish_row(source_video_path, vidData.v_video_timestamp)
         return []
 
     # Remove duplicate tracks that share the exact same timestamp.
@@ -877,6 +892,24 @@ def no_fish_found(video_path, filename):
             log_file.write(f"{filename} | {video_path}\n")
     except Exception as e:
         print(f"Error writing no-fish log: {e}")
+
+
+# ***************************************************************
+# Function: _append_no_fish_row
+# Description: Appends one row to no_fish_summary.csv for a video with no detections.
+# Notes: N/A
+def _append_no_fish_row(video_file_path, video_timestamp):
+    row = {
+        "video_file": video_file_path,
+        "location": FISHLENS_LOCATION,
+        "video_timestamp": video_timestamp or "Not detected"
+    }
+    try:
+        with open(NO_FISH_CSV, "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=NO_FISH_CSV_KEYS)
+            writer.writerow(row)
+    except Exception as e:
+        print(f"[ERROR] Failed to write no-fish row: {e}")
 
 
 # ***************************************************************

@@ -60,6 +60,15 @@ namespace FishLens_App.Services
         }
 
         // **************************************************
+        // Function: ResolveNoFishCsvPath
+        // Description: Resolves the no-fish summary CSV path
+        // **************************************************
+        public string ResolveNoFishCsvPath()
+        {
+            return Path.Combine(ResolveProjectRoot(), "no_fish_summary.csv");
+        }
+
+        // **************************************************
         // Function: ResolveSourceFolder
         // Description: Resolves the Source Folder
         // **************************************************

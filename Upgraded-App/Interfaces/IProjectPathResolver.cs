@@ -36,6 +36,12 @@ namespace FishLens_App.Interfaces
         string ResolveCsvScriptPath();
 
         // **************************************************
+        // Function: ResolveNoFishCsvPath
+        // Description: Resolves the path to the no-fish summary CSV.
+        // **************************************************
+        string ResolveNoFishCsvPath();
+
+        // **************************************************
         // Function: ResolveSourceFolder
         // Description: Prompts or determines the source folder containing videos for analysis.
         // **************************************************

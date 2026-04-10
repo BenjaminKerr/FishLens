@@ -302,22 +302,12 @@ namespace FishLens_App
                 ProcessVideoData(stats, videoName);
                 totalConfidence += ProcessConfidenceData(stats, columns);
 
-                // NEW: Process date/time data (columns: date at 11, time at 12)
+                // col 11: video_timestamp (full datetime string), col 12: location
                 DateTime? timestamp = null;
                 if (columns.Length > 11)
                 {
-                    var datePart = columns[11].Trim();
-                    var timePart = columns.Length > 12 ? columns[12].Trim() : string.Empty;
-                    if (!string.IsNullOrEmpty(timePart))
-                    {
-                        if (DateTime.TryParse($"{datePart} {timePart}", out DateTime ts))
-                            timestamp = ts;
-                    }
-                    else
-                    {
-                        if (DateTime.TryParse(datePart, out DateTime ts2))
-                            timestamp = ts2;
-                    }
+                    if (DateTime.TryParse(columns[11].Trim(), out DateTime ts))
+                        timestamp = ts;
                 }
 
                 if (timestamp.HasValue)
@@ -343,8 +333,10 @@ namespace FishLens_App
                     if (stats.DetectionsByHour.ContainsKey(hr)) stats.DetectionsByHour[hr]++; else stats.DetectionsByHour[hr] = 1;
                 }
 
-                // NEW: Process location data (extract from video name or separate column)
-                string location = ExtractLocationFromVideo(videoName);
+                // Location from column 12 (actual location field); fall back to name-based extraction
+                string location = columns.Length > 12 ? columns[12].Trim() : string.Empty;
+                if (string.IsNullOrEmpty(location))
+                    location = ExtractLocationFromVideo(videoName);
                 ProcessLocationData(stats, location, species);
 
                 // NEW: Process correctness/accuracy data (if available in columns)
