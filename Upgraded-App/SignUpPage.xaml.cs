@@ -56,7 +56,6 @@ namespace FishLens_App
         private void CreateAccount_Click(object sender, RoutedEventArgs e)
         {
             ClearAllFieldErrors();
-            ErrorMessage.Visibility = Visibility.Collapsed;
 
             string orgName = OrgName.Text.Trim();
             string email = NewEmail.Text.Trim();
@@ -64,120 +63,38 @@ namespace FishLens_App
             string password = NewPassword.Password;
             string confirmPassword = ConfirmPassword.Password;
 
-            bool hasError = false;
-
-            //Org Check
-            if (string.IsNullOrWhiteSpace(orgName))
-            {
-                ShowFieldError(OrgNameError, "Please enter an organization name.");
-                hasError = true;
-            }
-            //Email Check
-            if (string.IsNullOrWhiteSpace(email))
-            {
-                ShowFieldError( EmailError, "Please enter an email address.");
-                hasError = true;
-            }
-            else if (!IsValidEmailFormat(email))
-            {
-                ShowFieldError(EmailError, "Please enter a valid email address.");
-                hasError = true;
-            }
-            //Username Check
-            if (string.IsNullOrWhiteSpace(username))
-            {
-                ShowFieldError(UsernameError, "Please enter a username.");
-                hasError = true;
-            }
-            else if (username.Length < 6)
-            {
-                ShowFieldError(UsernameError, "Username must be at least 6 characters.");
-                hasError = true;
-            }
-            //Password Check
-            if (string.IsNullOrWhiteSpace(password))
-            {
-                ShowFieldError(PasswordError, "Please enter a password.");
-                hasError = true;
-            }
-            else if (password.Length < 6)
-            {
-                ShowFieldError(PasswordError, "Password must be at least 6 characters.");
-                hasError = true;
-            }
-            //Confirm Password Check
-            if (password != confirmPassword)
-            {
-                ShowFieldError(ConfirmPasswordError, "Passwords do not match.");
-                hasError = true;
-            }
+            // Field validation via shared class
+            var fieldResult = UserValidationRules.ValidateSignUpFields(
+                orgName, email, username, password, confirmPassword);
 
             UpdateRequirements(username, password, confirmPassword);
 
-            if(!hasError)
+            if (!fieldResult.IsValid)
             {
-              
+                ApplyFieldErrors(fieldResult);
+
+            }
+            else
+            {
                 try
                 {
-                    bool canProceed = true;
-
-                    using (SqlConnection conn = new SqlConnection(connectionString))
+                    using (SqlConnection conn = new SqlConnection((Application.Current as App).connectionString))
                     {
                         conn.Open();
 
-                        // Check if org name already exists
-                        if (canProceed)
-                        {
-                            using (SqlCommand checkCmd = new SqlCommand(
-                                "SELECT COUNT(*) FROM [kaharra].[Organizations] WHERE Name = @name", conn))
-                            {
-                                checkCmd.Parameters.AddWithValue("@name", orgName);
-                                if (Convert.ToInt32(checkCmd.ExecuteScalar()) > 0)
-                                {
-                                    ShowFieldError(OrgNameError, "An organization with that name already exists.");
-                                    canProceed = false;
-                                }
-                            }
-                        }
+                        // DB duplicate checks via shared class
+                        var dbResult = UserValidationRules.ValidateSignUpDb(conn, orgName, email, username);
 
-                        // Check if username already exists
-                        if (canProceed)
+                        if (!dbResult.IsValid)
                         {
-                            using (SqlCommand checkCmd = new SqlCommand(
-                                "SELECT COUNT(*) FROM [kaharra].[FishLensUsers] WHERE Username = @user", conn))
-                            {
-                                checkCmd.Parameters.AddWithValue("@user", username);
-                                if (Convert.ToInt32(checkCmd.ExecuteScalar()) > 0)
-                                {
-                                    ShowFieldError(UsernameError, "That username is already taken.");
-                                    canProceed = false;
-                                }
-                            }
-                        }
+                            ApplyFieldErrors(dbResult);
 
-                        // Check if email already exists
-                        if (canProceed)
-                        {
-                            using (SqlCommand checkCmd = new SqlCommand(
-                                "SELECT COUNT(*) FROM [kaharra].[FishLensUsers] WHERE Email = @email", conn))
-                            {
-                                checkCmd.Parameters.AddWithValue("@email", email);
-                                if (Convert.ToInt32(checkCmd.ExecuteScalar()) > 0)
-                                {
-                                    ShowFieldError(EmailError, "That email is already in use.");
-                                    canProceed = false;
-                                }
-                            }
                         }
-
-                        if (canProceed)
+                        else
                         {
                             SendVerificationCode(conn, email);
 
-                            // Cache form data in memory (same session, no security risk)
-                            _pendingOrgName = orgName;
                             _pendingEmail = email;
-                            _pendingUsername = username;
                             _pendingPassword = password;
 
                             SignUpStep.Visibility = Visibility.Collapsed;
@@ -188,15 +105,31 @@ namespace FishLens_App
                 catch (SqlException ex)
                 {
                     Debug.WriteLine("SQL Exception: " + ex.Message);
-                    ShowError("Something went wrong. Please try again.");
+                    ShowFieldError(OrgNameError, "Something went wrong. Please try again.");
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine("Exception: " + ex.Message);
-                    ShowError("An unexpected error occurred. Please try again.");
+                    ShowFieldError(OrgNameError, "An unexpected error occurred. Please try again.");
                 }
             }
         }
+
+
+        private void ApplyFieldErrors(ValidationResult result)
+        {
+            if (result.HasErrorFor("orgName"))
+                ShowFieldError(OrgNameError, result.GetError("orgName"));
+            if (result.HasErrorFor("email"))
+                ShowFieldError(EmailError, result.GetError("email"));
+            if (result.HasErrorFor("username"))
+                ShowFieldError(UsernameError, result.GetError("username"));
+            if (result.HasErrorFor("password"))
+                ShowFieldError(PasswordError, result.GetError("password"));
+            if (result.HasErrorFor("confirmPassword"))
+                ShowFieldError(ConfirmPasswordError, result.GetError("confirmPassword"));
+        }
+
 
 
         private void SendVerificationCode(SqlConnection conn, string email)
