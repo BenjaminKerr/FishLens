@@ -262,7 +262,7 @@ namespace FishLens_App
         // **************************************************
         private void SignOutButtonClick(object sender, RoutedEventArgs e)
         {
-            SigninPage signin = new SigninPage();
+            AuthWindow signin = new AuthWindow();
             signin.Show();
             this.Close();
         }

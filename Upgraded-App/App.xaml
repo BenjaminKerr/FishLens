@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:FishLens_App"
              xmlns:system="clr-namespace:System;assembly=mscorlib"
-             StartupUri="SigninPage.xaml">
+             StartupUri="AuthWindow.xaml">
     <Application.Resources>
         <ResourceDictionary>
             <!-- Merge the default theme so all XAML can resolve theme resources -->
