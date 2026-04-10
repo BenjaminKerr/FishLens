@@ -1,5 +1,7 @@
 ﻿using FishLens_App.Models;
 using System;
+using System.IO;
+using System.Text.Json;
 using System.Windows;
 
 namespace FishLens_App
@@ -20,15 +22,34 @@ namespace FishLens_App
         public bool IsAdmin => CurrentRoleId == 1;
         public bool IsUser => CurrentRoleId == 2;
 
-        // Raised when the user toggles Fast Mode in Settings so MainWindow can restart Python
+        // Raised when the user saves a Fast Mode change in Settings so MainWindow can restart Python
         public static event Action FastModeChanged;
         public static void RaiseFastModeChanged() => FastModeChanged?.Invoke();
 
         protected override void OnStartup(StartupEventArgs e)
         {
-            base.OnStartup(e); // Call the regular startup logic first
+            base.OnStartup(e);
             CheckBoxes = new CheckBoxToggle();
             Configuration = new AppConfiguration();
+
+            // Read persisted settings now so FastMode is correct before Python starts.
+            // Settings.LoadSettings does the same read later, but by then Python may already
+            // have launched with the wrong FISHLENS_FAST_MODE value.
+            try
+            {
+                string appDir = AppDomain.CurrentDomain.BaseDirectory;
+                string configPath = Path.Combine(appDir, "appsettings.json");
+                if (File.Exists(configPath))
+                {
+                    using var stream = File.OpenRead(configPath);
+                    using var doc = JsonDocument.Parse(stream);
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("FastMode", out var fmEl) &&
+                        (fmEl.ValueKind == JsonValueKind.True || fmEl.ValueKind == JsonValueKind.False))
+                        CheckBoxes.FastMode = fmEl.GetBoolean();
+                }
+            }
+            catch { /* non-critical; defaults will be used */ }
         }
     }
 }

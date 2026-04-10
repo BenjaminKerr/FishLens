@@ -118,10 +118,11 @@ namespace FishLens_App
                     ThemeHelper.ApplyHighContrastMode(false);
                 }
                 EnsureYoloProcessRunning();
-                App.FastModeChanged += EnsureYoloProcessRunning;
+                App.FastModeChanged += OnFastModeChanged;
             };
             Closing += (s, e) =>
             {
+                App.FastModeChanged -= OnFastModeChanged;
                 if (_yoloProcess != null && !_yoloProcess.HasExited)
                     try { _yoloProcess.Kill(); } catch { }
             };
@@ -397,20 +398,28 @@ namespace FishLens_App
 
         // **************************************************
         // Function: EnsureYoloProcessRunning
-        // Description: Starts or restarts the Python process (e.g. when Fast Mode changes)
+        // Description: Starts the Python process if it is not already running.
+        //              Does NOT restart due to Fast Mode — that goes through OnFastModeChanged.
         // **************************************************
         private void EnsureYoloProcessRunning()
         {
-            bool fastMode = _checkBoxes?.FastMode ?? false;
-            bool alreadyRunning = _yoloProcess != null && !_yoloProcess.HasExited;
-            if (!alreadyRunning || _yoloFastModeAtStart != fastMode)
-            {
-                if (alreadyRunning)
-                    try { _yoloProcess.Kill(); } catch { }
-
-                _yoloFastModeAtStart = fastMode;
+            if (_yoloProcess == null || _yoloProcess.HasExited)
                 StartYoloProcess();
-            }
+        }
+
+        // **************************************************
+        // Function: OnFastModeChanged
+        // Description: Restarts Python only when the user saves a Fast Mode change in Settings
+        // **************************************************
+        private void OnFastModeChanged()
+        {
+            bool fastMode = _checkBoxes?.FastMode ?? false;
+            if (_yoloFastModeAtStart == fastMode) return; // no actual change, ignore
+
+            if (_yoloProcess != null && !_yoloProcess.HasExited)
+                try { _yoloProcess.Kill(); } catch { }
+
+            StartYoloProcess();
         }
 
         // **************************************************
@@ -419,6 +428,9 @@ namespace FishLens_App
         // **************************************************
         private void StartYoloProcess()
         {
+            // Snapshot FastMode here so _yoloFastModeAtStart is always in sync with the env var we pass.
+            _yoloFastModeAtStart = _checkBoxes?.FastMode ?? false;
+
             string yoloScriptPath = _pathResolver.ResolveYoloScriptPath();
             string pythonPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "venv", "Scripts", "python.exe");
 
@@ -434,7 +446,6 @@ namespace FishLens_App
                 CreateNoWindow = true,
             };
             processInfo.Environment["FISHLENS_FAST_MODE"] = _yoloFastModeAtStart ? "1" : "0";
-
             _yoloReadyTcs = new TaskCompletionSource<bool>();
             _yoloProcess = Process.Start(processInfo);
 

@@ -700,13 +700,13 @@ def finalize_tracks(frameData, vidData, termination_reason):
         disappeared_ids = set(vidData.v_active_tracks.keys()) - vidData.v_current_track_ids 
         for tid in disappeared_ids:
             track_data = vidData.v_active_tracks.pop(tid)
-            track_dict = build_track_summary(tid, track_data, frameData, vidData, frame_width=vidData.v_frame_width)
+            track_dict = build_track_summary(tid, track_data, frameData, vidData)
             if track_dict:
                 vidData.v_finished_tracks.append(track_dict)
 
     elif termination_reason == "forced":
         for tid, track_data in vidData.v_active_tracks.items():
-            track_dict = build_track_summary(tid, track_data, frameData, vidData, frame_width=vidData.v_frame_width)
+            track_dict = build_track_summary(tid, track_data, frameData, vidData)
             if track_dict:
                 vidData.v_finished_tracks.append(track_dict)
 
@@ -715,7 +715,7 @@ def finalize_tracks(frameData, vidData, termination_reason):
 # Function: build_track_summary
 # Description: Helper function for finalizing track data.
 # Notes: N/A
-def build_track_summary(trackId, track_data, frameData, vidData, image_path=None, frame_width=640):
+def build_track_summary(trackId, track_data, frameData, vidData, image_path=None):
     duration_sec = (frameData.f_index - track_data["start_frame"]) / vidData.v_fps
     if duration_sec < 1.0:
         return None
@@ -729,30 +729,30 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     best_conf_pct = best_conf * 100 if best_conf <= 1.0 else best_conf
     
     # Determine direction.
-    # First check entry/exit side: if the fish ended on the same side it entered from
-    # (e.g. swam in from the right, turned around, drifted back out right) it is indecisive
-    # regardless of direction counts. DeepSort dx is always relative to the first position,
-    # so a fish that swims partially back never flips its dx sign — counts alone can't detect this.
-    entry_x = track_data.get("entry_x", frame_width / 2)
-    exit_x = track_data.get("last_x", frame_width / 2)
-    entry_side = "left" if entry_x < frame_width / 2 else "right"
-    exit_side = "left" if exit_x < frame_width / 2 else "right"
+    # Uses net displacement (exit_x - entry_x) cross-checked against per-frame DeepSort counts.
+    # The center-line "left/right side" approach is unreliable because DeepSort's n_init=10 means
+    # entry_x is recorded ~10 frames in — a fast fish may already be past center by then.
+    entry_x = track_data.get("entry_x", vidData.v_frame_width / 2)
+    exit_x = track_data.get("last_x", vidData.v_frame_width / 2)
+    net_dx = exit_x - entry_x  # positive = fish moved right (downstream) overall
+
     directions = track_data["directions"]
     upstream_count = directions.count("upstream")
     downstream_count = directions.count("downstream")
-    if entry_side == exit_side and (upstream_count > 0 or downstream_count > 0):
-        # Fish entered and exited the same side — it turned around at some point.
-        overall_direction = "indecisive"
-    elif upstream_count > downstream_count:
-        overall_direction = "upstream"
+    total_directional = upstream_count + downstream_count
+
+    if total_directional == 0:
+        # Only stationary frames — no directional movement.
+        overall_direction = directions[-1] if directions else "unknown"
     elif downstream_count > upstream_count:
-        overall_direction = "downstream"
-    elif upstream_count > 0 and downstream_count > 0:
-        overall_direction = "indecisive"
-    elif directions:
-        overall_direction = directions[-1]
+        # Majority of frames were downstream; net displacement must also be rightward to confirm.
+        # If net_dx contradicts the frame counts, movement was genuinely ambiguous.
+        overall_direction = "downstream" if net_dx >= 0 else "indecisive"
+    elif upstream_count > downstream_count:
+        overall_direction = "upstream" if net_dx <= 0 else "indecisive"
     else:
-        overall_direction = "unknown"
+        # Equal upstream and downstream frame counts → genuinely ambiguous.
+        overall_direction = "indecisive"
     
     # Handle timestamp with confidence flag
     video_timestamp = track_data.get("video_timestamp") or vidData.v_video_timestamp or "Not detected"
