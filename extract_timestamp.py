@@ -51,30 +51,34 @@ def probe_video_timestamp(cap, first_frame, probe_frames=12, read_frame_fn=None)
     # Rewind so normal processing still starts from frame 0.
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-    parsed = []
-    for probe_frame in candidates:
+    parsed = []  # list of (timestamp_str, confidence_str)
+    for i, probe_frame in enumerate(candidates):
         result = extractTimestamFromFrame(probe_frame, False)
         if result and result[0]:  # result is (timestamp, confidence) tuple
-            parsed.append(result[0])
+            parsed.append(result)
 
     if not parsed:
-        return None
+        return None, None
 
-    # Prefer the most common full timestamp.
-    full_counts = Counter(parsed)
-    most_common_full, full_count = full_counts.most_common(1)[0]
+    # Prefer the most common full timestamp string.
+    ts_counts = Counter(ts for ts, _ in parsed)
+    most_common_full, full_count = ts_counts.most_common(1)[0]
 
-    # If there is no clear full-timestamp winner, stabilize by date part and then choose
-    # the most common timestamp within that date.
+    # If there is no clear full-timestamp winner, stabilize by date part.
     if full_count == 1 and len(parsed) > 1:
-        date_counts = Counter(ts.split(' ')[0] for ts in parsed if ' ' in ts)
+        date_counts = Counter(ts.split(' ')[0] for ts, _ in parsed if ' ' in ts)
         if date_counts:
             best_date = date_counts.most_common(1)[0][0]
-            same_date = [ts for ts in parsed if ts.startswith(best_date + ' ')]
+            same_date = [(ts, conf) for ts, conf in parsed if ts.startswith(best_date + ' ')]
             if same_date:
-                return Counter(same_date).most_common(1)[0][0]
+                winner_ts = Counter(ts for ts, _ in same_date).most_common(1)[0][0]
+                # HIGH if any read of this timestamp was HIGH.
+                winner_conf = "HIGH" if any(c == "HIGH" for ts, c in same_date if ts == winner_ts) else "MEDIUM"
+                return winner_ts, winner_conf
 
-    return most_common_full
+    # Aggregate confidence for the winning timestamp string.
+    winner_conf = "HIGH" if any(c == "HIGH" for ts, c in parsed if ts == most_common_full) else "MEDIUM"
+    return most_common_full, winner_conf
 
 
 # ****************************************************************
@@ -231,25 +235,30 @@ def extractTimestamFromFrame(frame, debug=False):
     try:
         h, w = frame.shape[:2]
         
-        # Focus on bottom-left corner where timestamp appears
-        # Taking bottom 25% of height and left 65% of width
-        regionHeight = int(h * 0.25)
+        # The bottom ~10% is a black letterbox border with no text.
+        # The timestamp OSD sits in the 15% band just above that border.
+        bottomSkip = int(h * 0.10)
+        regionHeight = int(h * 0.15)   # 15% band above the border
         regionWidth = int(w * 0.65)
-        
-        # Extract the timestamp region
-        timestampRegion = frame[h - regionHeight:h, 0:regionWidth]
-        
-       
-        
+
+        # Extract the timestamp region (skip the black border at the very bottom).
+        timestampRegion = frame[h - bottomSkip - regionHeight : h - bottomSkip, 0:regionWidth]
+
+        # Upscale 2× — improves OCR accuracy on small/compressed text.
+        timestampRegion = cv2.resize(
+            timestampRegion,
+            (regionWidth * 2, regionHeight * 2),
+            interpolation=cv2.INTER_CUBIC,
+        )
+
         # Convert to grayscale
         gray = cv2.cvtColor(timestampRegion, cv2.COLOR_BGR2GRAY)
-        
-        # White text on dark background - use binary threshold
-        _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
-        
-        # Optional: Apply slight dilation to thicken text
-        kernel = np.ones((2, 2), np.uint8)
-        processed = cv2.dilate(thresh, kernel, iterations=1)
+
+        # Fixed threshold at 160: OSD text is near-255 white; anything above
+        # 160 is confidently text, everything darker is background.
+        # THRESH_BINARY_INV produces dark text on white directly, which is
+        # what Tesseract expects — no separate bitwise_not needed.
+        _, processed = cv2.threshold(gray, 160, 255, cv2.THRESH_BINARY_INV)
         
         
         # OCR configuration optimized for single-line timestamps

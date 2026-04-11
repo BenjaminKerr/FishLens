@@ -167,6 +167,7 @@ class VideoData:
         self.v_confidence_sum = 0.0
         self.v_confidence_count = 0 
         self.v_video_timestamp = None
+        self.v_probe_confidence = None   # "HIGH" / "MEDIUM" / None — from probe_video_timestamp
         self.v_frame_width = 640
 
 
@@ -459,13 +460,16 @@ def run_video_tracker(video_path, source_video_path=None):
     ret, frame = _video_capture_read(cap)
 
     # Pre-compute a video-level timestamp fallback from early frames.
+    # probe_video_timestamp now returns (timestamp, confidence).
     if ret and frame is not None:
-        vidData.v_video_timestamp = probe_video_timestamp(
+        _probe_ts, _probe_conf = probe_video_timestamp(
             cap,
             frame,
             probe_frames=VIDEO_TIMESTAMP_PROBE_FRAMES,
             read_frame_fn=_video_capture_read
         )
+        vidData.v_video_timestamp = _probe_ts
+        vidData.v_probe_confidence = _probe_conf   # "HIGH" / "MEDIUM" / None
         ret, frame = _video_capture_read(cap)
 
     # Cycle through video frames until end of video
@@ -623,6 +627,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
 
     # Use the tracker's default iou threshold (tuned in the tracker)
     frameData.f_detections = tracker.filterOverlaps(frameData.f_detections)
+
     tracked_objects = tracker.update(frameData.f_detections, frame)
     
     for obj in tracked_objects:
@@ -634,7 +639,13 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
 
         if is_new_track:
             x1_e, y1_e, x2_e, y2_e = obj["bbox"]
-            initial_conf = "LOW" if (vidData.v_video_timestamp and vidData.v_video_timestamp != "Not detected") else None
+            # Use the probe confidence when the probe already gave us a timestamp.
+            # "HIGH" probe → skip per-frame retries; "MEDIUM"/None → keep retrying.
+            _probe_conf_val = getattr(vidData, "v_probe_confidence", None)
+            if vidData.v_video_timestamp and vidData.v_video_timestamp != "Not detected":
+                initial_conf = _probe_conf_val if _probe_conf_val in ("HIGH", "MEDIUM") else "LOW"
+            else:
+                initial_conf = None
             vidData.v_active_tracks[trackId] = {
                 "start_frame": frameData.f_index,
                 "confidences": [],
@@ -647,33 +658,8 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                 "timestamp_attempts": 0
             }
             
-            # Track created; timestamp OCR will be retried for several frames if needed.
-            print(f"  New fish detected (Track {trackId}) at frame {frameData.f_index} - initial ts_conf={initial_conf}")
-
-        # Retry timestamp OCR on early frames of each track until one succeeds.
-        track_data = vidData.v_active_tracks[trackId]
-        current_confidence = track_data.get("timestamp_confidence")
-        current_ts = track_data.get("video_timestamp", "Not detected")
-        
-        # Keep trying to get direct OCR if we only have LOW confidence (from probe) or no timestamp at all
-        if current_confidence in (None, "LOW"):
-            attempts = track_data.get("timestamp_attempts", 0)
-            if attempts < TIMESTAMP_MAX_ATTEMPTS:
-                result = extractTimestamFromFrame(frame, False)
-                track_data["timestamp_attempts"] = attempts + 1
-
-                if result and result[0]:  # result is (timestamp, confidence) tuple
-                    old_ts = current_ts
-                    old_conf = current_confidence
-                    track_data["video_timestamp"] = result[0]
-                    track_data["timestamp_confidence"] = result[1]
-                    print(f"    Track {trackId}: Updated ts from '{old_ts}' ({old_conf}) to '{result[0]}' ({result[1]})")
-                elif track_data["timestamp_attempts"] == TIMESTAMP_MAX_ATTEMPTS and current_confidence is None:
-                    print(f"    Could not extract timestamp after {TIMESTAMP_MAX_ATTEMPTS} attempts")
-                    if SAVE_TIMESTAMP_DEBUG_FRAMES:
-                        debug_frame_path = f"debug_full_frame_track_{trackId}.jpg"
-                        cv2.imwrite(debug_frame_path, frame)
-                        print(f"    Saved full frame to: {debug_frame_path}")
+            # Track created; timestamp comes from probe only.
+            print(f"  New fish detected (Track {trackId}) at frame {frameData.f_index} - ts='{vidData.v_video_timestamp}' conf={initial_conf}")
 
         # Update track data per-frame
         vidData.v_active_tracks[trackId]["confidences"].append(obj["confidence"])
@@ -780,7 +766,7 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     # Handle timestamp with confidence flag
     video_timestamp = track_data.get("video_timestamp") or vidData.v_video_timestamp or "Not detected"
     timestamp_confidence = track_data.get("timestamp_confidence")
-    
+
     # Add * only if timestamp is LOW confidence
     if timestamp_confidence and timestamp_confidence == "LOW":
         video_timestamp = f"{video_timestamp}*"
@@ -798,7 +784,10 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         "species_confidence": "No data",
         "video_timestamp": video_timestamp,
         "timestamp_confidence": timestamp_confidence,
-        "best_frame": vidData.v_active_tracks.get(trackId, {}).get("best_frame") if trackId in vidData.v_active_tracks else None
+        "best_frame": vidData.v_active_tracks.get(trackId, {}).get("best_frame") if trackId in vidData.v_active_tracks else None,
+        # Spatial info forwarded so dedupe_fragmented_tracks can guard against merging two simultaneous fish.
+        "entry_x": track_data.get("entry_x"),
+        "exit_x": track_data.get("last_x"),
     }
 
 
@@ -860,7 +849,51 @@ def dedupe_fragmented_tracks(finished_tracks):
         if not temporal_match:
             return False
 
-        # Prefer merging only when one track is clearly weaker/shorter.
+        # Spatial / ID-split check using interpolated position.
+        #
+        # Problem with comparing overall midpoints: a fish that has already
+        # traversed half the frame has a very different average-x from a fish
+        # just entering — yet those two tracks might co-exist in time as two
+        # _different_ fish.  Comparing midpoints would incorrectly see them
+        # as close and allow a merge.
+        #
+        # Better: estimate where track A actually IS at the moment track B
+        # first appears (linear interpolation along entry_x→exit_x), then
+        # compare that to track B's entry position.
+        #
+        # Two outcomes:
+        #   • separation > 20% of A's traversal → different fish, block merge
+        #   • separation ≤ 20% of A's traversal AND overlap_ratio >= 0.50
+        #       → ID split of the same fish, force merge
+        a_ex = a.get("entry_x")
+        a_lx = a.get("exit_x")
+        b_ex = b.get("entry_x")
+
+        if overlap_ratio >= 0.25 and a_ex is not None and a_lx is not None and b_ex is not None:
+            # Interpolate track A's x position at the start of the overlap.
+            overlap_start = max(a_start, b_start)
+            dur_a = max(0.001, a_end - a_start)
+            frac = max(0.0, min(1.0, (overlap_start - a_start) / dur_a))
+            ax_at_overlap = a_ex + frac * (a_lx - a_ex)
+
+            separation = abs(ax_at_overlap - b_ex)
+            # Scale threshold to track A's actual traversal distance so the
+            # logic works regardless of video resolution.
+            traversal_a = max(abs(a_lx - a_ex), 50.0)
+            spatial_threshold = traversal_a * 0.20
+
+            if separation > spatial_threshold:
+                # Tracks are spatially far apart at the time they overlap —
+                # these are two different fish onscreen simultaneously.
+                return False
+
+            if overlap_ratio >= 0.50:
+                # Very high temporal overlap AND spatially co-located: the
+                # tracker switched IDs on the same fish mid-traverse.
+                return True
+
+        # Fall back to quality gate for gap-only or low-overlap cases, or
+        # when spatial data is unavailable.
         pa = _pct(a)
         pb = _pct(b)
         conf_gap = abs(pa - pb)

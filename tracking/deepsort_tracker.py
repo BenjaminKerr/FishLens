@@ -20,8 +20,23 @@ class DeepSortTracker:
     MIN_MOVE_THRESHOLD = 5
     MAX_TRACK_HISTORY = 50
     MIN_FRAMES_FOR_SUMMARY = 10
-    DEFAULT_NMS_IOU_THRESHOLD = 0.7
+    DEFAULT_NMS_IOU_THRESHOLD = 0.85
     MIN_POSITIONS_FOR_DIRECTION = 2
+    # A single fish should never occupy more than ~65% of the frame height
+    # while also being nearly square. A diagonally-swimming fish will produce
+    # a taller axis-aligned box than a horizontal fish, but it will still be
+    # wider than it is tall (fish are long animals). Two vertically stacked
+    # fish collapse into a box that is both tall (>65% frame height) AND
+    # squarish (width/height < 2.5). Requiring both conditions avoids
+    # discarding legitimate diagonal-swimming detections.
+    MAX_BOX_HEIGHT_FRACTION = 0.65
+    MAX_BOX_MERGED_ASPECT_RATIO = 2.5  # width/height; below this = suspiciously square
+    # Lowered from 10→4: fish pass through quickly; waiting 10 confirmed frames
+    # before track activation causes many short-duration fish to be missed entirely.
+    DEEPSORT_N_INIT = 4
+    # Lowered from 50→30: shorter retention window reduces ghost tracks from
+    # slow-moving background objects while still covering brief occlusions.
+    DEEPSORT_MAX_AGE = 30
     
     # ******************************
     # Function: __init__
@@ -30,8 +45,8 @@ class DeepSortTracker:
 
     def __init__(self) -> None:
         self.tracker = DeepSort(
-            max_age=50,
-            n_init=10,
+            max_age=self.DEEPSORT_MAX_AGE,
+            n_init=self.DEEPSORT_N_INIT,
             max_iou_distance=0.6,
             max_cosine_distance=0.4
         )
@@ -115,11 +130,26 @@ class DeepSortTracker:
         frame: np.ndarray
     ) -> List[Dict[str, Any]]:
         
-        # Filter tiny boxes and low-confidence detections
+        h, w = frame.shape[:2]
+        max_box_h = h * self.MAX_BOX_HEIGHT_FRACTION
+
+        # Filter tiny boxes, low-confidence detections, and oversized merged boxes.
+        # A merged double-fish box is both tall (>65% frame height) AND squarish
+        # (width/height < 2.5). A diagonal single fish may be tall but will still
+        # be clearly wider than it is tall, so it passes the aspect ratio check.
+        def _is_merged(d):
+            bh = d[3] - d[1]
+            bw = d[2] - d[0]
+            if bh <= max_box_h:
+                return False
+            aspect = bw / max(bh, 1)
+            return aspect < self.MAX_BOX_MERGED_ASPECT_RATIO
+
         detections = [
-            d for d in detections 
-            if (d[2] - d[0]) * (d[3] - d[1]) > self.MIN_BOX_AREA 
+            d for d in detections
+            if (d[2] - d[0]) * (d[3] - d[1]) > self.MIN_BOX_AREA
             and d[4] > self.MIN_CONFIDENCE
+            and not _is_merged(d)
         ]
 
         # Convert to DeepSORT format (bbox, conf, cls)
