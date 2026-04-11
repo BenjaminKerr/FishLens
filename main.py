@@ -877,15 +877,24 @@ def dedupe_fragmented_tracks(finished_tracks):
             ax_at_overlap = a_ex + frac * (a_lx - a_ex)
 
             separation = abs(ax_at_overlap - b_ex)
-            # Scale threshold to track A's actual traversal distance so the
-            # logic works regardless of video resolution.
-            traversal_a = max(abs(a_lx - a_ex), 50.0)
-            spatial_threshold = traversal_a * 0.20
-
-            if separation > spatial_threshold:
-                # Tracks are spatially far apart at the time they overlap —
-                # these are two different fish onscreen simultaneously.
-                return False
+            raw_traversal = abs(a_lx - a_ex)
+            # Only apply the spatial guard when track A actually traverses a
+            # meaningful distance. For stationary or slow fish the traversal is
+            # near zero, so the 50-pixel floor would make the threshold absurdly
+            # tight (10 px) and block legitimate ID-split merges due to box jitter.
+            if raw_traversal >= 100:
+                spatial_threshold = raw_traversal * 0.20
+                if separation > spatial_threshold:
+                    # Before blocking, check for a dramatic confidence gap — a very
+                    # high-confidence track and a very low-confidence track at the same
+                    # position are almost always the same fish re-detected with a new ID.
+                    pa = _pct(a)
+                    pb = _pct(b)
+                    if abs(pa - pb) >= 30.0:
+                        return True   # forced merge: confidence gap overrides spatial guard
+                    # Tracks are spatially far apart at the time they overlap —
+                    # these are two different fish onscreen simultaneously.
+                    return False
 
             if overlap_ratio >= 0.50:
                 # Very high temporal overlap AND spatially co-located: the

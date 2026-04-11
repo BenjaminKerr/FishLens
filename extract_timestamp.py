@@ -166,10 +166,11 @@ def parseTimestamp(text):
     compact_text = text.replace(' ', '')
 
     # Match full string only (prevents partial matches like ...:07:60 becoming ...:07)
+    # Seconds allow 2-3 digits to tolerate a trailing OCR noise character (e.g. 390 -> 39).
     patterns = [
-        r'^(20\d{2})[/\-](\d{1,2})[/\-](\d{1,2})(\d{1,2}):(\d{2,3}):(\d{2})$',
+        r'^(20\d{2})[/\-](\d{1,2})[/\-](\d{1,2})(\d{1,2}):(\d{2,3}):(\d{2,3})$',
         r'^(20\d{2})[/\-](\d{1,2})[/\-](\d{1,2})(\d{1,2}):(\d{2,3})$',
-        r'^(20\d{2})[/\-](\d{1,2})[/\-](\d{1,2})\s*(\d{1,2}):(\d{2,3}):(\d{2})$',
+        r'^(20\d{2})[/\-](\d{1,2})[/\-](\d{1,2})\s*(\d{1,2}):(\d{2,3}):(\d{2,3})$',
         r'^(20\d{2})[/\-](\d{1,2})[/\-](\d{1,2})\s*(\d{1,2}):(\d{2,3})$',
     ]
     
@@ -207,7 +208,13 @@ def parseTimestamp(text):
                 # Common OCR mistake: 4 read as 9  
                 elif 90 <= minute <= 99:
                     minute = minute - 50
-            
+
+            # Fix 3-digit seconds: trailing noise character appended by OCR (e.g. 390 -> 39).
+            if second >= 100:
+                second_str = str(second)
+                if len(second_str) == 3:
+                    second = int(second_str[0:2])
+
             # Fix occasional OCR seconds errors like 60-69 -> 00-09.
             if second >= 60 and 60 <= second <= 69:
                 second = second - 60
@@ -235,9 +242,9 @@ def extractTimestamFromFrame(frame, debug=False):
     try:
         h, w = frame.shape[:2]
         
-        # The bottom ~10% is a black letterbox border with no text.
+        # The bottom ~8% is a black letterbox border with no text.
         # The timestamp OSD sits in the 15% band just above that border.
-        bottomSkip = int(h * 0.10)
+        bottomSkip = int(h * 0.08)
         regionHeight = int(h * 0.15)   # 15% band above the border
         regionWidth = int(w * 0.65)
 
@@ -259,8 +266,7 @@ def extractTimestamFromFrame(frame, debug=False):
         # THRESH_BINARY_INV produces dark text on white directly, which is
         # what Tesseract expects — no separate bitwise_not needed.
         _, processed = cv2.threshold(gray, 160, 255, cv2.THRESH_BINARY_INV)
-        
-        
+
         # OCR configuration optimized for single-line timestamps
         # Whitelist only characters that appear in timestamps
         custom_config = r'--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789/:- '
@@ -271,12 +277,18 @@ def extractTimestamFromFrame(frame, debug=False):
         
         if debug:
             print(f"  OCR raw output: '{text}'")
-        
+
         if len(text) < 15:  # Timestamp should be at least 15 chars
+            if debug:
+                print(f"  OCR text too short ({len(text)} chars), skipping parse")
             return None, None
         
         # Parse the timestamp - gets (timestamp, confidence) tuple
         result = _parseTimestampWithConfidence(text)
+
+        if debug and not (result and result[0]):
+            print(f"  OCR text passed length check but parseTimestamp returned None")
+            print(f"  Cleaned text tried: '{re.sub(chr(32)+r'+', ' ', re.sub(r'[^0-9/\\-:\\s]', '', text).strip())}'")
         
         if result and result[0] and debug:
             print(f"  Parsed timestamp: {result[0]} (confidence: {result[1]})")

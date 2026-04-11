@@ -25,6 +25,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace FishLens_App
 {
@@ -76,6 +77,14 @@ namespace FishLens_App
         private string _currentVideoStatus = string.Empty;
         private ProgressDialog _activeProgressDialog;
         private bool _processingCancelled = false;
+
+        // Video player state
+        private DispatcherTimer _videoTimer;
+        private bool _isDraggingScrubber = false;
+        private bool _isPlaying = false;
+        private double _fishStartSec = -1;
+        private double _fishEndSec = -1;
+        private int _suppressTimerTicks = 0;
 
         #endregion
 
@@ -577,6 +586,7 @@ namespace FishLens_App
                 File.WriteAllText(configPath, JsonSerializer.Serialize(dict, options));
             }
             catch { /* non-critical */ }
+            RefreshSessionOverview();
         }
 
         // **************************************************
@@ -809,6 +819,7 @@ namespace FishLens_App
 
                     // Step 4: create sidebar buttons
                     CreateVideoButtonsList(videoDataList);
+                    RefreshSessionOverview();
 
                     // Step 5: auto-load first video into player
                     if (videoDataList.Count > 0)
@@ -1281,29 +1292,53 @@ namespace FishLens_App
         private void BuildRunSummarySheet(ClosedXML.Excel.IXLWorksheet sheet, string[] fishLines, string[] noFishLines)
         {
             int upstream = 0, downstream = 0, indecisive = 0;
+            int chinookUp = 0, chinookDown = 0;
+            int omykissUp = 0, omykissDown = 0;
+
             // fishLines[0] is header — skip it
             for (int i = 1; i < fishLines.Length; i++)
             {
                 var cols = fishLines[i].Split(',');
-                string dir = cols.Length > 8 ? cols[8].Trim().ToLower() : string.Empty;
-                if (dir == "upstream") upstream++;
+                string dir     = cols.Length > 8 ? cols[8].Trim().ToLower() : string.Empty;
+                string species = cols.Length > 9 ? cols[9].Trim().ToLower() : string.Empty;
+
+                if (dir == "upstream")        upstream++;
                 else if (dir == "downstream") downstream++;
-                else indecisive++;
+                else                          indecisive++;
+
+                bool isChinook = species.Contains("chinook");
+                bool isOmykiss = species.Contains("omykiss");
+
+                if (dir == "upstream")
+                {
+                    if (isChinook) chinookUp++;
+                    else if (isOmykiss) omykissUp++;
+                }
+                else if (dir == "downstream")
+                {
+                    if (isChinook) chinookDown++;
+                    else if (isOmykiss) omykissDown++;
+                }
             }
-            int totalFish = fishLines.Length > 1 ? fishLines.Length - 1 : 0;
+
+            int totalFish   = fishLines.Length > 1 ? fishLines.Length - 1 : 0;
             int totalNoFish = noFishLines.Length > 1 ? noFishLines.Length - 1 : 0;
-            int net = upstream - downstream;
+            int net         = upstream - downstream;
+            int chinookNet  = chinookUp - chinookDown;
+            int omykissNet  = omykissUp - omykissDown;
 
             var rows = new[]
             {
-                new[] { "Metric", "Value" },
-                new[] { "Total Fish Detected",    totalFish.ToString() },
-                new[] { "Total No-Fish Videos",   totalNoFish.ToString() },
-                new[] { "Upstream",               upstream.ToString() },
-                new[] { "Downstream",              downstream.ToString() },
-                new[] { "Indecisive",              indecisive.ToString() },
-                new[] { "Net Upstream Count",      net.ToString() },
-                new[] { "Export Date",             DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") },
+                new[] { "Metric",                           "Value" },
+                new[] { "Total Fish Detected",              totalFish.ToString() },
+                new[] { "Total No-Fish Videos",             totalNoFish.ToString() },
+                new[] { "Upstream",                         upstream.ToString() },
+                new[] { "Downstream",                       downstream.ToString() },
+                new[] { "Indecisive",                       indecisive.ToString() },
+                new[] { "Chinook Net Upstream",             chinookNet.ToString() },
+                new[] { "Omykiss Net Upstream",             omykissNet.ToString() },
+                new[] { "Net Upstream Count (All Species)", net.ToString() },
+                new[] { "Export Date",                      DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") },
             };
 
             for (int r = 0; r < rows.Length; r++)
@@ -1315,8 +1350,10 @@ namespace FishLens_App
             // Header styling
             sheet.Row(1).Style.Font.Bold = true;
             sheet.Row(1).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightBlue;
-            // Highlight net count row
+            // Highlight the three net rows
             sheet.Row(7).Style.Font.Bold = true;
+            sheet.Row(8).Style.Font.Bold = true;
+            sheet.Row(9).Style.Font.Bold = true;
             sheet.Columns().AdjustToContents();
         }
 
@@ -1378,6 +1415,42 @@ namespace FishLens_App
         }
 
         // **************************************************
+        // Function: RefreshSessionOverview
+        // Description: Recalculates and displays net upstream fish count from current CSV
+        // **************************************************
+        private void RefreshSessionOverview()
+        {
+            string location = locationDropdown.SelectedItem as string ?? "--";
+            sessionLocationText.Text = $"Location: {location}";
+
+            string csvPath = _pathResolver.ResolveCsvScriptPath();
+            if (!File.Exists(csvPath))
+            {
+                sessionNetUpstreamText.Text = "Net Upstream: --";
+                return;
+            }
+
+            int upstreamCount = 0;
+            int downstreamCount = 0;
+            var lines = File.ReadAllLines(csvPath);
+            for (int i = 1; i < lines.Length; i++)
+            {
+                var cols = lines[i].Split(',');
+                if (cols.Length <= 8) continue;
+                // Filter to the currently selected location (col 12)
+                if (cols.Length > 12 && !string.Equals(cols[12].Trim(), location, StringComparison.OrdinalIgnoreCase)) continue;
+                string likelyClass = cols[3].Trim().ToLower();
+                if (likelyClass == "bird" || likelyClass == "no_fish" || likelyClass == "n/a") continue;
+                string direction = cols[8].Trim().ToLower();
+                if (direction == "upstream") upstreamCount++;
+                else if (direction == "downstream") downstreamCount++;
+            }
+
+            int net = upstreamCount - downstreamCount;
+            sessionNetUpstreamText.Text = $"Net Upstream: {net}";
+        }
+
+        // **************************************************
         // Function: SaveButtonClick
         // Description: Saves user modifications to CSV file
         // **************************************************
@@ -1401,6 +1474,7 @@ namespace FishLens_App
                 else
                 {
                     UpdateCsvFile(csvPath, currentVideoName);
+                    RefreshSessionOverview();
 
                     MessageBox.Show("Changes saved successfully!", "Save Successful",
                         MessageBoxButton.OK, MessageBoxImage.Information);
@@ -1615,14 +1689,15 @@ namespace FishLens_App
             Button clickedButton = (Button)sender;
             string videoPath = clickedButton.Tag.ToString();
 
-            LoadVideoInPlayer(videoPath);
-
+            // Load data first so fish markers are set before MediaOpened fires
             string videoFileName = Path.GetFileName(videoPath);
             var data = GetData(videoFileName);
             if (data != null)
             {
                 DisplayDataInUi(videoFileName);
             }
+
+            LoadVideoInPlayer(videoPath);
         }
 
 
@@ -1632,8 +1707,253 @@ namespace FishLens_App
         // **************************************************
         private void LoadVideoInPlayer(string videoPath)
         {
+            // Stop and reset timer before loading new video
+            _videoTimer?.Stop();
+            _isPlaying = false;
+
             videoPlayer.Source = new Uri(videoPath);
             videoPlayer.Play();
+            _isPlaying = true;
+            playPauseButton.Content = "⏸";
+
+            // Show controls, hide placeholder
+            placeholderPanel.Visibility = Visibility.Collapsed;
+            videoControls.Visibility = Visibility.Visible;
+
+            // Reset scrubber and time only — do NOT reset _fishStartSec/_fishEndSec
+            // because DisplayDataInUi sets them before LoadVideoInPlayer is called,
+            // and MediaOpened needs them to draw the markers.
+            videoScrubber.Value = 0;
+            videoCurrentTimeText.Text = "0:00";
+            videoTotalTimeText.Text = "0:00";
+        }
+
+        // **************************************************
+        // Function: VideoPlayer_MediaOpened
+        // Description: Called when MediaElement has opened and knows the duration
+        // **************************************************
+        private void VideoPlayer_MediaOpened(object sender, RoutedEventArgs e)
+        {
+            // Set total time label
+            if (videoPlayer.NaturalDuration.HasTimeSpan)
+                videoTotalTimeText.Text = FormatTime(videoPlayer.NaturalDuration.TimeSpan);
+
+            // Start the position-update timer
+            if (_videoTimer == null)
+            {
+                _videoTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+                _videoTimer.Tick += VideoTimer_Tick;
+            }
+            _videoTimer.Start();
+            UpdateFishMarkers();
+        }
+
+        // **************************************************
+        // Function: VideoPlayer_MediaEnded
+        // Description: Resets controls when video finishes
+        // **************************************************
+        private void VideoPlayer_MediaEnded(object sender, RoutedEventArgs e)
+        {
+            _videoTimer?.Stop();
+            _isPlaying = false;
+            playPauseButton.Content = "▶";
+            videoPlayer.Stop();
+            videoScrubber.Value = 0;
+            videoCurrentTimeText.Text = "0:00";
+        }
+
+        // **************************************************
+        // Function: VideoTimer_Tick
+        // Description: Updates scrubber and time readout while playing
+        // **************************************************
+        private void VideoTimer_Tick(object sender, EventArgs e)
+        {
+            if (_isDraggingScrubber) return;
+            // Suppress ticks briefly after a seek so the timer doesn't jump back to pre-seek position
+            if (_suppressTimerTicks > 0) { _suppressTimerTicks--; return; }
+            if (!videoPlayer.NaturalDuration.HasTimeSpan) return;
+
+            double total = videoPlayer.NaturalDuration.TimeSpan.TotalSeconds;
+            double pos   = videoPlayer.Position.TotalSeconds;
+            if (total > 0)
+                videoScrubber.Value = pos / total;
+
+            videoCurrentTimeText.Text = FormatTime(videoPlayer.Position);
+        }
+
+        // **************************************************
+        // Function: PlayPauseButton_Click
+        // Description: Toggles play/pause on the video
+        // **************************************************
+        private void PlayPauseButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isPlaying)
+            {
+                videoPlayer.Pause();
+                _isPlaying = false;
+                playPauseButton.Content = "▶";
+            }
+            else
+            {
+                videoPlayer.Play();
+                _isPlaying = true;
+                playPauseButton.Content = "⏸";
+            }
+        }
+
+        // **************************************************
+        // Function: SkipBackButton_Click / SkipForwardButton_Click
+        // Description: Skip video position by ±1 second
+        // **************************************************
+        private void SkipBackButton_Click(object sender, RoutedEventArgs e) => SkipSeconds(-1.0);
+        private void SkipForwardButton_Click(object sender, RoutedEventArgs e) => SkipSeconds(1.0);
+
+        private void SkipSeconds(double seconds)
+        {
+            if (!videoPlayer.NaturalDuration.HasTimeSpan) return;
+            double total = videoPlayer.NaturalDuration.TimeSpan.TotalSeconds;
+            double newPos = Math.Max(0.0, Math.Min(total, videoPlayer.Position.TotalSeconds + seconds));
+            videoPlayer.Position = TimeSpan.FromSeconds(newPos);
+            videoScrubber.Value = total > 0 ? newPos / total : 0;
+            videoCurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(newPos));
+            _suppressTimerTicks = 3;
+        }
+
+        // **************************************************
+        // Function: Window_PreviewKeyDown
+        // Description: Space = play/pause, Left/Right arrow = skip ±1s.
+        //              Only active when video controls are visible.
+        // **************************************************
+        private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (videoControls.Visibility != Visibility.Visible) return;
+
+            switch (e.Key)
+            {
+                case System.Windows.Input.Key.Space:
+                    PlayPauseButton_Click(sender, e);
+                    e.Handled = true;
+                    break;
+                case System.Windows.Input.Key.Left:
+                    SkipSeconds(-1.0);
+                    e.Handled = true;
+                    break;
+                case System.Windows.Input.Key.Right:
+                    SkipSeconds(1.0);
+                    e.Handled = true;
+                    break;
+            }
+        }
+
+        // **************************************************
+        // Function: VideoScrubber_PreviewMouseDown/Up
+        // Description: Pauses timer updates while user drags the scrubber
+        // **************************************************
+        private void VideoScrubber_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            _isDraggingScrubber = true;
+            if (_isPlaying) videoPlayer.Pause();
+            SeekToMousePosition(e);
+            e.Handled = true;
+        }
+
+        private void VideoScrubber_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            if (!_isDraggingScrubber || e.LeftButton != System.Windows.Input.MouseButtonState.Pressed) return;
+            SeekToMousePosition(e);
+        }
+
+        private void VideoScrubber_PreviewMouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (!_isDraggingScrubber) return;
+            SeekToMousePosition(e);
+            _isDraggingScrubber = false;
+            _suppressTimerTicks = 3;
+            if (_isPlaying) videoPlayer.Play();
+            e.Handled = true;
+        }
+
+        private void SeekToMousePosition(System.Windows.Input.MouseEventArgs e)
+        {
+            if (!videoPlayer.NaturalDuration.HasTimeSpan) return;
+            double x = e.GetPosition(videoScrubber).X;
+            double w = videoScrubber.ActualWidth;
+            const double thumbHalf = 7.0; // custom thumb is 14px wide
+            double trackW = Math.Max(1.0, w - 2 * thumbHalf);
+            double ratio = Math.Max(0.0, Math.Min(1.0, (x - thumbHalf) / trackW));
+            videoScrubber.Value = ratio;
+            double total = videoPlayer.NaturalDuration.TimeSpan.TotalSeconds;
+            videoPlayer.Position = TimeSpan.FromSeconds(ratio * total);
+            videoCurrentTimeText.Text = FormatTime(videoPlayer.Position);
+        }
+
+        // **************************************************
+        // Function: VideoScrubber_ValueChanged
+        // Description: Seeks when user clicks a new position on the scrubber
+        // **************************************************
+        private void VideoScrubber_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (!_isDraggingScrubber) return;
+            if (!videoPlayer.NaturalDuration.HasTimeSpan) return;
+
+            double total = videoPlayer.NaturalDuration.TimeSpan.TotalSeconds;
+            videoPlayer.Position = TimeSpan.FromSeconds(videoScrubber.Value * total);
+            videoCurrentTimeText.Text = FormatTime(videoPlayer.Position);
+        }
+
+        // **************************************************
+        // Function: FormatTime
+        // Description: Formats a TimeSpan as m:ss
+        // **************************************************
+        private static string FormatTime(TimeSpan t)
+        {
+            return $"{(int)t.TotalMinutes}:{t.Seconds:D2}";
+        }
+
+        // **************************************************
+        // Function: UpdateFishMarkers
+        // Description: Draws a teal range bar + fish emoji over the scrubber.
+        //              The canvas and rectangle live inside the Slider's ControlTemplate;
+        //              access them via Template.FindName after the template is applied.
+        // **************************************************
+        private void UpdateFishMarkers()
+        {
+            if (_fishStartSec < 0 || _fishEndSec < 0) return;
+            if (!videoPlayer.NaturalDuration.HasTimeSpan) return;
+            double total = videoPlayer.NaturalDuration.TimeSpan.TotalSeconds;
+            if (total <= 0) return;
+
+            var canvas   = videoScrubber.Template?.FindName("fishMarkersCanvas", videoScrubber) as Canvas;
+            var rangeBar = videoScrubber.Template?.FindName("fishRangeBar",      videoScrubber) as System.Windows.Shapes.Rectangle;
+            if (canvas == null || rangeBar == null)
+            {
+                Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(UpdateFishMarkers));
+                return;
+            }
+
+            double w = canvas.ActualWidth;
+            if (w < 10)
+            {
+                Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(UpdateFishMarkers));
+                return;
+            }
+
+            // Custom thumb is 14px wide — track usable width is inset 7px on each side.
+            const double thumbHalf = 7.0;
+            double trackW = Math.Max(1.0, w - 2 * thumbHalf);
+            double startX = thumbHalf + (_fishStartSec / total) * trackW;
+            double endX   = thumbHalf + (_fishEndSec   / total) * trackW;
+            double barW   = Math.Max(4.0, endX - startX);
+
+            rangeBar.Width = barW;
+            Canvas.SetLeft(rangeBar, startX);
+            rangeBar.Visibility = Visibility.Visible;
+
+            // Emoji: positioned via Margin.Left in its own row above the slider.
+            double midX     = startX + barW / 2.0;
+            double emojiLeft = Math.Max(thumbHalf, Math.Min(w - thumbHalf - 14, midX - 7));
+            fishEmojiMarker.Margin     = new Thickness(emojiLeft, 0, 0, 2);
+            fishEmojiMarker.Visibility = barW >= 20 ? Visibility.Visible : Visibility.Collapsed;
         }
 
         // **************************************************
@@ -1660,6 +1980,25 @@ namespace FishLens_App
             travelDirection.Text = CapitalizeFirstLetter(vid.Direction);
             fishSpecies.Text = CapitalizeFirstLetter(vid.Species);
             fishSpeciesConfidence.Text = vid.SpeciesConfidence > 0 ? $"{vid.SpeciesConfidence * 100:F2}%" : "--";
+
+            // Update fish scrubber markers
+            var _rangeBar = videoScrubber.Template?.FindName("fishRangeBar", videoScrubber) as System.Windows.Shapes.Rectangle;
+            if (_rangeBar != null) _rangeBar.Visibility = Visibility.Collapsed;
+            fishEmojiMarker.Visibility = Visibility.Collapsed;
+            if (double.TryParse(vid.StartTime, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out double fStart) &&
+                double.TryParse(vid.EndTime, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out double fEnd))
+            {
+                _fishStartSec = fStart;
+                _fishEndSec = fEnd;
+                UpdateFishMarkers();
+            }
+            else
+            {
+                _fishStartSec = -1;
+                _fishEndSec = -1;
+            }
         }
 
         // **************************************************
