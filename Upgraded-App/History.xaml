@@ -168,12 +168,7 @@
                                   Padding="12,8"
                                   FontSize="{DynamicResource BaseFontSize}"
                                   Margin="0,0,0,20"
-                                  SelectedIndex="0">
-                            <ComboBoxItem Content="All Locations"/>
-                            <ComboBoxItem Content="Keno Dam"/>
-                            <ComboBoxItem Content="Link River Dam"/>
-                            <ComboBoxItem Content="Spencer Creek"/>
-                        </ComboBox>
+                                  SelectedIndex="0"/>
 
                         <!-- Group By removed per user request -->
 

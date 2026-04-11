@@ -193,7 +193,9 @@ namespace FishLens_App
                     ErrorBox = _checkBoxes.ErrorBox,
                     FastMode = _checkBoxes.FastMode,
                     HighContrastMode = _config.HighContrastMode,
-                    LargeText = _config.LargeText
+                    LargeText = _config.LargeText,
+                    ActiveLocation = _config.ActiveLocation,
+                    Locations = _config.Locations
                 };
 
                 string projectRoot = _pathResolver.ResolveProjectRoot();
@@ -210,6 +212,12 @@ namespace FishLens_App
                 // Restart Python only if Fast Mode actually changed
                 if (_checkBoxes.FastMode != prevFastMode)
                     App.RaiseFastModeChanged();
+
+                // Sync active location to App and always notify MainWindow so dropdown refreshes
+                var appInst = Application.Current as App;
+                if (appInst != null)
+                    appInst.ActiveLocation = _config.ActiveLocation;
+                App.RaiseLocationChanged();
             }
             catch (Exception ex)
             {
@@ -233,6 +241,53 @@ namespace FishLens_App
             if (!_loadingSettings)
                 _checkBoxes.FastMode = enableFastMode.IsChecked ?? false;
         }
+
+        private void AddLocation_Click(object sender, RoutedEventArgs e)
+        {
+            string name = newLocationName.Text.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                MessageBox.Show("Please enter a location name.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // Prevent duplicates (case-insensitive)
+            if (_config.Locations.Any(l => string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase)))
+            {
+                MessageBox.Show("A location with that name already exists.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string direction = (newLocationDirection.SelectedIndex == 0) ? "left" : "right";
+            _config.Locations.Add(new LocationEntry { Name = name, UpstreamDirection = direction });
+            newLocationName.Text = string.Empty;
+            newLocationDirection.SelectedIndex = 0;
+            RefreshLocationsPanel();
+        }
+
+        private void DeleteLocation_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is string locName)
+            {
+                var entry = _config.Locations.FirstOrDefault(l => l.Name == locName);
+                if (entry != null)
+                {
+                    _config.Locations.Remove(entry);
+
+                    // If the deleted location was active, reset to Unknown (or first remaining)
+                    var app = Application.Current as App;
+                    if (app != null && app.ActiveLocation == locName)
+                    {
+                        string newActive = _config.Locations.FirstOrDefault()?.Name ?? "Unknown";
+                        app.ActiveLocation = newActive;
+                        _config.ActiveLocation = newActive;
+                    }
+
+                    RefreshLocationsPanel();
+                }
+            }
+        }
+
         #endregion
 
         #region Private Methods
@@ -305,6 +360,8 @@ namespace FishLens_App
                 ManageUsersText.Visibility = Visibility.Collapsed;
                 CreateUserCard.Visibility = Visibility.Collapsed;
                 CreateUserText.Visibility = Visibility.Collapsed;
+                LocationsCard.Visibility = Visibility.Collapsed;
+                LocationsText.Visibility = Visibility.Collapsed;
             }
         }
 
@@ -587,6 +644,26 @@ namespace FishLens_App
                     _checkBoxes.FastMode = fmEl.GetBoolean();
                     enableFastMode.IsChecked = _checkBoxes.FastMode;
                 }
+
+                if (root.TryGetProperty("ActiveLocation", out var alEl) && alEl.ValueKind == JsonValueKind.String)
+                {
+                    _config.ActiveLocation = alEl.GetString() ?? "Unknown";
+                }
+
+                if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == JsonValueKind.Array)
+                {
+                    var locs = new List<LocationEntry>();
+                    foreach (var locEl in locsEl.EnumerateArray())
+                    {
+                        string locName = locEl.TryGetProperty("Name", out var nEl) ? nEl.GetString() ?? "Unknown" : "Unknown";
+                        string locDir = locEl.TryGetProperty("UpstreamDirection", out var dEl) ? dEl.GetString() ?? "left" : "left";
+                        locs.Add(new LocationEntry { Name = locName, UpstreamDirection = locDir });
+                    }
+                    if (locs.Count > 0)
+                        _config.Locations = locs;
+                }
+
+                RefreshLocationsPanel();
             }
             catch (Exception ex)
             {
@@ -596,6 +673,60 @@ namespace FishLens_App
             finally
             {
                 _loadingSettings = false;
+            }
+        }
+
+        private void RefreshLocationsPanel()
+        {
+            if (locationsListPanel == null) return;
+            locationsListPanel.Children.Clear();
+
+            foreach (var loc in _config.Locations)
+            {
+                var row = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                var nameBlock = new TextBlock
+                {
+                    Text = loc.Name,
+                    FontSize = (double)Application.Current.Resources["BaseFontSize"],
+                    Foreground = (System.Windows.Media.Brush)Application.Current.Resources["PrimaryText"],
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                Grid.SetColumn(nameBlock, 0);
+
+                string dirLabel = loc.UpstreamDirection == "right" ? "Upstream: Right" : "Upstream: Left";
+                var dirBlock = new TextBlock
+                {
+                    Text = dirLabel,
+                    FontSize = (double)Application.Current.Resources["BaseFontSize"],
+                    Foreground = (System.Windows.Media.Brush)Application.Current.Resources["SecondaryText"],
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(12, 0, 12, 0)
+                };
+                Grid.SetColumn(dirBlock, 1);
+
+                var deleteBtn = new Button
+                {
+                    Content = "Remove",
+                    Tag = loc.Name,
+                    Height = 28,
+                    Padding = new Thickness(10, 0, 10, 0),
+                    FontSize = (double)Application.Current.Resources["BaseFontSize"],
+                    Background = System.Windows.Media.Brushes.IndianRed,
+                    Foreground = System.Windows.Media.Brushes.White,
+                    BorderThickness = new Thickness(0),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                deleteBtn.Click += DeleteLocation_Click;
+                Grid.SetColumn(deleteBtn, 2);
+
+                row.Children.Add(nameBlock);
+                row.Children.Add(dirBlock);
+                row.Children.Add(deleteBtn);
+                locationsListPanel.Children.Add(row);
             }
         }
 

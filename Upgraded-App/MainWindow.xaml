@@ -135,6 +135,7 @@ Height="70">
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
@@ -147,9 +148,24 @@ Height="70">
                     </TextBlock>
                 </StackPanel>
 
+                <!-- Location Selector -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,15,0">
+                    <TextBlock Text="Location:" 
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <ComboBox x:Name="locationDropdown"
+                              Width="160"
+                              Height="36"
+                              FontSize="{DynamicResource BaseFontSize}"
+                              VerticalContentAlignment="Center"
+                              SelectionChanged="LocationDropdown_SelectionChanged"/>
+                </StackPanel>
+
                 <!-- Export Button (initially hidden) -->
                 <Button Name="exportData" 
-                        Grid.Column="1"
+                        Grid.Column="2"
                         Click="ExportDataClick" 
                         VerticalAlignment="Center"
                         Padding="20,12" 
@@ -188,7 +204,7 @@ Height="70">
                 </Button>
 
                 <Button Name="openFolder"
-                    Grid.Column="2"
+                    Grid.Column="3"
                     Click="OpenFolderClick" 
                     VerticalAlignment="Center"
                     Padding="20,12" 
@@ -224,7 +240,7 @@ Height="70">
                     📁 Choose Video Folder
                 </Button>
                 <Button Name="SignOutButton"
-        Grid.Column="3"
+        Grid.Column="4"
         Click="SignOutButtonClick"
         VerticalAlignment="Center"
         Padding="30,12"
@@ -314,6 +330,11 @@ Height="70">
                                            Foreground="{DynamicResource SecondaryText}"
                                            Margin="0,0,0,5"
                                            TextWrapping="Wrap"/>
+                                <TextBlock x:Name="videoLocation"
+                                           Text="--"
+                                           FontSize="{DynamicResource BaseFontSize}"
+                                           Foreground="{DynamicResource SecondaryText}"
+                                           Margin="0,0,0,5"/>
                                 <TextBlock x:Name="videoDateTime" 
                                            Text="--" 
                                            FontSize="{DynamicResource BaseFontSize}"

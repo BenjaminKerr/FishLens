@@ -46,6 +46,16 @@ namespace FishLens_App
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
 
             InitializeComponent();
+
+            Loaded += (s, e) =>
+            {
+                LoadLocationFilter();
+                App.LocationChanged += OnLocationChanged;
+            };
+            Unloaded += (s, e) =>
+            {
+                App.LocationChanged -= OnLocationChanged;
+            };
         }
 
         #endregion
@@ -582,6 +592,47 @@ namespace FishLens_App
         }
 
         // **************************************************
+        // Function: LoadLocationFilter
+        // Description: Populates the location ComboBox from appsettings.json Locations list
+        private void LoadLocationFilter()
+        {
+            try
+            {
+                string configPath = System.IO.Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
+                var names = new List<string> { "All Locations" };
+
+                if (File.Exists(configPath))
+                {
+                    using var stream = File.OpenRead(configPath);
+                    using var doc = System.Text.Json.JsonDocument.Parse(stream);
+                    var root = doc.RootElement;
+
+                    if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        foreach (var locEl in locsEl.EnumerateArray())
+                        {
+                            if (locEl.TryGetProperty("Name", out var nEl) && nEl.ValueKind == System.Text.Json.JsonValueKind.String)
+                            {
+                                string name = nEl.GetString();
+                                if (!string.IsNullOrWhiteSpace(name) && !names.Contains(name))
+                                    names.Add(name);
+                            }
+                        }
+                    }
+                }
+
+                cameraFilter.ItemsSource = names;
+                cameraFilter.SelectedIndex = 0;
+            }
+            catch { /* non-critical; leave dropdown empty */ }
+        }
+
+        private void OnLocationChanged()
+        {
+            Dispatcher.Invoke(LoadLocationFilter);
+        }
+
+        // **************************************************
         // Function: PassesConfidenceFilter
         // Description: Checks if a confidence value passes the minimum confidence threshold
         private bool PassesConfidenceFilter(double? avgConfidence)
@@ -633,9 +684,8 @@ namespace FishLens_App
             // Update camera/location filter
             if (cameraFilter?.SelectedItem != null)
             {
-                var selectedItem = (ComboBoxItem)cameraFilter.SelectedItem;
-                string content = selectedItem.Content.ToString();
-                _filterCamera = content.Contains("All") ? "All" : content;
+                string content = cameraFilter.SelectedItem.ToString();
+                _filterCamera = content.Contains("All Locations") ? "All" : content;
             }
         }
 

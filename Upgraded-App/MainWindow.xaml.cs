@@ -19,6 +19,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -66,6 +67,7 @@ namespace FishLens_App
         // Persistent Python process — models stay loaded between runs
         private Process _yoloProcess;
         private bool _yoloFastModeAtStart;
+        private string _yoloLocationAtStart = string.Empty;
         private TaskCompletionSource<bool> _processingTcs;
         private TaskCompletionSource<bool> _yoloReadyTcs;
         private int _totalVideos;
@@ -117,12 +119,15 @@ namespace FishLens_App
                     _config.HighContrastMode = false;
                     ThemeHelper.ApplyHighContrastMode(false);
                 }
+                PopulateLocationDropdown();
                 EnsureYoloProcessRunning();
                 App.FastModeChanged += OnFastModeChanged;
+                App.LocationChanged += OnLocationChanged;
             };
             Closing += (s, e) =>
             {
                 App.FastModeChanged -= OnFastModeChanged;
+                App.LocationChanged -= OnLocationChanged;
                 if (_yoloProcess != null && !_yoloProcess.HasExited)
                     try { _yoloProcess.Kill(); } catch { }
             };
@@ -357,6 +362,16 @@ namespace FishLens_App
             if (_yoloProcess == null || _yoloProcess.HasExited)
                 EnsureYoloProcessRunning();
 
+            // If the user changed location while models were loading, restart now with the
+            // correct env vars before sending any work.
+            string currentLocation = (Application.Current as App)?.ActiveLocation ?? "Unknown";
+            if (!string.Equals(currentLocation, _yoloLocationAtStart, StringComparison.OrdinalIgnoreCase))
+            {
+                if (_yoloProcess != null && !_yoloProcess.HasExited)
+                    try { _yoloProcess.Kill(); } catch { }
+                StartYoloProcess();
+            }
+
             // Show dialog early so the user sees feedback during any remaining warmup
             _activeProgressDialog = new ProgressDialog();
             _activeProgressDialog.Cancelled += OnProcessingCancelled;
@@ -423,13 +438,156 @@ namespace FishLens_App
         }
 
         // **************************************************
+        // Function: OnLocationChanged
+        // Description: Refreshes the dropdown when admin changes location list via Settings
+        // **************************************************
+        private void OnLocationChanged()
+        {
+            Dispatcher.Invoke(PopulateLocationDropdown);
+        }
+
+        // **************************************************
+        // Function: GetUpstreamDirectionForActiveLocation
+        // Description: Returns "left" or "right" based on the UpstreamDirection of the
+        //              currently active location stored in appsettings.json
+        // **************************************************
+        private string GetUpstreamDirectionForActiveLocation()
+        {
+            try
+            {
+                string activeLocation = (Application.Current as App)?.ActiveLocation ?? "Unknown";
+                string configPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
+                if (!File.Exists(configPath)) return "left";
+
+                using var stream = File.OpenRead(configPath);
+                using var doc = JsonDocument.Parse(stream);
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var locEl in locsEl.EnumerateArray())
+                    {
+                        if (locEl.TryGetProperty("Name", out var nEl) &&
+                            nEl.GetString()?.Equals(activeLocation, StringComparison.OrdinalIgnoreCase) == true &&
+                            locEl.TryGetProperty("UpstreamDirection", out var dEl))
+                        {
+                            return dEl.GetString() ?? "left";
+                        }
+                    }
+                }
+            }
+            catch { /* fall through to default */ }
+            return "left";
+        }
+
+        // **************************************************
+        // Function: PopulateLocationDropdown
+        // Description: Loads named locations from appsettings.json into the header ComboBox
+        // **************************************************
+        private void PopulateLocationDropdown()
+        {
+            try
+            {
+                string configPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
+                var locationNames = new List<string>();
+                string activeLocation = "Unknown";
+
+                if (File.Exists(configPath))
+                {
+                    using var stream = File.OpenRead(configPath);
+                    using var doc = JsonDocument.Parse(stream);
+                    var root = doc.RootElement;
+
+                    if (root.TryGetProperty("ActiveLocation", out var alEl) && alEl.ValueKind == JsonValueKind.String)
+                        activeLocation = alEl.GetString() ?? "Unknown";
+
+                    if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var locEl in locsEl.EnumerateArray())
+                        {
+                            if (locEl.TryGetProperty("Name", out var nEl) && nEl.ValueKind == JsonValueKind.String)
+                                locationNames.Add(nEl.GetString());
+                        }
+                    }
+                }
+
+                if (locationNames.Count == 0)
+                    locationNames.Add("Unknown");
+
+                // Suppress SelectionChanged while populating
+                locationDropdown.SelectionChanged -= LocationDropdown_SelectionChanged;
+                locationDropdown.ItemsSource = locationNames;
+                locationDropdown.SelectedItem = locationNames.Contains(activeLocation) ? activeLocation : locationNames[0];
+                locationDropdown.SelectionChanged += LocationDropdown_SelectionChanged;
+
+                // Keep App in sync
+                var app = Application.Current as App;
+                if (app != null)
+                    app.ActiveLocation = locationDropdown.SelectedItem as string ?? "Unknown";
+            }
+            catch { /* non-critical */ }
+        }
+
+        // **************************************************
+        // Function: LocationDropdown_SelectionChanged
+        // Description: Persists the newly selected location to appsettings.json and updates App
+        // **************************************************
+        private void LocationDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            string selected = locationDropdown.SelectedItem as string;
+            if (string.IsNullOrEmpty(selected)) return;
+
+            // Block location changes while a video batch is processing to avoid
+            // mismatching the location/direction env vars already baked into the running process.
+            if (_activeProgressDialog != null)
+            {
+                // Silently revert to whatever was previously committed
+                string committed = (Application.Current as App)?.ActiveLocation ?? "Unknown";
+                locationDropdown.SelectionChanged -= LocationDropdown_SelectionChanged;
+                locationDropdown.SelectedItem = locationDropdown.Items.Contains(committed) ? committed : locationDropdown.Items[0];
+                locationDropdown.SelectionChanged += LocationDropdown_SelectionChanged;
+                return;
+            }
+
+            var app = Application.Current as App;
+            if (app != null)
+                app.ActiveLocation = selected;
+
+            // Persist to JSON so next startup remembers the choice
+            try
+            {
+                string configPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
+                if (!File.Exists(configPath)) return;
+
+                string json = File.ReadAllText(configPath);
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                // Rebuild the JSON with the updated ActiveLocation
+                var dict = new System.Collections.Generic.Dictionary<string, object>();
+                foreach (var prop in root.EnumerateObject())
+                {
+                    if (prop.Name == "ActiveLocation")
+                        dict[prop.Name] = selected;
+                    else
+                        dict[prop.Name] = prop.Value.Clone();
+                }
+
+                var options = new JsonSerializerOptions { WriteIndented = true };
+                File.WriteAllText(configPath, JsonSerializer.Serialize(dict, options));
+            }
+            catch { /* non-critical */ }
+        }
+
+        // **************************************************
         // Function: StartYoloProcess
         // Description: Spawns the persistent Python process and begins the output reader loop
         // **************************************************
         private void StartYoloProcess()
         {
-            // Snapshot FastMode here so _yoloFastModeAtStart is always in sync with the env var we pass.
+            // Snapshot FastMode and Location so they stay in sync with the env vars we pass.
             _yoloFastModeAtStart = _checkBoxes?.FastMode ?? false;
+            _yoloLocationAtStart = (Application.Current as App)?.ActiveLocation ?? "Unknown";
 
             string yoloScriptPath = _pathResolver.ResolveYoloScriptPath();
             string pythonPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "venv", "Scripts", "python.exe");
@@ -446,6 +604,8 @@ namespace FishLens_App
                 CreateNoWindow = true,
             };
             processInfo.Environment["FISHLENS_FAST_MODE"] = _yoloFastModeAtStart ? "1" : "0";
+            processInfo.Environment["FISHLENS_LOCATION"] = (Application.Current as App)?.ActiveLocation ?? "Unknown";
+            processInfo.Environment["FISHLENS_UPSTREAM_DIRECTION"] = GetUpstreamDirectionForActiveLocation();
             _yoloReadyTcs = new TaskCompletionSource<bool>();
             _yoloProcess = Process.Start(processInfo);
 
@@ -1484,7 +1644,16 @@ namespace FishLens_App
         {
             FishLens_App.Models.Video vid = GetData(videoFileName);
 
+            // If the fish CSV has no location (e.g. no-fish video), fall back to no_fish_summary.csv
+            string location = vid.Location;
+            if (string.IsNullOrWhiteSpace(location))
+            {
+                string noFishCsvPath = _pathResolver.ResolveNoFishCsvPath();
+                location = FishLens_App.Services.CsvUtils.ReadLocationFromNoFishCsv(noFishCsvPath, videoFileName);
+            }
+
             videoName.Text = vid.Name;
+            videoLocation.Text = string.IsNullOrWhiteSpace(location) ? "--" : location;
             videoDateTime.Text = $"Duration: {vid.StartTime}s - {vid.EndTime}s";
             fishPresentStatus.Text = vid.LikelyClass == "fish" ? "Present" : "Not Present";
             fishPresentConfidence.Text = $"{vid.AvgConfidence * 100:F2}%";

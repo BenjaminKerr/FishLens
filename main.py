@@ -126,6 +126,9 @@ TIMESTAMP_MAX_ATTEMPTS = max(1, int(os.getenv("FISHLENS_TIMESTAMP_MAX_ATTEMPTS",
 SUPPRESS_CODEC_WARNINGS = os.getenv("FISHLENS_SUPPRESS_CODEC_WARNINGS", "1") == "1"
 VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRAMES", "6" if FAST_MODE else "12")))
 FISHLENS_LOCATION = os.getenv("FISHLENS_LOCATION", "Unknown")
+# "left" means fish moving left-to-right are upstream (default).
+# "right" means fish moving right-to-left are upstream (flips the direction labels).
+FISHLENS_UPSTREAM_DIRECTION = os.getenv("FISHLENS_UPSTREAM_DIRECTION", "left").strip().lower()
 
 # Constants--Classifier
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
@@ -768,7 +771,12 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     else:
         # Equal upstream and downstream frame counts → genuinely ambiguous.
         overall_direction = "indecisive"
-    
+
+    # If upstream direction at this location is right-to-left, the DeepSort labels and
+    # net_dx assumptions are inverted — flip upstream/downstream on the final result.
+    if FISHLENS_UPSTREAM_DIRECTION == "right" and overall_direction in ("upstream", "downstream"):
+        overall_direction = "downstream" if overall_direction == "upstream" else "upstream"
+
     # Handle timestamp with confidence flag
     video_timestamp = track_data.get("video_timestamp") or vidData.v_video_timestamp or "Not detected"
     timestamp_confidence = track_data.get("timestamp_confidence")
@@ -885,13 +893,6 @@ def no_fish_found(video_path, filename):
     print("***************************************************************")
     print(f"No fish detected in {filename}. Skipping export.")
     print("***************************************************************")
-
-    log_path = os.path.join(NO_FISH, "no_fish_log.txt")
-    try:
-        with open(log_path, "a") as log_file:
-            log_file.write(f"{filename} | {video_path}\n")
-    except Exception as e:
-        print(f"Error writing no-fish log: {e}")
 
 
 # ***************************************************************

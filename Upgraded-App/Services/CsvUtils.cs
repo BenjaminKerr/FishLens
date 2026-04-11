@@ -199,5 +199,25 @@ namespace FishLens_App.Services
                 SpeciesConfidence = 0.0
             };
         }
+
+        // **************************************************
+        // Function: ReadLocationFromNoFishCsv
+        // Description: Returns the location string for a video from no_fish_summary.csv,
+        //              or null if the video is not present in that file.
+        // **************************************************
+        public static string ReadLocationFromNoFishCsv(string noFishCsvPath, string videoFileName)
+        {
+            if (!File.Exists(noFishCsvPath)) return null;
+            var lines = File.ReadAllLines(noFishCsvPath);
+            // Header: video_file,location,video_timestamp
+            for (int i = 1; i < lines.Length; i++)
+            {
+                var cols = lines[i].Split(',');
+                if (cols.Length < 2) continue;
+                if (string.Equals(Path.GetFileName(cols[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase))
+                    return cols[1].Trim();
+            }
+            return null;
+        }
     }
 }
