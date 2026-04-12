@@ -38,7 +38,8 @@
                     BorderBrush="{DynamicResource BorderColorBrush}"
                     BorderThickness="0,0,1,0"
                     Padding="30,20">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              PreviewMouseWheel="FilterPanel_PreviewMouseWheel">
                     <StackPanel>
                         <TextBlock Text="Filters" 
                                    FontSize="{DynamicResource LargeFontSize}"
@@ -46,6 +47,22 @@
                                    Foreground="{DynamicResource PrimaryColorBrush}"
                                    Margin="0,0,0,15"/>
 
+                        <!-- ── Run ────────────────────────────────────────── -->
+                        <TextBlock Text="Run"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
+                                   Margin="0,0,0,8"/>
+                        <ComboBox x:Name="runFilter"
+                                  Background="{DynamicResource PageBackgroundBrush}"
+                                  BorderBrush="{DynamicResource BorderColorBrush}"
+                                  Padding="12,8"
+                                  FontSize="{DynamicResource BaseFontSize}"
+                                  Margin="0,0,0,15"
+                                  SelectedIndex="0"
+                                  SelectionChanged="RunFilter_SelectionChanged"/>
+
+                        <!-- ── Date Range ─────────────────────────────────── -->
                         <Grid Margin="0,0,0,8">
                             <TextBlock Text="Date Range" 
                                        FontSize="{DynamicResource BaseFontSize}"
@@ -54,7 +71,7 @@
                                        HorizontalAlignment="Left"
                                        VerticalAlignment="Center"/>
 
-                            <Button Content="Select Entire Date Range" 
+                            <Button Content="Reset Dates" 
                                     Click="AllDatesClick"
                                     Background="{DynamicResource SecondaryBackgroundBrush}"
                                     Foreground="{DynamicResource PrimaryColorBrush}"
@@ -119,31 +136,26 @@
                                         FontSize="{DynamicResource BaseFontSize}"/>
                         </Grid>
 
-                        <TextBlock Text="Species" 
-                                   FontSize="13" 
+                        <!-- ── Location ───────────────────────────────────── -->
+                        <TextBlock Text="Location" 
+                                   FontSize="{DynamicResource BaseFontSize}"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource PrimaryTextBrush}"
                                    Margin="0,0,0,8"/>
-
-                        <ComboBox x:Name="speciesFilter"
+                        <ComboBox x:Name="cameraFilter"
                                   Background="{DynamicResource PageBackgroundBrush}"
                                   BorderBrush="{DynamicResource BorderColorBrush}"
                                   Padding="12,8"
                                   FontSize="{DynamicResource BaseFontSize}"
                                   Margin="0,0,0,15"
-                                  SelectedIndex="0">
-                            <ComboBoxItem Content="All Species"/>
-                            <ComboBoxItem Content="Trout"/>
-                            <ComboBoxItem Content="Salmon"/>
-                            <ComboBoxItem Content="Other"/>
-                        </ComboBox>
+                                  SelectedIndex="0"/>
 
+                        <!-- ── Direction ──────────────────────────────────── -->
                         <TextBlock Text="Direction" 
                                    FontSize="{DynamicResource BaseFontSize}"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource PrimaryTextBrush}"
                                    Margin="0,0,0,8"/>
-
                         <ComboBox x:Name="directionFilter"
                                   Background="{DynamicResource PageBackgroundBrush}"
                                   BorderBrush="{DynamicResource BorderColorBrush}"
@@ -154,24 +166,29 @@
                             <ComboBoxItem Content="All Directions"/>
                             <ComboBoxItem Content="Upstream"/>
                             <ComboBoxItem Content="Downstream"/>
+                            <ComboBoxItem Content="Indecisive"/>
                         </ComboBox>
 
-                        <TextBlock Text="Location" 
-                                   FontSize="{DynamicResource BaseFontSize}"
+                        <!-- ── Species ────────────────────────────────────── -->
+                        <TextBlock Text="Species" 
+                                   FontSize="13" 
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource PrimaryTextBrush}"
                                    Margin="0,0,0,8"/>
-
-                        <ComboBox x:Name="cameraFilter"
+                        <ComboBox x:Name="speciesFilter"
                                   Background="{DynamicResource PageBackgroundBrush}"
                                   BorderBrush="{DynamicResource BorderColorBrush}"
                                   Padding="12,8"
                                   FontSize="{DynamicResource BaseFontSize}"
-                                  Margin="0,0,0,20"
-                                  SelectedIndex="0"/>
+                                  Margin="0,0,0,15"
+                                  SelectedIndex="0">
+                            <ComboBoxItem Content="All"/>
+                            <ComboBoxItem Content="Chinook"/>
+                            <ComboBoxItem Content="Omykiss"/>
+                            <ComboBoxItem Content="Other"/>
+                        </ComboBox>
 
-                        <!-- Group By removed per user request -->
-
+                        <!-- ── Confidence ─────────────────────────────────── -->
                         <TextBlock Text="Minimum Confidence" 
                                    FontSize="{DynamicResource BaseFontSize}"
                                    FontWeight="SemiBold"
@@ -207,6 +224,7 @@
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    Margin="0,0,0,20"/>
 
+                        <!-- ── Action Buttons ─────────────────────────────── -->
                         <Button Content="Apply Filters" 
                                 Click="ApplyFiltersClick"
                                 Background="{DynamicResource PrimaryColorBrush}"

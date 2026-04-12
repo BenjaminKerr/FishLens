@@ -86,6 +86,186 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ── Run Setup (admin only) ──────────────────────────────── -->
+                <TextBlock x:Name="RunSetupText" Text="Run Setup"
+                           FontSize="{DynamicResource LargeHeaderFontSize}"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource PrimaryText}"
+                           Margin="0,0,0,15"/>
+
+                <Border x:Name="RunSetupCard"
+                        Background="{DynamicResource CardBackground}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="20"
+                        Margin="0,0,0,30">
+                    <StackPanel>
+                        <TextBlock Text="Create and manage seasonal monitoring runs. Each run stores its own fish and no-fish records."
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   Foreground="{DynamicResource SecondaryText}"
+                                   Margin="0,0,0,15"
+                                   TextWrapping="Wrap"/>
+
+                        <!-- Active run display -->
+                        <TextBlock Text="Active Run"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PrimaryText}"
+                                   Margin="0,0,0,6"/>
+
+                        <Grid Margin="0,0,0,15">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <ComboBox x:Name="activeRunDropdown"
+                                      Grid.Column="0"
+                                      Height="36"
+                                      Padding="8"
+                                      FontSize="{DynamicResource BaseFontSize}"
+                                      Margin="0,0,10,0"
+                                      SelectionChanged="ActiveRunDropdown_SelectionChanged"/>
+
+                            <Button x:Name="setActiveRunButton"
+                                    Grid.Column="1"
+                                    Content="Set Active"
+                                    Height="36"
+                                    Padding="14,0"
+                                    FontSize="{DynamicResource BaseFontSize}"
+                                    Background="{DynamicResource HeaderBackground}"
+                                    Foreground="{DynamicResource OnAccentForeground}"
+                                    BorderThickness="0"
+                                    Margin="0,0,8,0"
+                                    Click="SetActiveRun_Click"/>
+
+                            <Button x:Name="endRunButton"
+                                    Grid.Column="2"
+                                    Content="End Run"
+                                    Height="36"
+                                    Padding="14,0"
+                                    FontSize="{DynamicResource BaseFontSize}"
+                                    Background="#C62828"
+                                    Foreground="White"
+                                    BorderThickness="0"
+                                    Click="EndRun_Click"/>
+                        </Grid>
+
+                        <!-- Current run status -->
+                        <TextBlock x:Name="runStatusText"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   Foreground="{DynamicResource SecondaryText}"
+                                   Margin="0,0,0,15"
+                                   TextWrapping="Wrap"/>
+
+                        <!-- Create new run -->
+                        <TextBlock Text="Create New Run"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PrimaryText}"
+                                   Margin="0,0,0,8"/>
+
+                        <Grid Margin="0,0,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox x:Name="newRunNameBox"
+                                     Grid.Column="0"
+                                     Height="36"
+                                     Padding="8"
+                                     FontSize="{DynamicResource BaseFontSize}"
+                                     Margin="0,0,10,0"
+                                     VerticalContentAlignment="Center"
+                                     ToolTip="e.g. Spring 2026"/>
+
+                            <Button Grid.Column="1"
+                                    Content="Create Run"
+                                    Height="36"
+                                    Padding="14,0"
+                                    FontSize="{DynamicResource BaseFontSize}"
+                                    Background="{DynamicResource HeaderBackground}"
+                                    Foreground="{DynamicResource OnAccentForeground}"
+                                    BorderThickness="0"
+                                    Click="CreateRun_Click"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+                <!-- ──────────────────────────────────────────────────────────── -->
+
+                <!-- ── Locations (admin only) ───────────────────────────────── -->
+                <TextBlock x:Name="LocationsText" Text="Locations"
+                           FontSize="{DynamicResource LargeHeaderFontSize}"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource PrimaryText}"
+                           Margin="0,0,0,15"/>
+
+                <Border x:Name="LocationsCard"
+                        Background="{DynamicResource CardBackground}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="20"
+                        Margin="0,0,0,30">
+                    <StackPanel>
+                        <TextBlock Text="Manage named monitoring locations and their upstream direction."
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   Foreground="{DynamicResource SecondaryText}"
+                                   Margin="0,0,0,15"
+                                   TextWrapping="Wrap"/>
+
+                        <!-- List of existing locations -->
+                        <StackPanel x:Name="locationsListPanel" Margin="0,0,0,15"/>
+
+                        <!-- Add new location row -->
+                        <TextBlock Text="Add New Location"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PrimaryText}"
+                                   Margin="0,0,0,8"/>
+
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox x:Name="newLocationName"
+                                     Grid.Column="0"
+                                     Height="36"
+                                     Padding="8"
+                                     FontSize="{DynamicResource BaseFontSize}"
+                                     Margin="0,0,10,0"
+                                     VerticalContentAlignment="Center"/>
+
+                            <ComboBox x:Name="newLocationDirection"
+                                      Grid.Column="1"
+                                      Height="36"
+                                      Margin="0,0,10,0"
+                                      FontSize="{DynamicResource BaseFontSize}"
+                                      SelectedIndex="0">
+                                <ComboBoxItem Content="Upstream: Left"/>
+                                <ComboBoxItem Content="Upstream: Right"/>
+                            </ComboBox>
+
+                            <Button Grid.Column="2"
+                                    Content="Add Location"
+                                    Height="36"
+                                    Padding="14,0"
+                                    FontSize="{DynamicResource BaseFontSize}"
+                                    Background="{DynamicResource HeaderBackground}"
+                                    Foreground="{DynamicResource OnAccentForeground}"
+                                    BorderThickness="0"
+                                    Click="AddLocation_Click"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+                <!-- ──────────────────────────────────────────────────────────── -->
+
                 <TextBlock Text="Output" 
                            FontSize="{DynamicResource LargeHeaderFontSize}"
                            FontWeight="SemiBold"
@@ -162,75 +342,6 @@
                                   Margin="0,0,0,15"/>
                     </StackPanel>
                 </Border>
-                <!-- ── Locations (admin only) ───────────────────────────────── -->
-                <TextBlock x:Name="LocationsText" Text="Locations"
-                           FontSize="{DynamicResource LargeHeaderFontSize}"
-                           FontWeight="SemiBold"
-                           Foreground="{DynamicResource PrimaryText}"
-                           Margin="0,0,0,15"/>
-
-                <Border x:Name="LocationsCard"
-                        Background="{DynamicResource CardBackground}"
-                        BorderBrush="{DynamicResource BorderBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="20"
-                        Margin="0,0,0,30">
-                    <StackPanel>
-                        <TextBlock Text="Manage named monitoring locations and their upstream direction."
-                                   FontSize="{DynamicResource BaseFontSize}"
-                                   Foreground="{DynamicResource SecondaryText}"
-                                   Margin="0,0,0,15"
-                                   TextWrapping="Wrap"/>
-
-                        <!-- List of existing locations -->
-                        <StackPanel x:Name="locationsListPanel" Margin="0,0,0,15"/>
-
-                        <!-- Add new location row -->
-                        <TextBlock Text="Add New Location"
-                                   FontSize="{DynamicResource BaseFontSize}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource PrimaryText}"
-                                   Margin="0,0,0,8"/>
-
-                        <Grid Margin="0,0,0,10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="160"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-
-                            <TextBox x:Name="newLocationName"
-                                     Grid.Column="0"
-                                     Height="36"
-                                     Padding="8"
-                                     FontSize="{DynamicResource BaseFontSize}"
-                                     Margin="0,0,10,0"
-                                     VerticalContentAlignment="Center"/>
-
-                            <ComboBox x:Name="newLocationDirection"
-                                      Grid.Column="1"
-                                      Height="36"
-                                      Margin="0,0,10,0"
-                                      FontSize="{DynamicResource BaseFontSize}"
-                                      SelectedIndex="0">
-                                <ComboBoxItem Content="Upstream: Left"/>
-                                <ComboBoxItem Content="Upstream: Right"/>
-                            </ComboBox>
-
-                            <Button Grid.Column="2"
-                                    Content="Add Location"
-                                    Height="36"
-                                    Padding="14,0"
-                                    FontSize="{DynamicResource BaseFontSize}"
-                                    Background="{DynamicResource HeaderBackground}"
-                                    Foreground="{DynamicResource OnAccentForeground}"
-                                    BorderThickness="0"
-                                    Click="AddLocation_Click"/>
-                        </Grid>
-                    </StackPanel>
-                </Border>
-                <!-- ──────────────────────────────────────────────────────────── -->
 
                 <TextBlock x:Name="CreateUserText" Text="Create User"
            FontSize="{DynamicResource LargeHeaderFontSize}"

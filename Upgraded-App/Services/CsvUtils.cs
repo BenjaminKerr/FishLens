@@ -111,9 +111,8 @@ namespace FishLens_App.Services
         }
 
         // Parse row columns according to CSV layout:
-        // 0: video_file, 1: track_id, 2: image_path, 3: likely_class, 4: confidence,
-        // 5: start_time_sec, 6: end_time_sec, 7: avg_confidence, 8: direction,
-        // 9: species, 10: species_confidence
+        // 0: video_file, 1: location, 2: species, 3: species_confidence, 4: likely_class,
+        // 5: confidence, 6: direction, 7: start_time_sec, 8: end_time_sec, 9: video_timestamp
         public static Video ParseVideoFromColumns(string[] columns)
         {
             var video = new Video();
@@ -122,36 +121,18 @@ namespace FishLens_App.Services
             video.Name = !string.IsNullOrEmpty(video.VideoFilePath)
                 ? Path.GetFileName(video.VideoFilePath)
                 : string.Empty;
-            video.TrackId = columns.Length > 1 ? columns[1].Trim() : "-1";
-            video.LikelyClass = columns.Length > 3 ? columns[3].Trim() : "N/A";
-            video.Confidence = columns.Length > 4 ? columns[4].Trim() : "00.00%";
-            video.StartTime = columns.Length > 5 ? columns[5].Trim() : "00.00";
-            video.EndTime = columns.Length > 6 ? columns[6].Trim() : "00.00";
+            video.TrackId = "-1";
 
-            // avg_confidence may include a '%' suffix or be a decimal; try to parse robustly
-            video.AvgConfidence = 0.0;
-            if (columns.Length > 7)
-            {
-                var raw = columns[7].Trim().TrimEnd('%');
-                if (double.TryParse(raw, out var d))
-                {
-                    // If value looks like a percent (e.g., 81 or 81.0), normalize to 0-1 if >1
-                    if (d > 1) d = d / 100.0;
-                    video.AvgConfidence = d;
-                }
-            }
-            else            
-            {
-                video.AvgConfidence = 0.0;
-            }
+            // col 1: location
+            video.Location = columns.Length > 1 ? columns[1].Trim() : string.Empty;
 
-            video.Direction = columns.Length > 8 ? columns[8].Trim() : "Unknown";
-            video.Species = columns.Length > 9 ? columns[9].Trim() : string.Empty;
-            
-            // Parse species confidence as double, removing % sign if present
-            if (columns.Length > 10)
+            // col 2: species
+            video.Species = columns.Length > 2 ? columns[2].Trim() : string.Empty;
+
+            // col 3: species_confidence
+            if (columns.Length > 3)
             {
-                var speciesConfStr = columns[10].Trim().TrimEnd('%');
+                var speciesConfStr = columns[3].Trim().TrimEnd('%');
                 if (double.TryParse(speciesConfStr, out var speciesConfValue))
                 {
                     if (speciesConfValue > 1) speciesConfValue = speciesConfValue / 100.0;
@@ -167,8 +148,33 @@ namespace FishLens_App.Services
                 video.SpeciesConfidence = 0.0;
             }
 
-            // col 11: video_timestamp (full datetime string e.g. "2025/10/01 19:07:44")
-            string videoTimestamp = columns.Length > 11 ? columns[11].Trim() : string.Empty;
+            // col 4: likely_class
+            video.LikelyClass = columns.Length > 4 ? columns[4].Trim() : "N/A";
+
+            // col 5: confidence (also used as display confidence)
+            video.Confidence = columns.Length > 5 ? columns[5].Trim() : "00.00%";
+            video.AvgConfidence = 0.0;
+            if (columns.Length > 5)
+            {
+                var raw = columns[5].Trim().TrimEnd('%');
+                if (double.TryParse(raw, out var d))
+                {
+                    if (d > 1) d = d / 100.0;
+                    video.AvgConfidence = d;
+                }
+            }
+
+            // col 6: direction
+            video.Direction = columns.Length > 6 ? columns[6].Trim() : "Unknown";
+
+            // col 7: start_time_sec
+            video.StartTime = columns.Length > 7 ? columns[7].Trim() : "00.00";
+
+            // col 8: end_time_sec
+            video.EndTime = columns.Length > 8 ? columns[8].Trim() : "00.00";
+
+            // col 9: video_timestamp (full datetime string e.g. "2025/10/01 19:07:44")
+            string videoTimestamp = columns.Length > 9 ? columns[9].Trim() : string.Empty;
             video.Date = videoTimestamp;
             video.Time = string.Empty;
             if (!string.IsNullOrEmpty(videoTimestamp))
@@ -176,9 +182,6 @@ namespace FishLens_App.Services
                 if (DateTime.TryParse(videoTimestamp, out var ts))
                     video.DetectionTimestamp = ts;
             }
-
-            // col 12: location
-            video.Location = columns.Length > 12 ? columns[12].Trim() : string.Empty;
 
             return video;
         }

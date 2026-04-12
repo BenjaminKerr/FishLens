@@ -195,6 +195,8 @@ namespace FishLens_App
                     HighContrastMode = _config.HighContrastMode,
                     LargeText = _config.LargeText,
                     ActiveLocation = _config.ActiveLocation,
+                    ActiveRun = _config.ActiveRun,
+                    Runs = _config.Runs,
                     Locations = _config.Locations
                 };
 
@@ -362,6 +364,8 @@ namespace FishLens_App
                 CreateUserText.Visibility = Visibility.Collapsed;
                 LocationsCard.Visibility = Visibility.Collapsed;
                 LocationsText.Visibility = Visibility.Collapsed;
+                RunSetupCard.Visibility = Visibility.Collapsed;
+                RunSetupText.Visibility = Visibility.Collapsed;
             }
         }
 
@@ -650,6 +654,28 @@ namespace FishLens_App
                     _config.ActiveLocation = alEl.GetString() ?? "Unknown";
                 }
 
+                if (root.TryGetProperty("ActiveRun", out var arEl) && arEl.ValueKind == JsonValueKind.String)
+                {
+                    _config.ActiveRun = arEl.GetString() ?? string.Empty;
+                    var app = Application.Current as App;
+                    if (app != null) app.ActiveRun = _config.ActiveRun;
+                }
+
+                if (root.TryGetProperty("Runs", out var runsEl) && runsEl.ValueKind == JsonValueKind.Array)
+                {
+                    var runs = new List<RunEntry>();
+                    foreach (var runEl in runsEl.EnumerateArray())
+                    {
+                        string rName = runEl.TryGetProperty("Name", out var rnEl) ? rnEl.GetString() ?? string.Empty : string.Empty;
+                        bool rLocked = runEl.TryGetProperty("Locked", out var rlEl) && rlEl.ValueKind == JsonValueKind.True;
+                        if (!string.IsNullOrWhiteSpace(rName))
+                            runs.Add(new RunEntry { Name = rName, Locked = rLocked });
+                    }
+                    _config.Runs = runs;
+                }
+
+                LoadRunsDropdown();
+
                 if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == JsonValueKind.Array)
                 {
                     var locs = new List<LocationEntry>();
@@ -769,5 +795,239 @@ namespace FishLens_App
         {
 
         }
+
+        #region Run Management
+
+        // ****************************************************************
+        // Function: CreateRun_Click
+        // Description: Creates a new seasonal run folder and adds it to appsettings.json
+        private void CreateRun_Click(object sender, RoutedEventArgs e)
+        {
+            string name = newRunNameBox?.Text?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                MessageBox.Show("Please enter a run name (e.g. Spring 2026).", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (string.Equals(name, "debug", StringComparison.OrdinalIgnoreCase))
+            {
+                MessageBox.Show("\"debug\" is a reserved run name. Use the Debug run from the dropdown.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (_config.Runs.Any(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase)))
+            {
+                MessageBox.Show("A run with that name already exists.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // Create the run folder under All History
+            try
+            {
+                string runFolder = _pathResolver.ResolveRunFolder(name);
+                Directory.CreateDirectory(runFolder);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not create run folder: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            _config.Runs.Add(new RunEntry { Name = name, Locked = false });
+            if (newRunNameBox != null) newRunNameBox.Text = string.Empty;
+
+            // Auto-activate the newly created run
+            _config.ActiveRun = name;
+            var app = Application.Current as App;
+            if (app != null) app.ActiveRun = name;
+            App.RaiseRunChanged();
+
+            PersistRuns();
+            LoadRunsDropdown();
+            UpdateRunStatusText();
+        }
+
+        // ****************************************************************
+        // Function: SetActiveRun_Click
+        // Description: Sets the selected run as the active run for the whole app
+        private void SetActiveRun_Click(object sender, RoutedEventArgs e)
+        {
+            if (activeRunDropdown?.SelectedItem is not string selectedDisplay || string.IsNullOrWhiteSpace(selectedDisplay))
+            {
+                MessageBox.Show("Please select a run from the dropdown first.", "No Run Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // Map display name back to internal run name
+            string selectedRun = selectedDisplay == "[Debug]" ? "debug" : selectedDisplay;
+
+            var runEntry = _config.Runs.FirstOrDefault(r => r.Name == selectedRun);
+            if (runEntry?.Locked == true)
+            {
+                MessageBox.Show($"'{selectedRun}' is locked and cannot be set as active. Reopen it first.", "Run Locked", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            _config.ActiveRun = selectedRun;
+            var app = Application.Current as App;
+            if (app != null) app.ActiveRun = selectedRun;
+
+            PersistRuns();
+            UpdateRunStatusText();
+            App.RaiseRunChanged();
+        }
+
+        // ****************************************************************
+        // Function: EndRun_Click
+        // Description: Locks the selected run so it cannot be written to accidentally
+        private void EndRun_Click(object sender, RoutedEventArgs e)
+        {
+            if (activeRunDropdown?.SelectedItem is not string selectedDisplay || string.IsNullOrWhiteSpace(selectedDisplay))
+            {
+                MessageBox.Show("Please select a run from the dropdown first.", "No Run Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string selectedRun = selectedDisplay == "[Debug]" ? "debug" : selectedDisplay;
+
+            if (selectedRun == "debug")
+            {
+                MessageBox.Show("The Debug run cannot be locked.", "Debug Run", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var runEntry = _config.Runs.FirstOrDefault(r => r.Name == selectedRun);
+            if (runEntry == null) return;
+
+            if (runEntry.Locked)
+            {
+                // Already locked — offer to reopen
+                var result = MessageBox.Show($"'{selectedRun}' is already locked. Reopen it?", "Reopen Run?", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (result == MessageBoxResult.Yes)
+                {
+                    runEntry.Locked = false;
+                    PersistRuns();
+                    UpdateRunStatusText();
+                }
+                return;
+            }
+
+            var confirm = MessageBox.Show(
+                $"End run '{selectedRun}'? It will be locked for new entries. Reports can still be generated.\n\nYou can reopen it later from this panel.",
+                "End Run",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (confirm != MessageBoxResult.Yes) return;
+
+            runEntry.Locked = true;
+
+            // If this was the active run, clear it
+            if (_config.ActiveRun == selectedRun)
+            {
+                _config.ActiveRun = string.Empty;
+                var app = Application.Current as App;
+                if (app != null) app.ActiveRun = string.Empty;
+                App.RaiseRunChanged();
+            }
+
+            PersistRuns();
+            UpdateRunStatusText();
+        }
+
+        // ****************************************************************
+        // Function: ActiveRunDropdown_SelectionChanged
+        // Description: Updates the status text when the dropdown selection changes
+        private void ActiveRunDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdateRunStatusText();
+        }
+
+        // ****************************************************************
+        // Function: LoadRunsDropdown
+        // Description: Populates the run selector dropdown from _config.Runs
+        private void LoadRunsDropdown()
+        {
+            if (activeRunDropdown == null) return;
+
+            // Ensure the debug folder exists (always present, never persisted in Runs list)
+            try { Directory.CreateDirectory(_pathResolver.ResolveRunFolder("debug")); } catch { }
+
+            // Build name list: debug entry first (shown as [Debug]), then normal runs
+            var names = new List<string> { "[Debug]" };
+            names.AddRange(_config.Runs.Select(r => r.Name));
+            activeRunDropdown.ItemsSource = names;
+
+            // Map active run name to list entry ("debug" -> "[Debug]")
+            string activeDisplay = _config.ActiveRun == "debug" ? "[Debug]" : _config.ActiveRun;
+
+            // Restore selection to active run if present
+            if (!string.IsNullOrWhiteSpace(activeDisplay) && names.Contains(activeDisplay))
+                activeRunDropdown.SelectedItem = activeDisplay;
+            else if (names.Count > 0)
+                activeRunDropdown.SelectedIndex = 0;
+
+            UpdateRunStatusText();
+        }
+
+        // ****************************************************************
+        // Function: UpdateRunStatusText
+        // Description: Updates the status label showing active run and lock state
+        private void UpdateRunStatusText()
+        {
+            if (runStatusText == null) return;
+            string selectedDisplay = activeRunDropdown?.SelectedItem as string ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(selectedDisplay)) { runStatusText.Text = string.Empty; return; }
+
+            string selected = selectedDisplay == "[Debug]" ? "debug" : selectedDisplay;
+
+            if (selected == "debug")
+            {
+                bool isActive = string.Equals("debug", _config.ActiveRun, StringComparison.OrdinalIgnoreCase);
+                runStatusText.Text = $"[Debug] — {(isActive ? "✔ Active" : "Inactive")} (testing mode, not saved to history)";
+                return;
+            }
+
+            var entry = _config.Runs.FirstOrDefault(r => r.Name == selected);
+            bool isActiveSeason = string.Equals(selected, _config.ActiveRun, StringComparison.OrdinalIgnoreCase);
+            bool isLocked = entry?.Locked ?? false;
+
+            string status = isLocked ? "🔒 Locked (read-only)" : (isActiveSeason ? "✔ Active" : "Inactive");
+            runStatusText.Text = $"{selected} — {status}";
+        }
+
+        // ****************************************************************
+        // Function: PersistRuns
+        // Description: Writes ActiveRun and Runs back to appsettings.json
+        private void PersistRuns()
+        {
+            try
+            {
+                string projectRoot = _pathResolver.ResolveProjectRoot();
+                string configPath = System.IO.Path.Combine(projectRoot, "appsettings.json");
+
+                // Read existing JSON, replace only ActiveRun and Runs keys
+                string existing = File.Exists(configPath) ? File.ReadAllText(configPath) : "{}";
+                using var doc = JsonDocument.Parse(existing);
+                var root = doc.RootElement;
+
+                var dict = new Dictionary<string, object>();
+                foreach (var prop in root.EnumerateObject())
+                    dict[prop.Name] = prop.Value.Clone();
+
+                dict["ActiveRun"] = (object)_config.ActiveRun;
+                dict["Runs"] = (object)_config.Runs.Select(r => new { r.Name, r.Locked }).ToList();
+
+                var options = new JsonSerializerOptions { WriteIndented = true };
+                File.WriteAllText(configPath, JsonSerializer.Serialize(dict, options));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to persist runs");
+            }
+        }
+
+        #endregion
     }
 }

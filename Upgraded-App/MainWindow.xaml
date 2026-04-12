@@ -22,6 +22,7 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
@@ -85,37 +86,85 @@ Height="70">
                        HorizontalAlignment="Center"/>
                 </StackPanel>
 
+                <!-- Inline Analysis Progress (shown only during analysis) -->
+                <Border x:Name="analysisProgressArea"
+                        Grid.Row="1"
+                        Visibility="Collapsed"
+                        Background="{DynamicResource HeaderBackground}"
+                        CornerRadius="6"
+                        Margin="10,0,10,8"
+                        Padding="12,10">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="analysisStatusText"
+                                       Grid.Column="0"
+                                       Text="Analyzing..."
+                                       Foreground="{DynamicResource OnAccentForeground}"
+                                       FontSize="12"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center"/>
+                            <Button x:Name="inlineCancelButton"
+                                    Grid.Column="1"
+                                    Content="✕ Cancel"
+                                    Click="InlineCancelClick"
+                                    Background="Transparent"
+                                    Foreground="{DynamicResource OnAccentForeground}"
+                                    BorderThickness="0"
+                                    FontSize="11"
+                                    Padding="6,2"
+                                    Cursor="Hand"
+                                    Margin="8,0,0,0"/>
+                        </Grid>
+                        <TextBlock x:Name="analysisFrameText"
+                                   Text=""
+                                   Foreground="{DynamicResource OnAccentForeground}"
+                                   FontSize="11"
+                                   Opacity="0.75"
+                                   Margin="0,0,0,6"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <ProgressBar x:Name="analysisProgressBar"
+                                     Height="6"
+                                     Minimum="0"
+                                     Maximum="100"
+                                     Value="0"
+                                     Background="{DynamicResource CardBackground}"
+                                     Foreground="{DynamicResource AccentBrush}"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- Video List -->
-                <ScrollViewer Grid.Row="1" 
+                <ScrollViewer Grid.Row="2"
                       VerticalScrollBarVisibility="Auto"
                       Margin="10,0,10,20">
                     <StackPanel x:Name="videoList" Margin="10,0"/>
                 </ScrollViewer>
 
                 <!-- Delete + Undo Buttons -->
-                <StackPanel Grid.Row="2" Orientation="Vertical" Margin="20,0,20,20">
+                <StackPanel Grid.Row="3" Orientation="Vertical" Margin="20,0,20,20">
                     <Button x:Name="deleteSelectedVideos"
+                            Style="{StaticResource AccentActionButton}"
                             Click="DeleteSelectedVideosClick"
-                            Background="{DynamicResource HeaderBackground}"
-                            Foreground="{DynamicResource OnAccentForeground}"
-                            FontSize="{DynamicResource BaseFontSize}"
-                            FontWeight="SemiBold"
-                            Padding="12"
-                            Margin="0,0,0,8"
-                            BorderThickness="0"
-                            Cursor="Hand">
+                            IsEnabled="False"
+                            Margin="0,0,0,8">
                         Delete Selected Videos
                     </Button>
 
+                    <Button x:Name="changeLocationForSelected"
+                            Style="{StaticResource NeutralActionButton}"
+                            Click="ChangeLocationForSelectedClick"
+                            IsEnabled="False"
+                            Margin="0,0,0,8">
+                        Change Location for Selected
+                    </Button>
+
                     <Button x:Name="undoLastDelete"
+                            Style="{StaticResource NeutralActionButton}"
                             Click="UndoLastDeleteClick"
-                            Background="{DynamicResource CardBackground}"
-                            Foreground="{DynamicResource PrimaryText}"
-                            FontSize="{DynamicResource BaseFontSize}"
-                            FontWeight="SemiBold"
-                            Padding="12"
-                            BorderThickness="0"
-                            Cursor="Hand">
+                            IsEnabled="False">
                         Undo Last Delete
                     </Button>
                 </StackPanel>
@@ -133,6 +182,7 @@ Height="70">
             <Grid Grid.Row="0" Margin="40,30,40,20">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
@@ -164,9 +214,24 @@ Height="70">
                               SelectionChanged="LocationDropdown_SelectionChanged"/>
                 </StackPanel>
 
+                <!-- Run Indicator (read-only) -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,15,0">
+                    <TextBlock Text="Run:" 
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <TextBlock x:Name="runDisplayLabel"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource PrimaryText}"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Text="No run selected"/>
+                </StackPanel>
+
                 <!-- Export Button (initially hidden) -->
                 <Button Name="exportData" 
-                        Grid.Column="2"
+                        Grid.Column="3"
                         Click="ExportDataClick" 
                         VerticalAlignment="Center"
                         Padding="20,12" 
@@ -205,7 +270,7 @@ Height="70">
                 </Button>
 
                 <Button Name="openFolder"
-                    Grid.Column="3"
+                    Grid.Column="4"
                     Click="OpenFolderClick" 
                     VerticalAlignment="Center"
                     Padding="20,12" 
@@ -241,7 +306,7 @@ Height="70">
                     📁 Choose Video Folder
                 </Button>
                 <Button Name="SignOutButton"
-        Grid.Column="4"
+        Grid.Column="5"
         Click="SignOutButtonClick"
         VerticalAlignment="Center"
         Padding="30,12"
@@ -352,7 +417,6 @@ Height="70">
                                                             Height="4">
                                                         <Rectangle Name="fishRangeBar"
                                                                    Height="4"
-                                                                   Fill="#1B4F5C"
                                                                    Opacity="0.85"
                                                                    RadiusX="2" RadiusY="2"
                                                                    Visibility="Collapsed"/>

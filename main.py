@@ -86,19 +86,16 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 # Constants--General
 CSV_KEYS = [
-    "video_file",
-    "trackId",
-    "image_path",
-    "likely_class",
-    "confidence",
-    "start_time_sec",
-    "end_time_sec",
-    "avg_confidence",
-    "direction",
-    "species",
-    "species_confidence",
-    "video_timestamp",
-    "location"
+    "video_file",         # col 0
+    "location",           # col 1
+    "species",            # col 2
+    "species_confidence", # col 3
+    "likely_class",       # col 4
+    "confidence",         # col 5
+    "direction",          # col 6
+    "start_time_sec",     # col 7
+    "end_time_sec",       # col 8
+    "video_timestamp",    # col 9
 ]
 NO_FISH_CSV_KEYS = ["video_file", "location", "video_timestamp"]
 TESSERACT_AVAILABLE = check_tesseract()
@@ -110,9 +107,32 @@ NO_FISH = os.path.join(PROJECT_ROOT, "no_fish")
 
 # Constants--DeepSort
 FPS_DEFAULT = 30 
-MAX_EXPORT_PER_VIDEO = 5  
-OUTPUT_CSV = os.path.join(PROJECT_ROOT, "fish_summary.csv")
-NO_FISH_CSV = os.path.join(PROJECT_ROOT, "no_fish_summary.csv")
+MAX_EXPORT_PER_VIDEO = 5
+
+# CSV paths — determined by the active run folder passed via FISHLENS_RUN_FOLDER env var.
+_RUN_FOLDER = os.getenv("FISHLENS_RUN_FOLDER", "").strip()
+_IS_DEBUG_RUN = _RUN_FOLDER and os.path.basename(_RUN_FOLDER).lower() == "debug"
+
+if not _RUN_FOLDER:
+    print("[ERROR] FISHLENS_RUN_FOLDER is not set. A run must be active before starting analysis.", flush=True)
+
+os.makedirs(_RUN_FOLDER, exist_ok=True) if _RUN_FOLDER else None
+_ALL_HISTORY_DIR = os.path.dirname(_RUN_FOLDER) if _RUN_FOLDER else PROJECT_ROOT
+os.makedirs(_ALL_HISTORY_DIR, exist_ok=True)
+
+if _IS_DEBUG_RUN:
+    # Debug mode: single CSV, never writes to all_history or session files
+    OUTPUT_CSV          = os.path.join(_RUN_FOLDER, "debug.csv")
+    SESSION_CSV         = None
+    SESSION_NO_FISH_CSV = None
+    MASTER_FISH_CSV     = None
+else:
+    # Normal run: session files (wiped on startup) + persistent masters
+    SESSION_CSV         = os.path.join(_RUN_FOLDER, "session_fish.csv")      if _RUN_FOLDER else None
+    SESSION_NO_FISH_CSV = os.path.join(_RUN_FOLDER, "session_no_fish.csv")   if _RUN_FOLDER else None
+    OUTPUT_CSV          = os.path.join(_RUN_FOLDER, "run_master.csv")        if _RUN_FOLDER else None
+    MASTER_FISH_CSV     = os.path.join(_ALL_HISTORY_DIR, "all_history.csv")  if _RUN_FOLDER else None
+
 FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
 
 # Performance tuning
@@ -140,6 +160,18 @@ IMAGE_SIZE = (150, 150)
 # Create and initialize folders
 os.makedirs(NO_FISH, exist_ok=True)
 os.makedirs(FISH_IMAGE_DIR, exist_ok=True)
+
+# Wipe session CSVs so this session starts fresh (they are appended during the session).
+def _init_session_csvs():
+    for path, keys in [(SESSION_CSV, CSV_KEYS), (SESSION_NO_FISH_CSV, NO_FISH_CSV_KEYS)]:
+        if path:
+            try:
+                with open(path, "w", newline="") as f:
+                    csv.DictWriter(f, fieldnames=keys).writeheader()
+            except Exception as ex:
+                print(f"[WARNING] Could not initialize session CSV {path}: {ex}")
+
+_init_session_csvs()
 
 # Signal to the host application that models are loaded and we are ready for work.
 print("[PROGRESS] READY", flush=True)
@@ -222,16 +254,7 @@ def main(input_path=None):
     # Debug: Print paths
     print(f"[INFO] Processing videos from: {video_folder}")
 
-    # Clear no-fish CSV fresh for each run
-    try:
-        with open(NO_FISH_CSV, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=NO_FISH_CSV_KEYS)
-            writer.writeheader()
-    except Exception as e:
-        print(f"[WARNING] Could not initialize no-fish CSV: {e}")
-
     # Process all videos in folder
-    all_tracks = []
     print(f"Performance: FAST_MODE={FAST_MODE}, FRAME_STRIDE={FRAME_STRIDE}, YOLO_IMGSZ={YOLO_IMGSZ}")
     if single_video_file:
         # Process single video file
@@ -248,7 +271,15 @@ def main(input_path=None):
         for t in video_tracks:
             t["video_file"] = single_video_file
             t["location"] = FISHLENS_LOCATION
-        all_tracks.extend(video_tracks)
+        if video_tracks:
+            try:
+                _flush_tracks_to_csv(video_tracks)
+                print(f"[SUCCESS] Exported {len(video_tracks)} fish tracks for {filename}.")
+            except Exception as e:
+                print(f"[ERROR] Failed to write CSV for {filename}: {e}")
+        else:
+            print(f"[INFO] No fish tracks to export for {filename}.")
+        print(f"[PROGRESS] VIDEO_DONE:{filename}", flush=True)
     else:
         # Process all videos in folder
         video_extensions = ('.mp4', '.avi', '.mov', '.mkv', '.asf', '.wmv', '.flv', '.webm')
@@ -268,9 +299,27 @@ def main(input_path=None):
         video_count = len(video_files)
         print(f"[PROGRESS] TOTAL:{video_count}", flush=True)
 
+        # Build set of already-analyzed filenames from run_master.csv so they can be skipped.
+        already_analyzed = set()
+        master_csv_path = OUTPUT_CSV  # run_master.csv
+        if master_csv_path and os.path.exists(master_csv_path):
+            try:
+                with open(master_csv_path, newline="") as _f:
+                    for row in csv.DictReader(_f):
+                        stored = row.get("video_file", "")
+                        if stored:
+                            already_analyzed.add(os.path.basename(stored))
+            except Exception as _e:
+                print(f"[WARNING] Could not read master CSV for skip-check: {_e}")
+
         for video_index, filename in enumerate(video_files, start=1):
             item_path = os.path.join(video_folder, filename)
             print(f"[PROGRESS] VIDEO:{video_index}/{video_count}|{filename}", flush=True)
+
+            if filename in already_analyzed:
+                print(f"[INFO] Skipping (already analyzed): {filename}", flush=True)
+                continue
+
             video_path, is_temp = convert_asf_to_mp4(item_path)
             print(f"Processing: {filename}")
             try:
@@ -281,20 +330,19 @@ def main(input_path=None):
             for t in video_tracks:
                 t["video_file"] = item_path
                 t["location"] = FISHLENS_LOCATION
-            all_tracks.extend(video_tracks)
 
-    # Export CSV
-    if all_tracks:
-        try:
-            with open(OUTPUT_CSV, "w", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=CSV_KEYS, extrasaction="ignore")
-                writer.writeheader()
-                writer.writerows(all_tracks)
-            print(f"[SUCCESS] Exported {len(all_tracks)} fish tracks to {OUTPUT_CSV}")
-        except Exception as e:
-            print(f"[ERROR] Failed to write CSV: {e}")
-    else:
-        print("[INFO] No fish tracks to export.")
+            # Flush this video's tracks to CSV immediately so results are preserved
+            # even if the run is cancelled before all videos finish.
+            if video_tracks:
+                try:
+                    _flush_tracks_to_csv(video_tracks)
+                    print(f"[SUCCESS] Exported {len(video_tracks)} fish tracks for {filename}.")
+                except Exception as e:
+                    print(f"[ERROR] Failed to write CSV for {filename}: {e}")
+            else:
+                print(f"[INFO] No fish tracks to export for {filename}.")
+
+            print(f"[PROGRESS] VIDEO_DONE:{filename}", flush=True)
 
 # ****************************************************************
 # Function: enhance_image
@@ -321,6 +369,30 @@ def enhance_image(crop):
     crop = np.clip(crop, 0, 255).astype(np.uint8)
     
     return crop
+
+
+# ****************************************************************
+# Function: _flush_tracks_to_csv
+# Description: Appends one video's fish tracks to the session + run master + all-history CSVs.
+#              Called immediately after each video finishes so results survive a cancel.
+# Notes: N/A
+def _flush_tracks_to_csv(tracks):
+    def _append_csv(path, rows, keys):
+        if path is None:
+            return
+        needs_header = not os.path.exists(path) or os.path.getsize(path) == 0
+        with open(path, "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=keys, extrasaction="ignore")
+            if needs_header:
+                writer.writeheader()
+            writer.writerows(rows)
+
+    if _IS_DEBUG_RUN:
+        _append_csv(OUTPUT_CSV, tracks, CSV_KEYS)
+    else:
+        _append_csv(SESSION_CSV, tracks, CSV_KEYS)
+        _append_csv(OUTPUT_CSV, tracks, CSV_KEYS)
+        _append_csv(MASTER_FISH_CSV, tracks, CSV_KEYS)
 
 
 # ****************************************************************
@@ -942,15 +1014,51 @@ def no_fish_found(video_path, filename):
 # Description: Appends one row to no_fish_summary.csv for a video with no detections.
 # Notes: N/A
 def _append_no_fish_row(video_file_path, video_timestamp):
-    row = {
+    slim_row = {
         "video_file": video_file_path,
         "location": FISHLENS_LOCATION,
         "video_timestamp": video_timestamp or "Not detected"
     }
+    # Full-schema row for the master files — likely_class="no_fish" is the fish-present indicator.
+    # Fish-specific fields are left blank so the master CSV has a uniform shape for every video.
+    master_row = {k: "" for k in CSV_KEYS}
+    master_row["video_file"]      = video_file_path
+    master_row["likely_class"]    = "no_fish"
+    master_row["video_timestamp"] = video_timestamp or "Not detected"
+    master_row["location"]        = FISHLENS_LOCATION
+
     try:
-        with open(NO_FISH_CSV, "a", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=NO_FISH_CSV_KEYS)
-            writer.writerow(row)
+        # --- Session no-fish file (slim schema, wiped on startup) ---
+        target = SESSION_NO_FISH_CSV
+        if target:
+            needs_header = not os.path.exists(target) or os.path.getsize(target) == 0
+            with open(target, "a", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=NO_FISH_CSV_KEYS)
+                if needs_header:
+                    writer.writeheader()
+                writer.writerow(slim_row)
+
+        # --- Master files (run_master + all_history) — full CSV_KEYS schema ---
+        # session_fish + session_no_fish rolls up into run_master;
+        # all run_master files roll up into all_history.
+        if _RUN_FOLDER and _IS_DEBUG_RUN:
+            # Debug: append no-fish row to debug.csv only, skip all_history
+            needs_header = not os.path.exists(OUTPUT_CSV) or os.path.getsize(OUTPUT_CSV) == 0
+            with open(OUTPUT_CSV, "a", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=CSV_KEYS, extrasaction="ignore")
+                if needs_header:
+                    writer.writeheader()
+                writer.writerow(master_row)
+        elif _RUN_FOLDER:
+            for path in (OUTPUT_CSV, MASTER_FISH_CSV):
+                if path is None:
+                    continue
+                needs_header = not os.path.exists(path) or os.path.getsize(path) == 0
+                with open(path, "a", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=CSV_KEYS, extrasaction="ignore")
+                    if needs_header:
+                        writer.writeheader()
+                    writer.writerow(master_row)
     except Exception as e:
         print(f"[ERROR] Failed to write no-fish row: {e}")
 

@@ -28,6 +28,7 @@ namespace FishLens_App
         private string _filterSpecies = "All";
         private string _filterDirection = "All";
         private string _filterCamera = "All";
+        private string _filterRun = "All";
         private double _filterMinConfidence = 0.0;
         private string _currentGroupBy = "species"; // "species", "datetime", "location"
 
@@ -49,12 +50,15 @@ namespace FishLens_App
 
             Loaded += (s, e) =>
             {
+                LoadRunFilter();
                 LoadLocationFilter();
                 App.LocationChanged += OnLocationChanged;
+                App.RunChanged += OnRunChanged;
             };
             Unloaded += (s, e) =>
             {
                 App.LocationChanged -= OnLocationChanged;
+                App.RunChanged -= OnRunChanged;
             };
         }
 
@@ -80,7 +84,7 @@ namespace FishLens_App
         {
             try
             {
-                string csvPath = _pathResolver.ResolveCsvScriptPath();
+                string csvPath = GetCsvPathForRun(_filterRun);
 
                 if (!File.Exists(csvPath))
                 {
@@ -185,6 +189,7 @@ namespace FishLens_App
             _filterSpecies = "All";
             _filterDirection = "All";
             _filterMinConfidence = 0.0;
+            _filterRun = "All";
 
             // Reset UI controls
             if (startDatePicker != null)
@@ -204,6 +209,9 @@ namespace FishLens_App
 
             if (confidenceSlider != null)
                 confidenceSlider.Value = 0;
+
+            if (runFilter != null)
+                runFilter.SelectedIndex = 0;
 
             // Regenerate report
             GenerateReportClick(sender, e);
@@ -230,11 +238,6 @@ namespace FishLens_App
 
             if (endDatePicker != null)
                 endDatePicker.SelectedDate = null;
-
-            MessageBox.Show("Date filters cleared. Click 'Apply Filters' to update the report.",
-                            "Filters Updated",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Information);
         }
 
         // **************************************************
@@ -277,34 +280,28 @@ namespace FishLens_App
                     continue;
 
                 // CSV layout (reference):
-                // 0: video_file, 1: track_id, 2: image_path, 3: likely_class, 4: confidence,
-                // 5: start_time_sec, 6: end_time_sec, 7: avg_confidence, 8: direction,
-                // 9: species, 10: species_confidence
+                // 0: video_file, 1: location, 2: species, 3: species_confidence, 4: likely_class,
+                // 5: confidence, 6: direction, 7: start_time_sec, 8: end_time_sec, 9: video_timestamp
                 string videoName = columns.Length > 0 ? columns[0] : string.Empty;
 
-                // Capture both the species column (index 9) and the likely_class (index 3).
+                // Capture both the species column (index 2) and the likely_class (index 4).
                 string species = string.Empty;
-                if (columns.Length > 9)
+                if (columns.Length > 2)
                 {
-                    species = columns[9].Trim();
+                    species = columns[2].Trim();
                 }
                 else
                 {
                     species = string.Empty;
                 }
 
-                string likelyClass = columns.Length > 3 ? columns[3].Trim() : string.Empty;
+                string likelyClass = columns.Length > 4 ? columns[4].Trim() : string.Empty;
 
-                // Direction is expected at index 8 in the provided CSV layout; fall back
-                // to index 7 if needed.
+                // Direction is at index 6 in the CSV layout.
                 string direction = string.Empty;
-                if (columns.Length > 8)
+                if (columns.Length > 6)
                 {
-                    direction = columns[8].Trim();
-                }
-                else if (columns.Length > 7)
-                {
-                    direction = columns[7].Trim();
+                    direction = columns[6].Trim();
                 }
 
                 ProcessSpeciesData(stats, species, likelyClass);
@@ -312,11 +309,11 @@ namespace FishLens_App
                 ProcessVideoData(stats, videoName);
                 totalConfidence += ProcessConfidenceData(stats, columns);
 
-                // col 11: video_timestamp (full datetime string), col 12: location
+                // col 9: video_timestamp (full datetime string)
                 DateTime? timestamp = null;
-                if (columns.Length > 11)
+                if (columns.Length > 9)
                 {
-                    if (DateTime.TryParse(columns[11].Trim(), out DateTime ts))
+                    if (DateTime.TryParse(columns[9].Trim(), out DateTime ts))
                         timestamp = ts;
                 }
 
@@ -343,14 +340,14 @@ namespace FishLens_App
                     if (stats.DetectionsByHour.ContainsKey(hr)) stats.DetectionsByHour[hr]++; else stats.DetectionsByHour[hr] = 1;
                 }
 
-                // Location from column 12 (actual location field); fall back to name-based extraction
-                string location = columns.Length > 12 ? columns[12].Trim() : string.Empty;
+                // Location from column 1; fall back to name-based extraction
+                string location = columns.Length > 1 ? columns[1].Trim() : string.Empty;
                 if (string.IsNullOrEmpty(location))
                     location = ExtractLocationFromVideo(videoName);
                 ProcessLocationData(stats, location, species);
 
                 // NEW: Process correctness/accuracy data (if available in columns)
-                if (columns.Length > 8 && double.TryParse(columns[8], out double correctness))
+                if (columns.Length > 6 && double.TryParse(columns[6], out double correctness))
                 {
                     totalCorrectness += correctness;
                     correctnessCount++;
@@ -632,6 +629,112 @@ namespace FishLens_App
             Dispatcher.Invoke(LoadLocationFilter);
         }
 
+        private void OnRunChanged()
+        {
+            Dispatcher.Invoke(LoadRunFilter);
+        }
+
+        // **************************************************
+        // Function: FilterPanel_PreviewMouseWheel
+        // Description: Normalises scroll speed on the filter panel ScrollViewer
+        private void FilterPanel_PreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+        {
+            if (sender is ScrollViewer sv)
+            {
+                sv.ScrollToVerticalOffset(sv.VerticalOffset - e.Delta * 0.3);
+                e.Handled = true;
+            }
+        }
+
+        // **************************************************
+        // Function: RunFilter_SelectionChanged
+        // Description: Constrains date pickers to the selected run's data range
+        public void RunFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (runFilter?.SelectedItem is not string selectedRun) return;
+            _filterRun = selectedRun == "All History" ? "All" : selectedRun;
+            ConstrainDatePickersForRun(selectedRun);
+        }
+
+        // **************************************************
+        // Function: ConstrainDatePickersForRun
+        // Description: Reads the CSV for a run to find min/max dates and sets picker bounds
+        private void ConstrainDatePickersForRun(string runName)
+        {
+            // Always cap future dates at today
+            if (endDatePicker != null)
+                endDatePicker.DisplayDateEnd = DateTime.Today;
+
+            if (string.IsNullOrWhiteSpace(runName) || runName == "All History") return;
+
+            try
+            {
+                string csvPath = _pathResolver.ResolveRunCsvPath(runName);
+                if (!File.Exists(csvPath)) return;
+
+                DateTime? minDate = null;
+                DateTime? maxDate = null;
+
+                foreach (string line in File.ReadLines(csvPath).Skip(1))
+                {
+                    var cols = line.Split(',');
+                    if (cols.Length > 9 && DateTime.TryParse(cols[9].Trim(), out DateTime ts))
+                    {
+                        if (!minDate.HasValue || ts < minDate.Value) minDate = ts;
+                        if (!maxDate.HasValue || ts > maxDate.Value) maxDate = ts;
+                    }
+                }
+
+                if (minDate.HasValue && startDatePicker != null)
+                {
+                    startDatePicker.DisplayDateStart = minDate.Value.Date;
+                    startDatePicker.DisplayDateEnd = DateTime.Today;
+                }
+                if (maxDate.HasValue && endDatePicker != null)
+                    endDatePicker.DisplayDateEnd = maxDate.Value.Date > DateTime.Today ? DateTime.Today : maxDate.Value.Date;
+            }
+            catch { /* non-critical */ }
+        }
+
+        // **************************************************
+        // Function: LoadRunFilter
+        // Description: Populates the run ComboBox from appsettings.json Runs
+        private void LoadRunFilter()
+        {
+            try
+            {
+                var items = new List<string> { "All History" };
+                string configPath = System.IO.Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
+
+                if (File.Exists(configPath))
+                {
+                    using var stream = File.OpenRead(configPath);
+                    using var doc = System.Text.Json.JsonDocument.Parse(stream);
+                    var root = doc.RootElement;
+
+                    if (root.TryGetProperty("Runs", out var runsEl) && runsEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        foreach (var runEl in runsEl.EnumerateArray())
+                        {
+                            if (runEl.TryGetProperty("Name", out var nEl) && nEl.ValueKind == System.Text.Json.JsonValueKind.String)
+                            {
+                                string name = nEl.GetString();
+                                if (!string.IsNullOrWhiteSpace(name))
+                                    items.Add(name);
+                            }
+                        }
+                    }
+                }
+
+                if (runFilter != null)
+                {
+                    runFilter.ItemsSource = items;
+                    runFilter.SelectedIndex = 0;
+                }
+            }
+            catch { /* non-critical */ }
+        }
+
         // **************************************************
         // Function: PassesConfidenceFilter
         // Description: Checks if a confidence value passes the minimum confidence threshold
@@ -687,6 +790,21 @@ namespace FishLens_App
                 string content = cameraFilter.SelectedItem.ToString();
                 _filterCamera = content.Contains("All Locations") ? "All" : content;
             }
+
+            // Update run filter
+            if (runFilter?.SelectedItem is string selectedRun)
+                _filterRun = selectedRun == "All History" ? "All" : selectedRun;
+        }
+
+        // **************************************************
+        // Function: GetCsvPathForRun
+        // Description: Returns the appropriate CSV path based on the active run filter
+        private string GetCsvPathForRun(string runFilter)
+        {
+            if (string.IsNullOrWhiteSpace(runFilter) || runFilter == "All")
+                return _pathResolver.ResolveAllTimeMasterFishCsvPath();
+
+            return _pathResolver.ResolveRunCsvPath(runFilter);
         }
 
         // **************************************************
@@ -704,17 +822,17 @@ namespace FishLens_App
                 // video name
                 string videoName = columns.Length > 0 ? columns[0].Trim() : string.Empty;
 
-                // species: prefer column 9, fallback to likely_class at 3
-                string species = columns.Length > 9 ? columns[9].Trim() : (columns.Length > 3 ? columns[3].Trim() : string.Empty);
+                // species: column 2
+                string species = columns.Length > 2 ? columns[2].Trim() : string.Empty;
 
-                // direction: prefer column 8, fallback to 7
-                string direction = columns.Length > 8 ? columns[8].Trim() : (columns.Length > 7 ? columns[7].Trim() : string.Empty);
+                // direction: column 6
+                string direction = columns.Length > 6 ? columns[6].Trim() : string.Empty;
 
-                // avg confidence: column 7
+                // confidence: column 5
                 double? avgConf = null;
-                if (columns.Length > 7)
+                if (columns.Length > 5)
                 {
-                    var raw = columns[7].Trim().TrimEnd('%');
+                    var raw = columns[5].Trim().TrimEnd('%');
                     if (double.TryParse(raw, out var d))
                     {
                         if (d > 1) d = d / 100.0;
@@ -722,24 +840,17 @@ namespace FishLens_App
                     }
                 }
 
-                // timestamp: columns 11 (date) and 12 (time)
+                // timestamp: column 9 (full datetime string)
                 DateTime? timestamp = null;
-                if (columns.Length > 11)
+                if (columns.Length > 9)
                 {
-                    var datePart = columns[11].Trim();
-                    var timePart = columns.Length > 12 ? columns[12].Trim() : string.Empty;
-                    if (!string.IsNullOrEmpty(timePart))
-                    {
-                        if (DateTime.TryParse($"{datePart} {timePart}", out DateTime ts)) timestamp = ts;
-                    }
-                    else
-                    {
-                        if (DateTime.TryParse(datePart, out DateTime ts2)) timestamp = ts2;
-                    }
+                    if (DateTime.TryParse(columns[9].Trim(), out DateTime ts)) timestamp = ts;
                 }
 
-                // location derived from video name
-                string location = ExtractLocationFromVideo(videoName);
+                // location: column 1, fall back to filename parse
+                string location = columns.Length > 1 && !string.IsNullOrWhiteSpace(columns[1].Trim())
+                    ? columns[1].Trim()
+                    : ExtractLocationFromVideo(videoName);
 
                 if (!PassesSpeciesFilter(species))
                     continue;
@@ -864,10 +975,10 @@ namespace FishLens_App
         // Description: Updates confidence statistics and returns the confidence value
         private double ProcessConfidenceData(ReportStatistics stats, string[] columns)
         {
-            // avg_confidence is expected at index 7 per CSV layout (0-based).
-            if (columns.Length > 7)
+            // confidence is at index 5 per CSV layout (0-based).
+            if (columns.Length > 5)
             {
-                var raw = columns[7].Trim().TrimEnd('%');
+                var raw = columns[5].Trim().TrimEnd('%');
                 if (double.TryParse(raw, out double confidence))
                 {
                     // Normalize percent-like values (e.g., 81 or 81.0) to 0-1 range

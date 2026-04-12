@@ -25,6 +25,9 @@ namespace FishLens_App
         // Active location used when launching Python processes
         public string ActiveLocation { get; set; } = "Unknown";
 
+        // Active run name (e.g. "Spring 2026"); empty string means no run selected
+        public string ActiveRun { get; set; } = string.Empty;
+
         // Raised when the user saves a Fast Mode change in Settings so MainWindow can restart Python
         public static event Action FastModeChanged;
         public static void RaiseFastModeChanged() => FastModeChanged?.Invoke();
@@ -32,6 +35,10 @@ namespace FishLens_App
         // Raised when the active location changes so MainWindow can refresh its dropdown
         public static event Action LocationChanged;
         public static void RaiseLocationChanged() => LocationChanged?.Invoke();
+
+        // Raised when the active run changes so MainWindow and History can refresh
+        public static event Action RunChanged;
+        public static void RaiseRunChanged() => RunChanged?.Invoke();
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -44,8 +51,11 @@ namespace FishLens_App
             // have launched with the wrong FISHLENS_FAST_MODE value.
             try
             {
+                // Resolve project root the same way DefaultProjectPathResolver does
+                // (4 levels up from BaseDirectory: bin/Debug/net*/):
                 string appDir = AppDomain.CurrentDomain.BaseDirectory;
-                string configPath = Path.Combine(appDir, "appsettings.json");
+                string projectRoot = System.IO.Directory.GetParent(appDir)?.Parent?.Parent?.Parent?.Parent?.FullName ?? appDir;
+                string configPath = Path.Combine(projectRoot, "appsettings.json");
                 if (File.Exists(configPath))
                 {
                     using var stream = File.OpenRead(configPath);
@@ -57,6 +67,9 @@ namespace FishLens_App
                     if (root.TryGetProperty("ActiveLocation", out var alEl) &&
                         alEl.ValueKind == JsonValueKind.String)
                         ActiveLocation = alEl.GetString() ?? "Unknown";
+                    if (root.TryGetProperty("ActiveRun", out var arEl) &&
+                        arEl.ValueKind == JsonValueKind.String)
+                        ActiveRun = arEl.GetString() ?? string.Empty;
                 }
             }
             catch { /* non-critical; defaults will be used */ }
