@@ -105,9 +105,20 @@ def dedupe_tracks_by_timestamp(finished_tracks):
             passthrough.append(track)
             continue
 
-        existing = best_by_timestamp.get(ts)
+        # Bucket by (wall-clock timestamp, start-time bin).
+        # Using 2-second bins so that a tracker ID-split on the same fish (which starts
+        # within a second or two of the original track) is still deduplicated, while
+        # two real fish that appear at different points in the video are not collapsed.
+        try:
+            start_sec = float(str(track.get("start_time_sec", "0")).replace("%", "").strip())
+        except (ValueError, TypeError):
+            start_sec = 0.0
+        start_bin = int(start_sec // 2)  # 2-second buckets
+
+        key = (ts, start_bin)
+        existing = best_by_timestamp.get(key)
         if existing is None or _pct_value(track) > _pct_value(existing):
-            best_by_timestamp[ts] = track
+            best_by_timestamp[key] = track
 
     # Keep original relative ordering of selected tracks where possible.
     selected_ids = {id(t) for t in best_by_timestamp.values()}

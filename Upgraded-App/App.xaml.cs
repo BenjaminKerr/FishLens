@@ -40,6 +40,15 @@ namespace FishLens_App
         public static event Action RunChanged;
         public static void RaiseRunChanged() => RunChanged?.Invoke();
 
+        // Raised when YOLO analysis starts or stops so other pages can lock/unlock their controls
+        public static bool IsAnalyzing { get; private set; }
+        public static event Action<bool> AnalysisStateChanged;
+        public static void RaiseAnalysisStateChanged(bool isAnalyzing)
+        {
+            IsAnalyzing = isAnalyzing;
+            AnalysisStateChanged?.Invoke(isAnalyzing);
+        }
+
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);

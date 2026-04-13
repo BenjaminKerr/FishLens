@@ -105,6 +105,14 @@ MODEL = _load_yolo_model("models/fish_detector2.pt")
 YOLO_CONFIDENCE_THRESHOLD = 0.25  # Adjustable: lower = detects more fish (but more false positives), higher = more selective
 NO_FISH = os.path.join(PROJECT_ROOT, "no_fish")
 
+# Corner-artifact filter: fixed IR illuminators or lens rings in camera corners produce
+# small, high-confidence detections that YOLO mistakes for fish.  A detection is rejected
+# if its bounding box is small (< CORNER_ARTIFACT_MAX_SIZE fraction of frame in both
+# dimensions) AND its center falls within CORNER_ARTIFACT_ZONE of both a horizontal
+# and a vertical frame edge (i.e. inside one of the four corner zones).
+CORNER_ARTIFACT_ZONE     = 0.15   # 15 % from each edge defines the corner zone
+CORNER_ARTIFACT_MAX_SIZE = 0.20   # box must be < 20 % of frame width AND height
+
 # Constants--DeepSort
 FPS_DEFAULT = 30 
 MAX_EXPORT_PER_VIDEO = 5
@@ -179,8 +187,9 @@ print("[PROGRESS] READY", flush=True)
 @dataclass
 class FrameData:
         f_index: int = 0
-        f_found_fish: bool = False 
-        f_detections: List = field(default_factory=list) 
+        f_found_fish: bool = False
+        f_detections: List = field(default_factory=list)
+        f_pos_ms: float = 0.0  # Actual decoder position in milliseconds (from CAP_PROP_POS_MSEC)
 
 class VideoData:
     def __init__(self):
@@ -300,17 +309,22 @@ def main(input_path=None):
         print(f"[PROGRESS] TOTAL:{video_count}", flush=True)
 
         # Build set of already-analyzed filenames from run_master.csv so they can be skipped.
+        # Set FISHLENS_FORCE_REANALYZE=1 to bypass this check and re-process all videos.
+        FORCE_REANALYZE = os.getenv("FISHLENS_FORCE_REANALYZE", "0") == "1"
         already_analyzed = set()
-        master_csv_path = OUTPUT_CSV  # run_master.csv
-        if master_csv_path and os.path.exists(master_csv_path):
-            try:
-                with open(master_csv_path, newline="") as _f:
-                    for row in csv.DictReader(_f):
-                        stored = row.get("video_file", "")
-                        if stored:
-                            already_analyzed.add(os.path.basename(stored))
-            except Exception as _e:
-                print(f"[WARNING] Could not read master CSV for skip-check: {_e}")
+        if not FORCE_REANALYZE:
+            master_csv_path = OUTPUT_CSV  # run_master.csv
+            if master_csv_path and os.path.exists(master_csv_path):
+                try:
+                    with open(master_csv_path, newline="") as _f:
+                        for row in csv.DictReader(_f):
+                            stored = row.get("video_file", "")
+                            if stored:
+                                already_analyzed.add(os.path.basename(stored))
+                except Exception as _e:
+                    print(f"[WARNING] Could not read master CSV for skip-check: {_e}")
+        else:
+            print("[INFO] FORCE_REANALYZE=1: skipping already-analyzed check, all videos will be re-processed.", flush=True)
 
         for video_index, filename in enumerate(video_files, start=1):
             item_path = os.path.join(video_folder, filename)
@@ -397,10 +411,11 @@ def _flush_tracks_to_csv(tracks):
 
 # ****************************************************************
 # Function: convert_asf_to_mp4
-# Description: Convert ASF video to a temporary MP4 to improve decode reliability.
+# Description: Convert ASF/WMV video to a temporary MP4 to improve decode reliability.
 # Notes: Returns (path, is_temp). Caller is responsible for deleting the temp file.
 def convert_asf_to_mp4(video_path):
-    if not video_path.lower().endswith('.asf'):
+    ext = os.path.splitext(video_path)[1].lower()
+    if ext not in ('.asf', '.wmv'):
         return video_path, False
 
     fd, output_path = tempfile.mkstemp(suffix='.mp4')
@@ -437,9 +452,36 @@ def convert_asf_to_mp4(video_path):
         _cleanup_temp(output_path)
         return video_path, False
 
-    fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
-    if fps <= 0:
-        fps = FPS_DEFAULT
+    # ASF files frequently report incorrect frame rates via the Windows codec
+    # (e.g. 1fps or 7.5fps when the camera ran at 30fps). Measure the actual
+    # frame interval from the decoder's own POS_MSEC clock by sampling the
+    # first PROBE_FRAMES frames, then derive fps from the real elapsed time.
+    PROBE_FRAMES = 30
+    probe_timestamps = []
+    for _ in range(PROBE_FRAMES):
+        ts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
+        probe_timestamps.append(ts_ms)
+        ret, _ = _video_capture_read(cap)
+        if not ret:
+            break
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # rewind for actual conversion
+
+    fps = FPS_DEFAULT  # start with safe default
+    if len(probe_timestamps) >= 2:
+        intervals = [probe_timestamps[i+1] - probe_timestamps[i]
+                     for i in range(len(probe_timestamps) - 1)
+                     if probe_timestamps[i+1] > probe_timestamps[i]]
+        if intervals:
+            median_interval_ms = sorted(intervals)[len(intervals) // 2]
+            if median_interval_ms > 0:
+                measured_fps = 1000.0 / median_interval_ms
+                if 5.0 <= measured_fps <= 120.0:
+                    fps = measured_fps
+    # Also cross-check against the metadata fps; if it's sane, prefer it.
+    meta_fps = cap.get(cv2.CAP_PROP_FPS)
+    if 5.0 <= meta_fps <= 120.0 and fps == FPS_DEFAULT:
+        fps = meta_fps
+    print(f"ASF OpenCV fallback: using fps={fps:.2f} for {os.path.basename(video_path)}")
 
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -504,7 +546,9 @@ def run_video_tracker(video_path, source_video_path=None):
     # Initialize new VideoData and DeepSort tracker for each video
     vidData = VideoData()
     source_video_path = source_video_path or video_path
-    vidData.v_filename = os.path.basename(video_path)
+    # Always use the original source filename so image saves and logs show the real name,
+    # not a temp MP4 path when an ASF/WMV was converted before analysis.
+    vidData.v_filename = os.path.basename(source_video_path)
     tracker = DeepSortTracker()
     
     # Initialize frameData to avoid UnboundLocalError if video fails early
@@ -547,18 +591,20 @@ def run_video_tracker(video_path, source_video_path=None):
     # Cycle through video frames until end of video
     while ret:
 
+        # Record actual decoder position BEFORE processing this frame.
+        # Using CAP_PROP_POS_MSEC is reliable regardless of FPS metadata accuracy,
+        # which is especially important for ASF files where OpenCV often reads the
+        # wrong FPS (e.g. 7.5 instead of 30), inflating all frame-based time calculations.
+        frameData = FrameData(f_index=vidData.v_frame_index)
+        frameData.f_pos_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
+        frameData.f_detections = []
+
         # Speed mode: process every Nth frame
         if FRAME_STRIDE > 1 and (vidData.v_frame_index % FRAME_STRIDE) != 0:
             vidData.v_frame_index += 1
             vidData.v_total_frames += 1
             ret, frame = _video_capture_read(cap)
             continue
-
-        # Initialize new FrameData object each frame
-        frameData = FrameData(f_index=vidData.v_frame_index)
-        frameData.f_detections = []
-
-        # Determine most common class per-frame
         analyze_yolo_detections(frame, MODEL, frameData, vidData)
 
         # Reset per-frame track set before DeepSort populates it
@@ -592,7 +638,7 @@ def run_video_tracker(video_path, source_video_path=None):
     # Skip export if fish was not detected in video
     if not vidData.v_found_fish:
         print(f"[INFO] No fish detected in {vidData.v_filename}")
-        no_fish_found(video_path, vidData.v_filename)
+        no_fish_found(source_video_path, vidData.v_filename)
         _append_no_fish_row(source_video_path, vidData.v_video_timestamp)
         return []
 
@@ -634,8 +680,11 @@ def analyze_yolo_detections(frame, model, frameData, vidData):
         verbose=False,
         stream=False,
         save=False,
-        imgsz=YOLO_IMGSZ
+        imgsz=YOLO_IMGSZ,
+        conf=YOLO_CONFIDENCE_THRESHOLD
     )
+
+    frame_h_px, frame_w_px = frame.shape[:2]
 
     # Begin YOLO post-analysis
     if results:
@@ -651,6 +700,23 @@ def analyze_yolo_detections(frame, model, frameData, vidData):
             
             if box_area < 100:
                 continue
+
+            # Corner-artifact filter: reject small detections whose center falls
+            # inside a corner zone on both axes (e.g., IR illuminator rings).
+            # NOTE: this is a per-detection pre-filter only for obvious corner pixels;
+            # the real corner-artifact guard runs at track level in build_track_summary
+            # so that genuinely small fish that move are never rejected here.
+            box_w_px, box_h_px = x2 - x1, y2 - y1
+            if box_w_px < frame_w_px * CORNER_ARTIFACT_MAX_SIZE and \
+               box_h_px < frame_h_px * CORNER_ARTIFACT_MAX_SIZE:
+                cx = (x1 + x2) / 2.0
+                cy = (y1 + y2) / 2.0
+                near_h_edge = cx < frame_w_px * CORNER_ARTIFACT_ZONE or \
+                              cx > frame_w_px * (1.0 - CORNER_ARTIFACT_ZONE)
+                near_v_edge = cy < frame_h_px * CORNER_ARTIFACT_ZONE or \
+                              cy > frame_h_px * (1.0 - CORNER_ARTIFACT_ZONE)
+                if near_h_edge and near_v_edge:
+                    continue
 
             # Mark if YOLO detected a fish in frame.
             try:
@@ -720,6 +786,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                 initial_conf = None
             vidData.v_active_tracks[trackId] = {
                 "start_frame": frameData.f_index,
+                "start_ms": frameData.f_pos_ms,  # actual decoder time; avoids FPS metadata errors
                 "confidences": [],
                 "directions": [],
                 "best_conf": -1.0,
@@ -795,21 +862,40 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     duration_sec = (frameData.f_index - track_data["start_frame"]) / vidData.v_fps
     if duration_sec < 1.0:
         return None
-    
+
+    entry_x = track_data.get("entry_x", vidData.v_frame_width / 2)
+    exit_x  = track_data.get("last_x",  vidData.v_frame_width / 2)
+
+    # Track-level corner-artifact filter.
+    # A static IR illuminator or lens artifact stays planted in one corner across
+    # the entire video — its entry_x and exit_x (the YOLO bbox center) are both
+    # close to the same frame edge.  A real small fish will move across the frame,
+    # so its traversal (|exit_x - entry_x|) will be at least 10% of frame width
+    # even if it is physically tiny.  We only reject a track when:
+    #   • it barely moved horizontally  (traversal < 10% frame width), AND
+    #   • both entry and exit are within CORNER_ARTIFACT_ZONE of the same side.
+    traversal = abs(exit_x - entry_x)
+    fw = vidData.v_frame_width
+    if traversal < fw * 0.10:
+        in_left_corner  = entry_x < fw * CORNER_ARTIFACT_ZONE and exit_x < fw * CORNER_ARTIFACT_ZONE
+        in_right_corner = entry_x > fw * (1.0 - CORNER_ARTIFACT_ZONE) and exit_x > fw * (1.0 - CORNER_ARTIFACT_ZONE)
+        if in_left_corner or in_right_corner:
+            print(f"  [FILTER] Track {trackId} rejected: static corner artifact "
+                  f"(traversal={traversal:.1f}px, entry_x={entry_x:.1f}, exit_x={exit_x:.1f})")
+            return None
+
     # Calculate DeepSort average confidence
     confidences = [c for c in track_data["confidences"] if c is not None]
     avg_conf_DS = sum(confidences) / len(confidences) if confidences else 0.0
-    
+
     # Get best confidence for track
     best_conf = track_data.get("best_conf", 0.0)
     best_conf_pct = best_conf * 100 if best_conf <= 1.0 else best_conf
-    
+
     # Determine direction.
     # Uses net displacement (exit_x - entry_x) cross-checked against per-frame DeepSort counts.
     # The center-line "left/right side" approach is unreliable because DeepSort's n_init=10 means
     # entry_x is recorded ~10 frames in — a fast fish may already be past center by then.
-    entry_x = track_data.get("entry_x", vidData.v_frame_width / 2)
-    exit_x = track_data.get("last_x", vidData.v_frame_width / 2)
     net_dx = exit_x - entry_x  # positive = fish moved right (downstream) overall
 
     directions = track_data["directions"]
@@ -848,8 +934,8 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         "likely_class": vidData.v_most_common_class,
         "confidence": f"{best_conf_pct:.2f}%" if best_conf_pct > 0 else f"{vidData.v_avg_confidence_YL:.2f}%",
         "avg_confidence": f"{best_conf_pct:.2f}%" if best_conf_pct > 0 else f"{avg_conf_DS:.2f}%",
-        "start_time_sec": f"{track_data['start_frame'] / vidData.v_fps:.2f}",
-        "end_time_sec": f"{frameData.f_index / vidData.v_fps:.2f}",
+        "start_time_sec": f"{track_data.get('start_ms', track_data['start_frame'] / vidData.v_fps * 1000) / 1000.0:.2f}",
+        "end_time_sec": f"{(frameData.f_pos_ms / 1000.0) if frameData.f_pos_ms > 0 else (frameData.f_index / vidData.v_fps):.2f}",
         "direction": overall_direction,
         "best_crop": track_data.get("best_crop"),
         "species": "No data",
@@ -954,6 +1040,12 @@ def dedupe_fragmented_tracks(finished_tracks):
             # meaningful distance. For stationary or slow fish the traversal is
             # near zero, so the 50-pixel floor would make the threshold absurdly
             # tight (10 px) and block legitimate ID-split merges due to box jitter.
+            # Very high temporal overlap alone is near-conclusive evidence of an
+            # ID split on the same fish (82%+ of the shorter track is shared).
+            # Skip the spatial check entirely at this level.
+            if overlap_ratio >= 0.45:
+                return True
+
             if raw_traversal >= 100:
                 spatial_threshold = raw_traversal * 0.20
                 if separation > spatial_threshold:
@@ -967,11 +1059,6 @@ def dedupe_fragmented_tracks(finished_tracks):
                     # Tracks are spatially far apart at the time they overlap —
                     # these are two different fish onscreen simultaneously.
                     return False
-
-            if overlap_ratio >= 0.50:
-                # Very high temporal overlap AND spatially co-located: the
-                # tracker switched IDs on the same fish mid-traverse.
-                return True
 
         # Fall back to quality gate for gap-only or low-overlap cases, or
         # when spatial data is unavailable.

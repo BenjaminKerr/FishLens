@@ -56,8 +56,34 @@ namespace FishLens_App
             _pathResolver = pathresolver ?? throw new ArgumentNullException(nameof(pathresolver));
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
             InitializeComponent();
-            
+
+            Loaded += (s, e) =>
+            {
+                App.AnalysisStateChanged += OnAnalysisStateChanged;
+                // Apply immediately in case analysis was already running when user navigated here
+                ApplyAnalysisLock(App.IsAnalyzing);
+            };
+            Unloaded += (s, e) => App.AnalysisStateChanged -= OnAnalysisStateChanged;
+
             LoadAll();
+        }
+
+        // ****************************************************************
+        // Function: OnAnalysisStateChanged / ApplyAnalysisLock
+        // Description: Locks/unlocks run + location controls while YOLO analysis is running
+        private void OnAnalysisStateChanged(bool isAnalyzing) =>
+            Dispatcher.Invoke(() => ApplyAnalysisLock(isAnalyzing));
+
+        private void ApplyAnalysisLock(bool isAnalyzing)
+        {
+            // Run setup section
+            RunSetupCard.IsEnabled = !isAnalyzing;
+            // Locations section (also disables dynamically-created delete buttons inside panel)
+            LocationsCard.IsEnabled = !isAnalyzing;
+            // Save Settings — disabled to prevent e.g. a Fast Mode toggle from restarting Python mid-run
+            saveSettingsButton.IsEnabled = !isAnalyzing;
+            // Banner
+            analysisWarningBanner.Visibility = isAnalyzing ? Visibility.Visible : Visibility.Collapsed;
         }
         #endregion
 
@@ -177,6 +203,7 @@ namespace FishLens_App
                 _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
                 bool prevFastMode = _checkBoxes.FastMode;
                 _checkBoxes.FastMode = enableFastMode.IsChecked ?? false;
+                _checkBoxes.ForceReanalyze = forceReanalyze.IsChecked ?? false;
 
                 bool highContrast = highContrastMode.IsChecked ?? false;
                 bool largeTxt = largeText.IsChecked ?? false;
@@ -192,6 +219,7 @@ namespace FishLens_App
                     OutputBox = _checkBoxes.OutputBox,
                     ErrorBox = _checkBoxes.ErrorBox,
                     FastMode = _checkBoxes.FastMode,
+                    ForceReanalyze = _checkBoxes.ForceReanalyze,
                     HighContrastMode = _config.HighContrastMode,
                     LargeText = _config.LargeText,
                     ActiveLocation = _config.ActiveLocation,
@@ -416,7 +444,7 @@ namespace FishLens_App
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 MessageBox.Show("Failed to load users.");
             }
@@ -466,8 +494,6 @@ namespace FishLens_App
         // Notes: N/A
         private void SaveUserChanges_Click(object sender, RoutedEventArgs e)
         {
-            string error;
-
             if (_users == null || _users.Count == 0)
             {
                 MessageBox.Show("No users to save.");
@@ -599,6 +625,7 @@ namespace FishLens_App
             hideErrors.IsChecked = _checkBoxes.ErrorBox;
             hideOutput.IsChecked = _checkBoxes.OutputBox;
             enableFastMode.IsChecked = _checkBoxes.FastMode;
+            forceReanalyze.IsChecked = _checkBoxes.ForceReanalyze;
 
             // Try to read persisted settings
             try
@@ -647,6 +674,12 @@ namespace FishLens_App
                 {
                     _checkBoxes.FastMode = fmEl.GetBoolean();
                     enableFastMode.IsChecked = _checkBoxes.FastMode;
+                }
+
+                if (root.TryGetProperty("ForceReanalyze", out var frEl) && (frEl.ValueKind == JsonValueKind.True || frEl.ValueKind == JsonValueKind.False))
+                {
+                    _checkBoxes.ForceReanalyze = frEl.GetBoolean();
+                    forceReanalyze.IsChecked = _checkBoxes.ForceReanalyze;
                 }
 
                 if (root.TryGetProperty("ActiveLocation", out var alEl) && alEl.ValueKind == JsonValueKind.String)

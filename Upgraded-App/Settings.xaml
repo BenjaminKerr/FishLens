@@ -27,6 +27,22 @@
                       PreviewMouseWheel="ScrollViewer_PreviewMouseWheel">
             <StackPanel MaxWidth="800" HorizontalAlignment="Center">
 
+                <!-- Analysis-in-progress warning banner -->
+                <Border x:Name="analysisWarningBanner"
+                        Background="#FFF3E0"
+                        BorderBrush="#FF9800"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16,12"
+                        Margin="0,0,0,20"
+                        Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x26A0;" FontSize="16" Foreground="#E65100" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Analysis is currently running. Run, location, and settings changes are locked until the analysis completes or is cancelled."
+                                   FontSize="13" Foreground="#E65100" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
                 <TextBlock Text="Analysis" 
                            FontSize="{DynamicResource LargeHeaderFontSize}"
                            FontWeight="SemiBold"
@@ -182,7 +198,8 @@
                                      VerticalContentAlignment="Center"
                                      ToolTip="e.g. Spring 2026"/>
 
-                            <Button Grid.Column="1"
+                            <Button x:Name="createRunButton"
+                                    Grid.Column="1"
                                     Content="Create Run"
                                     Height="36"
                                     Padding="14,0"
@@ -252,7 +269,8 @@
                                 <ComboBoxItem Content="Upstream: Right"/>
                             </ComboBox>
 
-                            <Button Grid.Column="2"
+                            <Button x:Name="addLocationButton"
+                                    Grid.Column="2"
                                     Content="Add Location"
                                     Height="36"
                                     Padding="14,0"
@@ -310,6 +328,19 @@
                               Click="ToggleFastMode"/>
 
                     <TextBlock Text="Process every other frame and use a lower YOLO resolution. Speeds up analysis but may reduce accuracy."
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"
+                               Margin="0,0,0,15"
+                               TextWrapping="Wrap"/>
+
+                    <CheckBox x:Name="forceReanalyze"
+                              Content="Force Re-analyze Already Processed Videos"
+                              FontSize="{DynamicResource BaseFontSize}"
+                              Foreground="{DynamicResource PrimaryText}"
+                              Margin="0,0,0,0"
+                              IsChecked="False"/>
+
+                    <TextBlock Text="When enabled, videos that were previously analyzed will be processed again. Use this after fixing data or changing settings that affect accuracy."
                                FontSize="{DynamicResource BaseFontSize}"
                                Foreground="{DynamicResource SecondaryText}"
                                Margin="0,0,0,15"
@@ -933,7 +964,8 @@
             <StackPanel Orientation="Horizontal" 
                         HorizontalAlignment="Right">
 
-                        <Button Content="Save Settings" 
+                        <Button x:Name="saveSettingsButton"
+                        Content="Save Settings" 
                         Click="SaveSettings_Click"
                         Background="{DynamicResource HeaderBackground}"
                         Foreground="{DynamicResource OnAccentForeground}"

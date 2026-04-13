@@ -80,7 +80,6 @@ namespace FishLens_App
         private readonly System.Text.StringBuilder _outputBuilder = new System.Text.StringBuilder();
         private readonly System.Text.StringBuilder _errorBuilder = new System.Text.StringBuilder();
         private string _currentVideoStatus = string.Empty;
-        private bool _processingCancelled = false;
 
         // Video player state
         private DispatcherTimer _videoTimer;
@@ -90,6 +89,7 @@ namespace FishLens_App
         private double _fishEndSec     = -1;
         private string _fishDirection  = string.Empty;
         private int _suppressTimerTicks = 0;
+        private string _playbackTempPath = null; // temp MP4 created from ASF for accurate scrubbing
 
         #endregion
 
@@ -149,6 +149,7 @@ namespace FishLens_App
                 App.RunChanged -= OnRunChanged;
                 if (_yoloProcess != null && !_yoloProcess.HasExited)
                     try { _yoloProcess.Kill(); } catch { }
+                CleanupPlaybackTemp();
             };
         }
 
@@ -413,7 +414,6 @@ namespace FishLens_App
             lock (_errorBuilder) _errorBuilder.Clear();
             _currentVideoStatus = "Processing videos, please wait...";
             _totalVideos = 0;
-            _processingCancelled = false;
             _processingTcs = new TaskCompletionSource<bool>();
 
             try
@@ -819,6 +819,8 @@ namespace FishLens_App
                 processInfo.Environment["FISHLENS_RUN_FOLDER"] = _pathResolver.ResolveRunFolder(activeRun);
             else
                 processInfo.Environment["FISHLENS_RUN_FOLDER"] = string.Empty;
+
+            processInfo.Environment["FISHLENS_FORCE_REANALYZE"] = (_checkBoxes?.ForceReanalyze ?? false) ? "1" : "0";
             _yoloReadyTcs = new TaskCompletionSource<bool>();
             _yoloProcess = Process.Start(processInfo);
 
@@ -947,11 +949,13 @@ namespace FishLens_App
             analysisProgressBar.Value = 0;
             analysisStatusText.Text = "Starting up, please wait...";
             analysisFrameText.Text = string.Empty;
+            App.RaiseAnalysisStateChanged(true);
         }
 
         private void HideAnalysisProgress()
         {
             analysisProgressArea.Visibility = Visibility.Collapsed;
+            App.RaiseAnalysisStateChanged(false);
         }
 
         private void SetAnalysisStatus(string status)
@@ -992,7 +996,6 @@ namespace FishLens_App
         // **************************************************
         private void OnProcessingCancelled()
         {
-            _processingCancelled = true;
             _processingTcs?.TrySetCanceled();
             if (_yoloProcess != null && !_yoloProcess.HasExited)
                 try { _yoloProcess.Kill(); } catch { }
@@ -2007,9 +2010,13 @@ namespace FishLens_App
 
             videoList.Visibility = Visibility.Collapsed;
             deleteSelectedVideos.Visibility = Visibility.Collapsed;
+            changeLocationForSelected.Visibility = Visibility.Collapsed;
             undoLastDelete.Visibility = Visibility.Collapsed;
             sidebarSeperator.Visibility = Visibility.Collapsed;
             videoLibraryTitle.Visibility = Visibility.Collapsed;
+            // Only hide the progress UI — do NOT raise AnalysisStateChanged(false) here
+            // because analysis may still be running in the background.
+            analysisProgressArea.Visibility = Visibility.Collapsed;
 
             ButtonGrid.RowDefinitions.Clear();
             ButtonGrid.ColumnDefinitions.Clear();
@@ -2039,9 +2046,15 @@ namespace FishLens_App
             // Show video list
             videoList.Visibility = Visibility.Visible;
             deleteSelectedVideos.Visibility = Visibility.Visible;
+            changeLocationForSelected.Visibility = Visibility.Visible;
             undoLastDelete.Visibility = Visibility.Visible;
             sidebarSeperator.Visibility = Visibility.Visible;
             videoLibraryTitle.Visibility = Visibility.Visible;
+
+            // If analysis is still running, re-show the progress area so the user
+            // can see progress after navigating back to the main window.
+            if (App.IsAnalyzing)
+                analysisProgressArea.Visibility = Visibility.Visible;
 
             // Restore horizontal button layout
             ButtonGrid.RowDefinitions.Clear();
@@ -2083,11 +2096,74 @@ namespace FishLens_App
         // Function: LoadVideoInPlayer
         // Description: Loads video into media player with auto-play preference
         // **************************************************
+        // **************************************************
+        // Function: CleanupPlaybackTemp
+        // Description: Deletes the temporary MP4 created for ASF scrubbing, if any
+        // **************************************************
+        private void CleanupPlaybackTemp()
+        {
+            if (!string.IsNullOrEmpty(_playbackTempPath) && File.Exists(_playbackTempPath))
+            {
+                try { File.Delete(_playbackTempPath); } catch { }
+            }
+            _playbackTempPath = null;
+        }
+
+        // **************************************************
+        // Function: ConvertAsfToTempMp4
+        // Description: Converts an ASF file to a temporary MP4 using ffmpeg for accurate scrubbing.
+        //              Returns the temp path on success, or the original path if conversion fails.
+        // **************************************************
+        private string ConvertAsfToTempMp4(string asfPath)
+        {
+            string ffmpeg = null;
+            foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(';'))
+            {
+                var candidate = System.IO.Path.Combine(dir.Trim(), "ffmpeg.exe");
+                if (File.Exists(candidate)) { ffmpeg = candidate; break; }
+            }
+            if (ffmpeg == null) return asfPath; // ffmpeg not found — use original
+
+            string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                $"fishlens_play_{System.IO.Path.GetFileNameWithoutExtension(asfPath)}_{System.Guid.NewGuid():N}.mp4");
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = ffmpeg,
+                    Arguments = $"-hide_banner -loglevel error -y -i \"{asfPath}\" -c:v libx264 -preset ultrafast -crf 23 \"{tempPath}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                using var proc = System.Diagnostics.Process.Start(psi);
+                proc.WaitForExit(30_000); // 30s max
+                if (proc.ExitCode == 0 && File.Exists(tempPath) && new FileInfo(tempPath).Length > 0)
+                    return tempPath;
+            }
+            catch { }
+            // Conversion failed — clean up and fall back to original
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+            return asfPath;
+        }
+
         private void LoadVideoInPlayer(string videoPath)
         {
             // Stop and reset timer before loading new video
             _videoTimer?.Stop();
             _isPlaying = false;
+
+            // For ASF files, convert to a temp MP4 so that MediaElement seeking is accurate.
+            // ASF (WMV) only supports keyframe-level seeks; the temp MP4 allows sample-accurate
+            // scrubbing. The temp file is deleted when the next video loads or the app closes.
+            CleanupPlaybackTemp();
+            if (videoPath.EndsWith(".asf", StringComparison.OrdinalIgnoreCase) ||
+                videoPath.EndsWith(".wmv", StringComparison.OrdinalIgnoreCase))
+            {
+                string converted = ConvertAsfToTempMp4(videoPath);
+                if (!string.Equals(converted, videoPath, StringComparison.OrdinalIgnoreCase))
+                    _playbackTempPath = converted;
+                videoPath = converted;
+            }
 
             videoPlayer.Source = new Uri(videoPath);
             videoPlayer.Play();

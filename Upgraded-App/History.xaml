@@ -12,17 +12,17 @@
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0" 
-                Background="{DynamicResource PrimaryColorBrush}" 
+                Background="{DynamicResource HeaderBackground}" 
                 Padding="30,25">
             <StackPanel>
                 <TextBlock Text="Reports &amp; Analytics" 
                            FontSize="{DynamicResource LargeHeaderFontSize}"
                            FontWeight="SemiBold"
-                           Foreground="{DynamicResource SecondaryTextBrush}"
+                           Foreground="{DynamicResource OnAccentForeground}"
                            Margin="0,0,0,5"/>
                 <TextBlock Text="Filter, analyze, and export your detection data" 
                            FontSize="{DynamicResource BaseFontSize}"
-                           Foreground="{DynamicResource SecondaryTextBrush}"
+                           Foreground="{DynamicResource OnAccentForeground}"
                            FontWeight="Normal"/>
             </StackPanel>
         </Border>
@@ -109,27 +109,43 @@
                         </Grid>
 
                         <Grid Margin="0,0,0,15">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="10"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
 
+                            <!-- "From" / "To" labels so the order (past → recent) is obvious -->
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                                       Text="From"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       Margin="0,0,0,4"/>
+                            <TextBlock Grid.Row="0" Grid.Column="2"
+                                       Text="To"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       Margin="0,0,0,4"/>
+
                             <DatePicker x:Name="startDatePicker"
-                                        Grid.Column="0"
+                                        Grid.Row="1" Grid.Column="0"
                                         Background="{DynamicResource PageBackgroundBrush}"
                                         BorderBrush="{DynamicResource BorderColorBrush}"
                                         Padding="10,8"
                                         FontSize="{DynamicResource BaseFontSize}"/>
 
-                            <TextBlock Grid.Column="1" 
-                                       Text="—" 
-                                       VerticalAlignment="Center" 
+                            <TextBlock Grid.Row="1" Grid.Column="1"
+                                       Text="—"
+                                       VerticalAlignment="Center"
                                        HorizontalAlignment="Center"
                                        Foreground="{DynamicResource SecondaryTextBrush}"/>
 
                             <DatePicker x:Name="endDatePicker"
-                                        Grid.Column="2"
+                                        Grid.Row="1" Grid.Column="2"
                                         Background="{DynamicResource PageBackgroundBrush}"
                                         BorderBrush="{DynamicResource BorderColorBrush}"
                                         Padding="10,8"
@@ -228,7 +244,7 @@
                         <Button Content="Apply Filters" 
                                 Click="ApplyFiltersClick"
                                 Background="{DynamicResource PrimaryColorBrush}"
-                                Foreground="{DynamicResource SecondaryTextBrush}"
+                                Foreground="White"
                                 FontSize="{DynamicResource BaseFontSize}"
                                 FontWeight="SemiBold"
                                 Padding="0,10"
@@ -377,7 +393,8 @@
                                   Grid.Row="1"
                                   VerticalScrollBarVisibility="Auto"
                                   Visibility="Collapsed"
-                                  Padding="30,20">
+                                  Padding="30,20"
+                                  PreviewMouseWheel="ReportPanel_PreviewMouseWheel">
                         <StackPanel x:Name="reportPanel">
                         </StackPanel>
                     </ScrollViewer>
@@ -393,7 +410,7 @@
                             <Button Content="Export Report" 
                                     Click="ExportReportClick"
                                     Background="{DynamicResource PrimaryColorBrush}"
-                                    Foreground="{DynamicResource SecondaryTextBrush}"
+                                    Foreground="White"
                                     FontSize="{DynamicResource BaseFontSize}"
                                     FontWeight="SemiBold"
                                     Padding="20,10"
@@ -471,10 +488,11 @@
             <Grid>
                 <StackPanel Orientation="Horizontal" 
                             HorizontalAlignment="Right">
-                    <Button Content="Generate Report" 
+                    <Button x:Name="generateReportButton"
+                            Content="Generate Report" 
                             Click="GenerateReportClick"
                             Background="{DynamicResource PrimaryColorBrush}"
-                            Foreground="{DynamicResource SecondaryTextBrush}"
+                            Foreground="White"
                             FontSize="{DynamicResource BaseFontSize}"
                             FontWeight="SemiBold"
                             Padding="25,12"
@@ -503,6 +521,23 @@
                         </Button.Style>
                     </Button>
                 </StackPanel>
+
+                <!-- Shown while analysis is running -->
+                <Border x:Name="historyAnalysisBanner"
+                        Background="#FFF3E0"
+                        BorderBrush="#FF9800"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="12,8"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x26A0;" FontSize="14" Foreground="#E65100" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Analysis in progress — report data may be incomplete."
+                                   FontSize="12" Foreground="#E65100" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
             </Grid>
         </Border>
     </Grid>
