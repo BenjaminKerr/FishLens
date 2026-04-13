@@ -1,3 +1,0 @@
-video_file,trackId,image_path,likely_class,confidence,start_time_sec,end_time_sec,avg_confidence,direction,species,species_confidence,video_timestamp
-00000009.ASF,1,C:\Users\aleks\source\repos\FishLens\fish_images\Omykiss\tmpguruh_w6_track_1.jpg,fish,85.48%,28.50,511.25,85.48%,indecisive,Omykiss,99.88%,2026/09/27 01:47:46
-00000009.ASF,4,C:\Users\aleks\source\repos\FishLens\fish_images\Chinook\tmpguruh_w6_track_4.jpg,fish,93.31%,33.50,511.25,93.31%,downstream,Chinook,99.97%,2026/09/27 01:47:36*

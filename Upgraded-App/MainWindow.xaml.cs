@@ -85,11 +85,12 @@ namespace FishLens_App
         private DispatcherTimer _videoTimer;
         private bool _isDraggingScrubber = false;
         private bool _isPlaying = false;
-        private double _fishStartSec   = -1;
-        private double _fishEndSec     = -1;
-        private string _fishDirection  = string.Empty;
         private int _suppressTimerTicks = 0;
         private string _playbackTempPath = null; // temp MP4 created from ASF for accurate scrubbing
+
+        // Multi-track state — all tracks for the currently-displayed video
+        private List<FishLens_App.Models.Video> _currentTracks = new List<FishLens_App.Models.Video>();
+        private int _currentTrackIndex;
 
         #endregion
 
@@ -1450,33 +1451,41 @@ namespace FishLens_App
 
         // **************************************************
         // Function: GetData
-        // Description: Retrieves video analysis data from CSV file
+        // Description: Retrieves video analysis data from CSV file (first track only)
         // **************************************************
         private FishLens_App.Models.Video GetData(string videoFileName)
         {
-            FishLens_App.Models.Video vid = new FishLens_App.Models.Video();
+            var tracks = GetAllTracks(videoFileName);
+            return tracks.Count > 0 ? tracks[0] : new FishLens_App.Models.Video();
+        }
+
+        // **************************************************
+        // Function: GetAllTracks
+        // Description: Returns all CSV rows (tracks) for a given video filename.
+        //              A video with N detected fish will have N tracks.
+        // **************************************************
+        private List<FishLens_App.Models.Video> GetAllTracks(string videoFileName)
+        {
             string csvPath = _pathResolver.ResolveCsvScriptPath();
 
             if (!File.Exists(csvPath))
             {
-                // In debug mode the CSV only exists after analysis has been run — silently return defaults.
                 string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
                 bool isDebug = activeRun.Equals("debug", StringComparison.OrdinalIgnoreCase);
                 if (!isDebug)
                     MessageBox.Show("Analysis data file not found.", "Error",
                         MessageBoxButton.OK, MessageBoxImage.Warning);
-                return vid;
+                return new List<FishLens_App.Models.Video> { new FishLens_App.Models.Video { Name = videoFileName } };
             }
 
             try
             {
-                return FishLens_App.Services.CsvUtils.ReadVideoFromCsv(csvPath, videoFileName);
+                return FishLens_App.Services.CsvUtils.ReadAllTracksFromCsv(csvPath, videoFileName);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error reading analysis data: {ex.Message}", "Error",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-                return vid;
+                _logger.LogError(ex, "Error reading tracks for {VideoFileName}", videoFileName);
+                return new List<FishLens_App.Models.Video> { new FishLens_App.Models.Video { Name = videoFileName } };
             }
         }
 
@@ -1732,12 +1741,33 @@ namespace FishLens_App
         // **************************************************
         private void WriteDataToWorksheet(ClosedXML.Excel.IXLWorksheet worksheet, string[] allLines)
         {
+            // Confidence columns (0-based): 3 = species_confidence, 5 = confidence
+            var confColumns = new HashSet<int> { 3, 5 };
+
             for (int line = 0; line < allLines.Length; line++)
             {
                 string[] columns = allLines[line].Split(',');
                 for (int column = 0; column < columns.Length; column++)
                 {
-                    worksheet.Cell(line + 1, column + 1).Value = columns[column].Trim();
+                    string raw = columns[column].Trim();
+                    // Header row or non-numeric: write as-is
+                    if (line == 0 || !confColumns.Contains(column))
+                    {
+                        worksheet.Cell(line + 1, column + 1).Value = raw;
+                        continue;
+                    }
+                    // Convert stored decimal (0.9377) or legacy percent (93.77%) to display percent
+                    string clean = raw.TrimEnd('%');
+                    if (double.TryParse(clean, System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out double val))
+                    {
+                        if (val <= 1.0) val *= 100.0;  // decimal → percent
+                        worksheet.Cell(line + 1, column + 1).Value = $"{val:F2}%";
+                    }
+                    else
+                    {
+                        worksheet.Cell(line + 1, column + 1).Value = raw;
+                    }
                 }
             }
         }
@@ -1836,30 +1866,33 @@ namespace FishLens_App
                     return;
                 }
 
-                // Build the list of every CSV that holds this video's row.
-                // Edits must be consistent across all files so exports at any scope reflect the latest data.
+                // Identify the specific track to save by its start_time_sec.
+                // This ensures edits to Fish 2 don't overwrite Fish 1's row.
                 string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
-                var csvPaths = new List<string>
-                {
-                    _pathResolver.ResolveSessionCsvPath(activeRun),      // session_fish.csv
-                    _pathResolver.ResolveRunCsvPath(activeRun),           // run_master.csv
-                    _pathResolver.ResolveAllTimeMasterFishCsvPath(),      // all_history.csv
-                };
+                string startTimeSec = (_currentTracks.Count > _currentTrackIndex)
+                    ? _currentTracks[_currentTrackIndex].StartTime
+                    : string.Empty;
 
-                bool savedAtLeastOne = false;
-                foreach (string csvPath in csvPaths)
+                // run_master.csv and all_history.csv are written together during analysis
+                // and must stay in sync — the save must succeed in both.
+                string runMasterPath = _pathResolver.ResolveRunCsvPath(activeRun);
+                if (!File.Exists(runMasterPath) || !UpdateCsvFile(runMasterPath, currentVideoName, startTimeSec))
                 {
-                    if (!File.Exists(csvPath)) continue;
-                    UpdateCsvFile(csvPath, currentVideoName);
-                    savedAtLeastOne = true;
-                }
-
-                if (!savedAtLeastOne)
-                {
-                    MessageBox.Show("CSV file not found.", "Save Error",
-                        MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show(
+                        "This track was not found in the run master CSV. No changes were saved.",
+                        "Save Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
+
+                string allHistoryPath = _pathResolver.ResolveAllTimeMasterFishCsvPath();
+                if (File.Exists(allHistoryPath))
+                    UpdateCsvFile(allHistoryPath, currentVideoName, startTimeSec);
+
+                // session_fish.csv is best-effort — only populated for the current session,
+                // so prior-session videos won't be present. Silently skip if row is absent.
+                string sessionPath = _pathResolver.ResolveSessionCsvPath(activeRun);
+                if (File.Exists(sessionPath))
+                    UpdateCsvFile(sessionPath, currentVideoName, startTimeSec);
 
                 RefreshSessionOverview();
                 MessageBox.Show("Changes saved successfully!", "Save Successful",
@@ -1875,28 +1908,33 @@ namespace FishLens_App
 
         // **************************************************
         // Function: UpdateCsvFile
-        // Description: Updates CSV file with modified video data
+        // Description: Updates exactly the current track's CSV row (identified by start_time_sec).
+        //              Returns true if the row was found and updated, false if not present in this file.
         // **************************************************
-        private void UpdateCsvFile(string csvPath, string videoFileName)
+        private bool UpdateCsvFile(string csvPath, string videoFileName, string startTimeSec)
         {
-            // Create updated row using current UI values
             string[] lines = File.ReadAllLines(csvPath);
             string[] columns = null;
             for (int i = 1; i < lines.Length; i++)
             {
                 var cols = lines[i].Split(',');
-                if (cols.Length > 0 && string.Equals(Path.GetFileName(cols[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase))
+                bool nameMatch = cols.Length > 0 &&
+                    string.Equals(Path.GetFileName(cols[0].Trim()), videoFileName,
+                        StringComparison.OrdinalIgnoreCase);
+                bool timeMatch = cols.Length > 7 &&
+                    string.Equals(cols[7].Trim(), startTimeSec, StringComparison.OrdinalIgnoreCase);
+                if (nameMatch && timeMatch)
                 {
                     columns = cols;
                     break;
                 }
             }
 
-            if (columns == null)
-                throw new InvalidOperationException($"Video {videoFileName} not found in CSV file.");
+            // Row not present in this file — skip silently (e.g. session_fish.csv for old-run data)
+            if (columns == null) return false;
 
             string updatedRow = CreateUpdatedCsvRow(columns);
-            FishLens_App.Services.CsvUtils.UpdateCsvRow(csvPath, videoFileName, updatedRow);
+            return FishLens_App.Services.CsvUtils.UpdateCsvRowForTrack(csvPath, videoFileName, startTimeSec, updatedRow);
         }
 
         // CSV removal moved to CsvUtils for reuse and testability
@@ -1950,12 +1988,6 @@ namespace FishLens_App
                 }
             }
 
-            // If user entered a species, update the likely_class
-            if (!string.IsNullOrEmpty(species) && species != "--")
-            {
-                likelyClass = species.ToLower();
-            }
-
             // Build the CSV row
             return $"{videoFile},{location},{species},{species_confidence},{likelyClass},{confidence},{direction},{startTime},{endTime},{vidTimeStamp}";
         }
@@ -1969,9 +2001,7 @@ namespace FishLens_App
             var selectedItem = fishPresentStatus.SelectedItem as ComboBoxItem;
 
             if (selectedItem == null)
-            {
-                return "unknown";
-            }
+                return "not_fish";
 
             string status = selectedItem.Content.ToString();
             return status == "Present" ? "fish" : "not_fish";
@@ -2174,9 +2204,7 @@ namespace FishLens_App
             placeholderPanel.Visibility = Visibility.Collapsed;
             videoControls.Visibility = Visibility.Visible;
 
-            // Reset scrubber and time only — do NOT reset _fishStartSec/_fishEndSec
-            // because DisplayDataInUi sets them before LoadVideoInPlayer is called,
-            // and MediaOpened needs them to draw the markers.
+            // Reset scrubber and time only — fish markers are redrawn from _currentTracks by UpdateFishMarkers()
             videoScrubber.Value = 0;
             videoCurrentTimeText.Text = "0:00";
             videoTotalTimeText.Text = "0:00";
@@ -2367,24 +2395,21 @@ namespace FishLens_App
 
         // **************************************************
         // Function: UpdateFishMarkers
-        // Description: Draws a direction-colored range bar + fish emoji over the scrubber.
-        //              Color is chosen from _fishDirection:
-        //                upstream   → #2AB5B5 (bright teal)
-        //                downstream → #E05C5C (soft coral-red)
-        //                indecisive → #E8A038 (warm amber)
-        //              The canvas and rectangle live inside the Slider's ControlTemplate;
-        //              access them via Template.FindName after the template is applied.
+        // Description: Draws one colored range bar per fish track onto the scrubber canvas,
+        //              and one directional emoji per track above it.
+        //              The active track is full opacity; inactive tracks are 50% opacity.
+        //              Colors: upstream=#2AB5B5 teal, downstream=#E05C5C coral, indecisive=#E8A038 amber.
+        //              Emojis: upstream="◀🐟", downstream="🐟▶", indecisive="↔🐟"
         // **************************************************
         private void UpdateFishMarkers()
         {
-            if (_fishStartSec < 0 || _fishEndSec < 0) return;
+            if (_currentTracks.Count == 0) return;
             if (!videoPlayer.NaturalDuration.HasTimeSpan) return;
             double total = videoPlayer.NaturalDuration.TimeSpan.TotalSeconds;
             if (total <= 0) return;
 
-            var canvas   = videoScrubber.Template?.FindName("fishMarkersCanvas", videoScrubber) as Canvas;
-            var rangeBar = videoScrubber.Template?.FindName("fishRangeBar",      videoScrubber) as System.Windows.Shapes.Rectangle;
-            if (canvas == null || rangeBar == null)
+            var canvas = videoScrubber.Template?.FindName("fishMarkersCanvas", videoScrubber) as Canvas;
+            if (canvas == null)
             {
                 Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(UpdateFishMarkers));
                 return;
@@ -2397,78 +2422,186 @@ namespace FishLens_App
                 return;
             }
 
-            // Pick bar color based on travel direction.
-            var barColor = _fishDirection.ToLowerInvariant() switch
-            {
-                "upstream"   => System.Windows.Media.Color.FromRgb(0x2A, 0xB5, 0xB5), // #2AB5B5 teal
-                "downstream" => System.Windows.Media.Color.FromRgb(0xE0, 0x5C, 0x5C), // #E05C5C soft red
-                _            => System.Windows.Media.Color.FromRgb(0xE8, 0xA0, 0x38), // #E8A038 amber (indecisive / unknown)
-            };
-            rangeBar.Fill = new System.Windows.Media.SolidColorBrush(barColor);
+            // Clear previous bars and emojis
+            canvas.Children.Clear();
+            fishEmojiCanvas.Children.Clear();
 
-            // Custom thumb is 14px wide — track usable width is inset 7px on each side.
             const double thumbHalf = 7.0;
             double trackW = Math.Max(1.0, w - 2 * thumbHalf);
-            double startX = thumbHalf + (_fishStartSec / total) * trackW;
-            double endX   = thumbHalf + (_fishEndSec   / total) * trackW;
-            double barW   = Math.Max(4.0, endX - startX);
 
-            rangeBar.Width = barW;
-            Canvas.SetLeft(rangeBar, startX);
-            rangeBar.Visibility = Visibility.Visible;
+            for (int i = 0; i < _currentTracks.Count; i++)
+            {
+                var track = _currentTracks[i];
+                bool isActive = (i == _currentTrackIndex);
+                double opacity = isActive ? 1.0 : 0.5;
 
-            // Emoji: positioned via Margin.Left in its own row above the slider.
-            double midX      = startX + barW / 2.0;
-            double emojiLeft = Math.Max(thumbHalf, Math.Min(w - thumbHalf - 14, midX - 7));
-            fishEmojiMarker.Margin     = new Thickness(emojiLeft, 0, 0, 2);
-            fishEmojiMarker.Visibility = barW >= 20 ? Visibility.Visible : Visibility.Collapsed;
+                if (!double.TryParse(track.StartTime, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out double fStart)) continue;
+                if (!double.TryParse(track.EndTime, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out double fEnd)) continue;
+
+                string dir = (track.Direction ?? string.Empty).ToLowerInvariant();
+                var color = dir switch
+                {
+                    "upstream"   => System.Windows.Media.Color.FromRgb(0x2A, 0xB5, 0xB5), // teal
+                    "downstream" => System.Windows.Media.Color.FromRgb(0xE0, 0x5C, 0x5C), // coral
+                    _            => System.Windows.Media.Color.FromRgb(0xE8, 0xA0, 0x38), // amber
+                };
+
+                double startX = thumbHalf + (fStart / total) * trackW;
+                double endX   = thumbHalf + (fEnd   / total) * trackW;
+                double barW   = Math.Max(4.0, endX - startX);
+
+                // Range bar
+                var bar = new System.Windows.Shapes.Rectangle
+                {
+                    Height  = 4,
+                    Width   = barW,
+                    RadiusX = 2,
+                    RadiusY = 2,
+                    Fill    = new System.Windows.Media.SolidColorBrush(color),
+                    Opacity = opacity,
+                };
+                Canvas.SetLeft(bar, startX);
+                canvas.Children.Add(bar);
+
+                // Directional emoji above the bar
+                if (barW >= 14)
+                {
+                    string emoji = dir switch
+                    {
+                        "upstream"   => "◀🐟",
+                        "downstream" => "🐟▶",
+                        _            => "↔🐟",
+                    };
+                    double midX      = startX + barW / 2.0;
+                    double emojiLeft = Math.Max(thumbHalf, Math.Min(w - thumbHalf - 22, midX - 11));
+                    var tb = new TextBlock
+                    {
+                        Text     = emoji,
+                        FontSize = 11,
+                        Opacity  = opacity,
+                        Margin   = new Thickness(0),
+                    };
+                    Canvas.SetLeft(tb, emojiLeft);
+                    Canvas.SetTop(tb, 0);
+                    fishEmojiCanvas.Children.Add(tb);
+                }
+            }
         }
 
         // **************************************************
         // Function: DisplayDataInUi
-        // Description: Updates UI elements with video analysis data
+        // Description: Loads all tracks for a video and displays the first one
         // **************************************************
         private void DisplayDataInUi(string videoFileName)
         {
-            FishLens_App.Models.Video vid = GetData(videoFileName);
+            _currentTracks = GetAllTracks(videoFileName);
+            _currentTrackIndex = 0;
+            DisplayTrackInUi(_currentTracks[0]);
+            UpdateTrackNavigator();
+        }
 
-            // Location is written directly into run_master.csv for both fish and no-fish rows.
+        // **************************************************
+        // Function: DisplayTrackInUi
+        // Description: Populates the analysis panel from a single Video/track object.
+        //              Called by DisplayDataInUi (initial load) and by the track navigator (7.2).
+        // **************************************************
+        private void DisplayTrackInUi(FishLens_App.Models.Video vid)
+        {
+            // Location fallback for no-fish rows (no-fish CSVs don't appear in run_master)
             string location = vid.Location;
             if (string.IsNullOrWhiteSpace(location))
             {
                 string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
                 string noFishCsvPath = _pathResolver.ResolveSessionNoFishCsvPath(activeRun);
-                location = FishLens_App.Services.CsvUtils.ReadLocationFromNoFishCsv(noFishCsvPath, videoFileName);
+                location = FishLens_App.Services.CsvUtils.ReadLocationFromNoFishCsv(noFishCsvPath, vid.Name);
             }
 
             videoName.Text = vid.Name;
             videoLocation.Text = string.IsNullOrWhiteSpace(location) ? "--" : location;
             videoDateTime.Text = $"Duration: {vid.StartTime}s - {vid.EndTime}s";
-            fishPresentStatus.Text = vid.LikelyClass == "fish" ? "Present" : "Not Present";
+            // likely_class can be "fish", a species name ("chinook"), "not_fish", or "no_fish".
+            // Anything other than not_fish/no_fish means a fish was detected.
+            bool fishPresent = vid.LikelyClass != "not_fish" && vid.LikelyClass != "no_fish";
+            fishPresentStatus.SelectedIndex = fishPresent ? 0 : 1;
             fishPresentConfidence.Text = $"{vid.AvgConfidence * 100:F2}%";
-            travelDirection.Text = CapitalizeFirstLetter(vid.Direction);
+            string dirLower = (vid.Direction ?? string.Empty).ToLower().Trim();
+            travelDirection.SelectedIndex = dirLower == "upstream" ? 0 : dirLower == "downstream" ? 1 : 2;
             fishSpecies.Text = CapitalizeFirstLetter(vid.Species);
             fishSpeciesConfidence.Text = vid.SpeciesConfidence > 0 ? $"{vid.SpeciesConfidence * 100:F2}%" : "--";
 
-            // Update fish scrubber markers
-            var _rangeBar = videoScrubber.Template?.FindName("fishRangeBar", videoScrubber) as System.Windows.Shapes.Rectangle;
-            if (_rangeBar != null) _rangeBar.Visibility = Visibility.Collapsed;
-            fishEmojiMarker.Visibility = Visibility.Collapsed;
-            if (double.TryParse(vid.StartTime, System.Globalization.NumberStyles.Any,
-                    System.Globalization.CultureInfo.InvariantCulture, out double fStart) &&
-                double.TryParse(vid.EndTime, System.Globalization.NumberStyles.Any,
-                    System.Globalization.CultureInfo.InvariantCulture, out double fEnd))
+            // Refresh all track markers on the scrubber (opacity highlights the active one)
+            UpdateFishMarkers();
+        }
+
+        // **************************************************
+        // Function: UpdateTrackNavigator
+        // Description: Refreshes the track navigator label and shows/hides it
+        // **************************************************
+        private void UpdateTrackNavigator()
+        {
+            int total = _currentTracks.Count;
+            bool multi = total > 1;
+
+            trackNavigator.Visibility = multi ? Visibility.Visible : Visibility.Collapsed;
+            prevFishButton.Visibility = multi ? Visibility.Visible : Visibility.Collapsed;
+            nextFishButton.Visibility = multi ? Visibility.Visible : Visibility.Collapsed;
+
+            if (!multi) return;
+
+            trackLabel.Text = $"Fish {_currentTrackIndex + 1} / {total}";
+            trackVideoLabel.Text = _currentTracks[_currentTrackIndex].Name;
+            trackPrevButton.IsEnabled = _currentTrackIndex > 0;
+            trackNextButton.IsEnabled = _currentTrackIndex < total - 1;
+            prevFishButton.IsEnabled  = _currentTrackIndex > 0;
+            nextFishButton.IsEnabled  = _currentTrackIndex < total - 1;
+        }
+
+        // **************************************************
+        // Function: TrackPrevClick / TrackNextClick
+        // Description: Navigate backwards/forwards through fish tracks for the current video.
+        //              Also seeks the video to that track's start time (7.4).
+        // **************************************************
+        private void TrackPrevClick(object sender, RoutedEventArgs e)
+        {
+            if (_currentTrackIndex > 0)
             {
-                _fishStartSec  = fStart;
-                _fishEndSec    = fEnd;
-                _fishDirection = vid.Direction ?? string.Empty;
-                UpdateFishMarkers();
+                _currentTrackIndex--;
+                DisplayTrackInUi(_currentTracks[_currentTrackIndex]);
+                UpdateTrackNavigator();
+                SeekToCurrentTrack();
             }
-            else
+        }
+
+        private void TrackNextClick(object sender, RoutedEventArgs e)
+        {
+            if (_currentTrackIndex < _currentTracks.Count - 1)
             {
-                _fishStartSec  = -1;
-                _fishEndSec    = -1;
-                _fishDirection = string.Empty;
+                _currentTrackIndex++;
+                DisplayTrackInUi(_currentTracks[_currentTrackIndex]);
+                UpdateTrackNavigator();
+                SeekToCurrentTrack();
+            }
+        }
+
+        // Transport-bar fish jump buttons — same logic as track navigator arrows
+        private void PrevFishButton_Click(object sender, RoutedEventArgs e) => TrackPrevClick(sender, e);
+        private void NextFishButton_Click(object sender, RoutedEventArgs e) => TrackNextClick(sender, e);
+
+        // **************************************************
+        // Function: SeekToCurrentTrack
+        // Description: Seeks the video player to the start time of the currently selected track
+        // **************************************************
+        private void SeekToCurrentTrack()
+        {
+            if (_currentTracks.Count == 0) return;
+            var track = _currentTracks[_currentTrackIndex];
+            if (double.TryParse(track.StartTime, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out double startSec))
+            {
+                videoPlayer.Position = TimeSpan.FromSeconds(startSec);
+                _suppressTimerTicks = 2;
             }
         }
 

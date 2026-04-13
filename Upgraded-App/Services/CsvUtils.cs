@@ -40,13 +40,20 @@ namespace FishLens_App.Services
         // **************************************************
         public static Video ReadVideoFromCsv(string csvPath, string videoFileName)
         {
-            var vid = new Video();
-            if (!File.Exists(csvPath)) return vid;
+            var tracks = ReadAllTracksFromCsv(csvPath, videoFileName);
+            return tracks.Count > 0 ? tracks[0] : CreateDefaultVideo(videoFileName);
+        }
 
-            // REMOVE THESE IF WORKING
-            // THIS NEEDS TO RUN MAIN YOLO BEFORE READING FROM CSV - currently it just reads the already
-            // filled out csv which makes it not provide the data for the correct videos
-            
+        // **************************************************
+        // Function: ReadAllTracksFromCsv
+        // Description: Returns ALL rows for a given video filename as a list of Video objects.
+        //              A single video can have multiple tracks (one row per fish detected).
+        // **************************************************
+        public static List<Video> ReadAllTracksFromCsv(string csvPath, string videoFileName)
+        {
+            var tracks = new List<Video>();
+            if (!File.Exists(csvPath)) return tracks;
+
             var lines = File.ReadAllLines(csvPath);
             for (int i = 1; i < lines.Length; i++)
             {
@@ -54,16 +61,18 @@ namespace FishLens_App.Services
                 if (cols.Length == 0) continue;
                 if (string.Equals(Path.GetFileName(cols[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase))
                 {
-                    return ParseVideoFromColumns(cols);
+                    tracks.Add(ParseVideoFromColumns(cols));
                 }
             }
 
-            return CreateDefaultVideo(videoFileName);
+            return tracks.Count > 0 ? tracks : new List<Video> { CreateDefaultVideo(videoFileName) };
         }
 
         // **************************************************
         // Function: UpdateCsvRow
-        // Description: Replaces the CSV row for videoFileName with updatedRow
+        // Description: Replaces the CSV row for videoFileName with updatedRow.
+        //              When a video has multiple fish tracks this replaces ALL matching rows —
+        //              use UpdateCsvRowForTrack to target a specific track.
         // **************************************************
         public static void UpdateCsvRow(string csvPath, string videoFileName, string updatedRow)
         {
@@ -89,6 +98,44 @@ namespace FishLens_App.Services
             if (!found) throw new InvalidOperationException($"Video {videoFileName} not found in CSV file.");
 
             File.WriteAllLines(csvPath, updatedLines);
+        }
+
+        // **************************************************
+        // Function: UpdateCsvRowForTrack
+        // Description: Replaces exactly one CSV row — the row for videoFileName whose
+        //              start_time_sec column (col 7) matches startTimeSec.
+        //              Returns true if a row was found and replaced, false if not present.
+        // **************************************************
+        public static bool UpdateCsvRowForTrack(string csvPath, string videoFileName, string startTimeSec, string updatedRow)
+        {
+            var lines = File.ReadAllLines(csvPath).ToList();
+            if (lines.Count == 0) return false;
+
+            var updatedLines = new List<string> { lines[0] };
+            bool found = false;
+            for (int i = 1; i < lines.Count; i++)
+            {
+                var cols = lines[i].Split(',');
+                bool nameMatch = cols.Length > 0 &&
+                    string.Equals(Path.GetFileName(cols[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase);
+                bool timeMatch = cols.Length > 7 &&
+                    string.Equals(cols[7].Trim(), startTimeSec, StringComparison.OrdinalIgnoreCase);
+
+                if (nameMatch && timeMatch && !found)
+                {
+                    updatedLines.Add(updatedRow);
+                    found = true;
+                }
+                else
+                {
+                    updatedLines.Add(lines[i]);
+                }
+            }
+
+            if (found)
+                File.WriteAllLines(csvPath, updatedLines);
+
+            return found;
         }
 
         // **************************************************

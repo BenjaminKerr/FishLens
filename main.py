@@ -932,14 +932,14 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     return {
         "trackId": trackId,
         "likely_class": vidData.v_most_common_class,
-        "confidence": f"{best_conf_pct:.2f}%" if best_conf_pct > 0 else f"{vidData.v_avg_confidence_YL:.2f}%",
-        "avg_confidence": f"{best_conf_pct:.2f}%" if best_conf_pct > 0 else f"{avg_conf_DS:.2f}%",
+        "confidence": f"{(best_conf_pct / 100):.4f}" if best_conf_pct > 0 else f"{(vidData.v_avg_confidence_YL / 100):.4f}",
+        "avg_confidence": f"{(best_conf_pct / 100):.4f}" if best_conf_pct > 0 else f"{(avg_conf_DS / 100):.4f}",
         "start_time_sec": f"{track_data.get('start_ms', track_data['start_frame'] / vidData.v_fps * 1000) / 1000.0:.2f}",
         "end_time_sec": f"{(frameData.f_pos_ms / 1000.0) if frameData.f_pos_ms > 0 else (frameData.f_index / vidData.v_fps):.2f}",
         "direction": overall_direction,
         "best_crop": track_data.get("best_crop"),
         "species": "No data",
-        "species_confidence": "No data",
+        "species_confidence": "0.0000",
         "video_timestamp": video_timestamp,
         "timestamp_confidence": timestamp_confidence,
         "best_frame": vidData.v_active_tracks.get(trackId, {}).get("best_frame") if trackId in vidData.v_active_tracks else None,
@@ -1168,7 +1168,7 @@ def save_best_image(finished_tracks, filename):
                 if not write_ok:
                     print(f"Failed to write image at {temp_image_path}. Skipping classification.")
                     track["species"] = "No data"
-                    track["species_confidence"] = "No data"
+                    track["species_confidence"] = "0.0000"
                     track["image_path"] = None
                     track.pop("best_crop", None)
                     continue
@@ -1177,7 +1177,7 @@ def save_best_image(finished_tracks, filename):
                 species_data = classify_image(temp_image_path)
                 species = species_data[0] if species_data else "No data"
                 track["species"] = species
-                track["species_confidence"] = f"{species_data[1]:.2f}%" if species_data and len(species_data) > 1 else "No data"
+                track["species_confidence"] = f"{(species_data[1] / 100):.4f}" if species_data and len(species_data) > 1 else "0.0000"
                 
                 # Create species subfolder and move image
                 if species in CLASS_NAMES:

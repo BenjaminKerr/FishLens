@@ -381,17 +381,15 @@ Height="70">
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
 
-                                    <!-- Row 0: Fish emoji, horizontal position set via Margin.Left from C# -->
-                                    <TextBlock x:Name="fishEmojiMarker"
-                                               Grid.Row="0"
-                                               Text="🐟"
-                                               FontSize="13"
-                                               HorizontalAlignment="Left"
-                                               Visibility="Collapsed"
-                                               Margin="0,0,0,2"/>
+                                    <!-- Row 0: Fish emoji markers — drawn dynamically from C# per track -->
+                                    <Canvas x:Name="fishEmojiCanvas"
+                                            Grid.Row="0"
+                                            Height="18"
+                                            IsHitTestVisible="False"
+                                            HorizontalAlignment="Stretch"/>
 
                                     <!-- Row 1: Slider with full ControlTemplate.
-                                         Child order = Z-order: track bg → range bar → circular thumb -->
+                                         Child order = Z-order: track bg → range bars canvas → circular thumb -->
                                     <Slider x:Name="videoScrubber"
                                             Grid.Row="1"
                                             Minimum="0" Maximum="1" Value="0"
@@ -409,18 +407,12 @@ Height="70">
                                                             Background="#DDE3E8"
                                                             HorizontalAlignment="Stretch"
                                                             VerticalAlignment="Center"/>
-                                                    <!-- 2: Fish range bar canvas (above track, below thumb) -->
+                                                    <!-- 2: Fish range bars canvas — populated dynamically from C# -->
                                                     <Canvas Name="fishMarkersCanvas"
                                                             IsHitTestVisible="False"
                                                             HorizontalAlignment="Stretch"
                                                             VerticalAlignment="Center"
-                                                            Height="4">
-                                                        <Rectangle Name="fishRangeBar"
-                                                                   Height="4"
-                                                                   Opacity="0.85"
-                                                                   RadiusX="2" RadiusY="2"
-                                                                   Visibility="Collapsed"/>
-                                                    </Canvas>
+                                                            Height="4"/>
                                                     <!-- 3: Track with circular thumb (top of stack) -->
                                                     <Track Name="PART_Track" VerticalAlignment="Center">
                                                         <Track.DecreaseRepeatButton>
@@ -475,8 +467,40 @@ Height="70">
                                            Margin="8,0,0,0"/>
                             </Grid>
 
-                            <!-- Transport controls: skip-back | play/pause | skip-forward -->
+                            <!-- Transport controls: prev-fish | skip-back | play/pause | skip-forward | next-fish -->
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,0">
+
+                                <!-- Jump to previous fish track -->
+                                <Button x:Name="prevFishButton"
+                                        Content="🐟◀"
+                                        FontSize="12"
+                                        Width="36" Height="36"
+                                        Background="{DynamicResource AccentBrush}"
+                                        Foreground="{DynamicResource OnAccentForeground}"
+                                        BorderThickness="0"
+                                        Cursor="Hand"
+                                        Margin="0,0,6,0"
+                                        Visibility="Collapsed"
+                                        Click="PrevFishButton_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="border"
+                                                    Background="{TemplateBinding Background}"
+                                                    CornerRadius="18"
+                                                    Width="36" Height="36">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource HeaderBackground}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
 
                                 <!-- Skip back 1 second -->
                                 <Button x:Name="skipBackButton"
@@ -579,6 +603,38 @@ Height="70">
                                     </Button.Template>
                                 </Button>
 
+                                <!-- Jump to next fish track -->
+                                <Button x:Name="nextFishButton"
+                                        Content="▶🐟"
+                                        FontSize="12"
+                                        Width="36" Height="36"
+                                        Background="{DynamicResource AccentBrush}"
+                                        Foreground="{DynamicResource OnAccentForeground}"
+                                        BorderThickness="0"
+                                        Cursor="Hand"
+                                        Margin="6,0,0,0"
+                                        Visibility="Collapsed"
+                                        Click="NextFishButton_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="border"
+                                                    Background="{TemplateBinding Background}"
+                                                    CornerRadius="18"
+                                                    Width="36" Height="36">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource HeaderBackground}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+
                             </StackPanel>
                         </StackPanel>
 
@@ -632,6 +688,57 @@ Height="70">
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource PrimaryText}"
                                        Margin="0,0,0,8"/>
+
+                            <!-- Track Navigator — hidden when video has only one track -->
+                            <Border x:Name="trackNavigator"
+                                    Visibility="Collapsed"
+                                    Background="{DynamicResource CardBackground}"
+                                    CornerRadius="6"
+                                    Padding="8,6"
+                                    Margin="0,0,0,12">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="trackPrevButton"
+                                            Grid.Column="0"
+                                            Content="◀"
+                                            Click="TrackPrevClick"
+                                            FontSize="13"
+                                            Padding="8,4"
+                                            BorderThickness="0"
+                                            Cursor="Hand"
+                                            Background="Transparent"
+                                            Foreground="{DynamicResource PrimaryText}"/>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <TextBlock x:Name="trackLabel"
+                                                   Text="Fish 1 / 1"
+                                                   FontSize="{DynamicResource BaseFontSize}"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource PrimaryText}"
+                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock x:Name="trackVideoLabel"
+                                                   Text=""
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource SecondaryText}"
+                                                   HorizontalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   MaxWidth="160"/>
+                                    </StackPanel>
+                                    <Button x:Name="trackNextButton"
+                                            Grid.Column="2"
+                                            Content="▶"
+                                            Click="TrackNextClick"
+                                            FontSize="13"
+                                            Padding="8,4"
+                                            BorderThickness="0"
+                                            Cursor="Hand"
+                                            Background="Transparent"
+                                            Foreground="{DynamicResource PrimaryText}"/>
+                                </Grid>
+                            </Border>
 
                             <!-- Video Info - Small and Gray -->
                             <StackPanel Margin="0,0,0,20">
