@@ -18,7 +18,6 @@ import tempfile
 import numpy as np
 import shutil
 import sys
-from datetime import datetime, timedelta
 #from YOLO.detector import YoloDetector
 from tracking.deepsort_tracker import DeepSortTracker
 from collections import Counter
@@ -110,7 +109,7 @@ CSV_KEYS = [
 TESSERACT_AVAILABLE = check_tesseract()
 
 # Constants--YOLO
-MODEL = _load_yolo_model("models/fish_detector2.pt")
+MODEL = _load_yolo_model("models/fish_detector3.pt")
 YOLO_CONFIDENCE_THRESHOLD = 0.25  # Adjustable: lower = detects more fish (but more false positives), higher = more selective
 NO_FISH = os.path.join(PROJECT_ROOT, "no_fish")
 
@@ -128,6 +127,7 @@ SAVE_TIMESTAMP_DEBUG_FRAMES = os.getenv("FISHLENS_SAVE_TIMESTAMP_DEBUG", "0") ==
 TIMESTAMP_MAX_ATTEMPTS = max(1, int(os.getenv("FISHLENS_TIMESTAMP_MAX_ATTEMPTS", "4" if FAST_MODE else "8")))
 SUPPRESS_CODEC_WARNINGS = os.getenv("FISHLENS_SUPPRESS_CODEC_WARNINGS", "1") == "1"
 VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRAMES", "6" if FAST_MODE else "12")))
+MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DURATION_SEC", "0.75")))
 
 # Constants--Classifier
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
@@ -198,49 +198,6 @@ def _video_capture_open(video_path):
 def _video_capture_read(cap):
     with _suppress_stderr(SUPPRESS_CODEC_WARNINGS):
         return cap.read()
-
-
-def _parse_video_timestamp_value(value):
-    if not value:
-        return None
-    for fmt in ("%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
-        try:
-            return datetime.strptime(value, fmt)
-        except ValueError:
-            continue
-    return None
-
-
-def _stabilize_with_video_clock(parsed_ts, parsed_conf, base_ts, frame_index, fps):
-    """
-    Use video start timestamp + frame clock to correct OCR minute drift (common 5/6 swap).
-    """
-    parsed_dt = _parse_video_timestamp_value(parsed_ts)
-    base_dt = _parse_video_timestamp_value(base_ts)
-    if parsed_dt is None or base_dt is None:
-        return parsed_ts, parsed_conf
-
-    try:
-        safe_fps = float(fps) if fps else float(FPS_DEFAULT)
-        if safe_fps <= 0:
-            safe_fps = float(FPS_DEFAULT)
-    except Exception:
-        safe_fps = float(FPS_DEFAULT)
-
-    expected_dt = base_dt + timedelta(seconds=(float(frame_index) / safe_fps))
-    delta_seconds = abs((parsed_dt - expected_dt).total_seconds())
-
-    # If OCR is already close to expected, keep it.
-    if delta_seconds <= 10:
-        return parsed_ts, parsed_conf
-
-    # If OCR differs by about one minute, prefer expected clock time.
-    if 50 <= delta_seconds <= 70 and parsed_dt.date() == expected_dt.date() and parsed_dt.hour == expected_dt.hour:
-        corrected_ts = expected_dt.strftime("%Y/%m/%d %H:%M:%S")
-        corrected_conf = "MEDIUM" if parsed_conf == "HIGH" else parsed_conf
-        return corrected_ts, corrected_conf
-
-    return parsed_ts, parsed_conf
 
 
 # ****************************************************************
@@ -439,14 +396,10 @@ def _cleanup_temp(path):
 # Description: Process a single video through both YOLO and DeepSort;
 # return tracked fish data.
 # Notes: N/A
-def run_video_tracker(video_path, source_video_path=None, allow_recovery=True, force_precise=False):
+def run_video_tracker(video_path, source_video_path=None):
 
     # Initialize new VideoData and DeepSort tracker for each video
     vidData = VideoData()
-    frame_stride = 1 if force_precise else FRAME_STRIDE
-    yolo_imgsz = max(512, YOLO_IMGSZ) if force_precise else YOLO_IMGSZ
-    timestamp_max_attempts = max(8, TIMESTAMP_MAX_ATTEMPTS) if force_precise else TIMESTAMP_MAX_ATTEMPTS
-    video_ts_probe_frames = max(12, VIDEO_TIMESTAMP_PROBE_FRAMES) if force_precise else VIDEO_TIMESTAMP_PROBE_FRAMES
     source_video_path = source_video_path or video_path
     vidData.v_filename = os.path.basename(video_path)
     tracker = DeepSortTracker()
@@ -467,13 +420,6 @@ def run_video_tracker(video_path, source_video_path=None, allow_recovery=True, f
         print(f"[ERROR] Could not open video with cv2.VideoCapture: {video_path}")
         print(f"[DEBUG] This usually means the video codec is not supported or file is corrupted")
         return []
-
-    if force_precise:
-        print(
-            f"[INFO] Precision pass enabled: FRAME_STRIDE={frame_stride}, "
-            f"YOLO_IMGSZ={yolo_imgsz}, TIMESTAMP_MAX_ATTEMPTS={timestamp_max_attempts}, "
-            f"VIDEO_TS_PROBE_FRAMES={video_ts_probe_frames}"
-        )
     
     vidData.v_fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
     ret, frame = _video_capture_read(cap)
@@ -483,7 +429,7 @@ def run_video_tracker(video_path, source_video_path=None, allow_recovery=True, f
         vidData.v_video_timestamp = probe_video_timestamp(
             cap,
             frame,
-            probe_frames=video_ts_probe_frames,
+            probe_frames=VIDEO_TIMESTAMP_PROBE_FRAMES,
             read_frame_fn=_video_capture_read
         )
         ret, frame = _video_capture_read(cap)
@@ -493,7 +439,7 @@ def run_video_tracker(video_path, source_video_path=None, allow_recovery=True, f
         vidData.v_current_track_ids = set()
 
         # Speed mode: process every Nth frame
-        if frame_stride > 1 and (vidData.v_frame_index % frame_stride) != 0:
+        if FRAME_STRIDE > 1 and (vidData.v_frame_index % FRAME_STRIDE) != 0:
             vidData.v_frame_index += 1
             vidData.v_total_frames += 1
             ret, frame = _video_capture_read(cap)
@@ -504,13 +450,13 @@ def run_video_tracker(video_path, source_video_path=None, allow_recovery=True, f
         frameData.f_detections = []
 
         # Determine most common class per-frame
-        analyze_yolo_detections(frame, MODEL, frameData, vidData, yolo_imgsz)
+        analyze_yolo_detections(frame, MODEL, frameData, vidData)
 
         # YOLO Post-Processing. TODO: Move this farther down. Currently doesn't produce accurate results because it's running too early.
         process_yolo_results(frameData, vidData, MODEL)
 
         # DeepSort Tracking
-        deepsort_analysis(tracker, frame, frameData, vidData, timestamp_max_attempts) 
+        deepsort_analysis(tracker, frame, frameData, vidData) 
 
         # Finalize disappeared tracks (detections that ended before the video ended)
         finalize_tracks(frameData, vidData, termination_reason="disappeared")
@@ -530,14 +476,6 @@ def run_video_tracker(video_path, source_video_path=None, allow_recovery=True, f
 
     # Skip export if fish was not detected in video
     if not vidData.v_found_fish:
-        if FAST_MODE and allow_recovery and not force_precise:
-            print("[INFO] Fast pass found no fish; retrying this video with precision settings...")
-            return run_video_tracker(
-                video_path,
-                source_video_path=source_video_path,
-                allow_recovery=False,
-                force_precise=True
-            )
         print(f"[INFO] No fish detected in {vidData.v_filename}")
         no_fish_found(video_path, vidData.v_filename)
         return []
@@ -560,7 +498,7 @@ def run_video_tracker(video_path, source_video_path=None, allow_recovery=True, f
     vidData.v_finished_tracks = vidData.v_finished_tracks[:MAX_EXPORT_PER_VIDEO]
 
     # Save the best image from each video for analysis.
-    save_best_image(vidData.v_finished_tracks, vidData.v_filename, source_video_path)
+    save_best_image(vidData.v_finished_tracks, vidData.v_filename)
     
     # Save frames for uncertain timestamps
     save_uncertain_timestamp_frames(vidData.v_finished_tracks, source_video_path)
@@ -572,7 +510,7 @@ def run_video_tracker(video_path, source_video_path=None, allow_recovery=True, f
 # Function: analyse_yolo_detections
 # Description: Analyze YOLO detections to determine most common class of frame.
 # Notes: Vars modified: found_fish (frame, video), detections(frame), frames with/without fish (video)
-def analyze_yolo_detections(frame, model, frameData, vidData, yolo_imgsz):
+def analyze_yolo_detections(frame, model, frameData, vidData):
 
     # Run YOLO on frame
     results = model.predict(
@@ -580,7 +518,7 @@ def analyze_yolo_detections(frame, model, frameData, vidData, yolo_imgsz):
         verbose=False,
         stream=False,
         save=False,
-        imgsz=yolo_imgsz
+        imgsz=YOLO_IMGSZ
     )
 
     # Begin YOLO post-analysis
@@ -641,7 +579,7 @@ def process_yolo_results(frameData, vidData, model):
 # Function: deepsort_analysis
 # Description: Run video through DeepSort and return track data.
 # Notes: N/A
-def deepsort_analysis(tracker, frame, frameData, vidData, timestamp_max_attempts):
+def deepsort_analysis(tracker, frame, frameData, vidData):
 
     # Use the tracker's default iou threshold (tuned in the tracker)
     frameData.f_detections = tracker.filterOverlaps(frameData.f_detections)
@@ -655,73 +593,41 @@ def deepsort_analysis(tracker, frame, frameData, vidData, timestamp_max_attempts
         is_new_track = trackId not in vidData.v_active_tracks
 
         if is_new_track:
-            fallback_timestamp = vidData.v_video_timestamp if (vidData.v_video_timestamp and vidData.v_video_timestamp != "Not detected") else None
+            initial_conf = "LOW" if (vidData.v_video_timestamp and vidData.v_video_timestamp != "Not detected") else None
             vidData.v_active_tracks[trackId] = {
                 "start_frame": frameData.f_index,
                 "confidences": [],
                 "directions": [],
                 "best_conf": -1.0,
                 "best_crop": None,
-                "video_timestamp": None,
-                "timestamp_confidence": None,
-                "fallback_timestamp": fallback_timestamp,
-                "fallback_timestamp_confidence": "LOW" if fallback_timestamp else None,
+                "video_timestamp": vidData.v_video_timestamp or "Not detected",
+                "timestamp_confidence": initial_conf,
                 "timestamp_attempts": 0
             }
             
             # Track created; timestamp OCR will be retried for several frames if needed.
-            print(
-                f"  New fish detected (Track {trackId}) at frame {frameData.f_index} - "
-                f"fallback ts_conf={vidData.v_active_tracks[trackId]['fallback_timestamp_confidence']}"
-            )
+            print(f"  New fish detected (Track {trackId}) at frame {frameData.f_index} - initial ts_conf={initial_conf}")
 
         # Retry timestamp OCR on early frames of each track until one succeeds.
         track_data = vidData.v_active_tracks[trackId]
         current_confidence = track_data.get("timestamp_confidence")
-        current_ts = track_data.get("video_timestamp") or track_data.get("fallback_timestamp") or "Not detected"
+        current_ts = track_data.get("video_timestamp", "Not detected")
         
         # Keep trying to get direct OCR if we only have LOW confidence (from probe) or no timestamp at all
         if current_confidence in (None, "LOW"):
             attempts = track_data.get("timestamp_attempts", 0)
-            if attempts < timestamp_max_attempts:
+            if attempts < TIMESTAMP_MAX_ATTEMPTS:
                 result = extractTimestamFromFrame(frame, False)
                 track_data["timestamp_attempts"] = attempts + 1
 
                 if result and result[0]:  # result is (timestamp, confidence) tuple
-                    parsed_ts = result[0]
-                    parsed_conf = result[1]
-
-                    # Keep video-level date stable when direct OCR drifts by year/day.
-                    # Example: video probe found 2025/09/27, direct OCR returns 2026/09/27.
-                    base_ts = vidData.v_video_timestamp
-                    if base_ts and base_ts != "Not detected" and " " in base_ts and " " in parsed_ts:
-                        try:
-                            base_date, _ = base_ts.split(" ", 1)
-                            cand_date, cand_time = parsed_ts.split(" ", 1)
-                            if cand_date != base_date:
-                                parsed_ts = f"{base_date} {cand_time}"
-                                # Mark as at most MEDIUM confidence because a correction was applied.
-                                parsed_conf = "MEDIUM" if parsed_conf == "HIGH" else parsed_conf
-                        except Exception:
-                            pass
-
-                    # Keep OCR timestamp aligned to the video's frame clock to avoid
-                    # one-minute OCR drift (e.g., 00:36 instead of expected 00:35).
-                    parsed_ts, parsed_conf = _stabilize_with_video_clock(
-                        parsed_ts,
-                        parsed_conf,
-                        vidData.v_video_timestamp,
-                        frameData.f_index,
-                        vidData.v_fps
-                    )
-
                     old_ts = current_ts
                     old_conf = current_confidence
-                    track_data["video_timestamp"] = parsed_ts
-                    track_data["timestamp_confidence"] = parsed_conf
-                    print(f"    Track {trackId}: Updated ts from '{old_ts}' ({old_conf}) to '{parsed_ts}' ({parsed_conf})")
-                elif track_data["timestamp_attempts"] == timestamp_max_attempts and current_confidence is None:
-                    print(f"    Could not extract timestamp after {timestamp_max_attempts} attempts")
+                    track_data["video_timestamp"] = result[0]
+                    track_data["timestamp_confidence"] = result[1]
+                    print(f"    Track {trackId}: Updated ts from '{old_ts}' ({old_conf}) to '{result[0]}' ({result[1]})")
+                elif track_data["timestamp_attempts"] == TIMESTAMP_MAX_ATTEMPTS and current_confidence is None:
+                    print(f"    Could not extract timestamp after {TIMESTAMP_MAX_ATTEMPTS} attempts")
                     if SAVE_TIMESTAMP_DEBUG_FRAMES:
                         debug_frame_path = f"debug_full_frame_track_{trackId}.jpg"
                         cv2.imwrite(debug_frame_path, frame)
@@ -787,7 +693,7 @@ def finalize_tracks(frameData, vidData, termination_reason):
 # Notes: N/A
 def build_track_summary(trackId, track_data, frameData, vidData, image_path=None, frame_width=640):
     duration_sec = (frameData.f_index - track_data["start_frame"]) / vidData.v_fps
-    if duration_sec < 2.0:
+    if duration_sec < MIN_TRACK_DURATION_SEC:
         return None
     
     # Calculate DeepSort average confidence
@@ -828,13 +734,8 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     species_data = classify_image(image_path) if image_path else ("No image", 0.0)
     
     # Handle timestamp with confidence flag
-    video_timestamp = track_data.get("video_timestamp")
+    video_timestamp = track_data.get("video_timestamp") or vidData.v_video_timestamp or "Not detected"
     timestamp_confidence = track_data.get("timestamp_confidence")
-
-    if not video_timestamp:
-        video_timestamp = track_data.get("fallback_timestamp") or vidData.v_video_timestamp or "Not detected"
-        if timestamp_confidence is None:
-            timestamp_confidence = track_data.get("fallback_timestamp_confidence")
     
     # Add * only if timestamp is LOW confidence
     if timestamp_confidence and timestamp_confidence == "LOW":
@@ -884,108 +785,10 @@ def dedupe_fragmented_tracks(finished_tracks):
         # Confidence-first score with a small duration bonus.
         return _pct(track) + min(_duration(track), 10.0)
 
-    def _clean_timestamp(track):
-        value = str(track.get("video_timestamp", "")).strip()
-        if value.endswith("*"):
-            value = value[:-1].strip()
-        if not value or value.lower() == "not detected":
-            return None
-        return value
-
-    def _timestamp_rank(track):
-        confidence = str(track.get("timestamp_confidence") or "").upper()
-        if confidence == "HIGH":
-            return 3
-        if confidence == "MEDIUM":
-            return 2
-        if confidence == "LOW":
-            return 1
-        return 0
-
-    def _parse_timestamp_value(value):
-        if not value:
-            return None
-        for fmt in ("%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
-            try:
-                return datetime.strptime(value, fmt)
-            except ValueError:
-                continue
-        return None
-
-    def _timestamps_compatible(a, b):
-        ts_a = _clean_timestamp(a)
-        ts_b = _clean_timestamp(b)
-        if not ts_a or not ts_b:
-            return False
-        if ts_a == ts_b:
-            return True
-
-        parsed_a = _parse_timestamp_value(ts_a)
-        parsed_b = _parse_timestamp_value(ts_b)
-        if parsed_a and parsed_b:
-            return abs((parsed_a - parsed_b).total_seconds()) <= 2.0
-
-        return False
-
-    def _timestamp_delta_seconds(a, b):
-        ts_a = _clean_timestamp(a)
-        ts_b = _clean_timestamp(b)
-        if not ts_a or not ts_b:
-            return None
-
-        parsed_a = _parse_timestamp_value(ts_a)
-        parsed_b = _parse_timestamp_value(ts_b)
-        if parsed_a and parsed_b:
-            return abs((parsed_a - parsed_b).total_seconds())
-
-        return None
-
-    def _timestamp_is_uncertain(track):
-        confidence = str(track.get("timestamp_confidence") or "").upper()
-        return confidence != "HIGH"
-
-    def _choose_better_timestamp_track(a, b):
-        rank_a = _timestamp_rank(a)
-        rank_b = _timestamp_rank(b)
-        if rank_a != rank_b:
-            return a if rank_a > rank_b else b
-
-        ts_a = _clean_timestamp(a)
-        ts_b = _clean_timestamp(b)
-        if ts_a and not ts_b:
-            return a
-        if ts_b and not ts_a:
-            return b
-
-        return a if _score(a) >= _score(b) else b
-
-    def _merge_tracks(existing, incoming):
-        keeper = existing if _score(existing) >= _score(incoming) else incoming
-        other = incoming if keeper is existing else existing
-        merged = dict(keeper)
-
-        try:
-            merged["start_time_sec"] = f"{min(float(existing.get('start_time_sec', 0.0)), float(incoming.get('start_time_sec', 0.0))):.2f}"
-            merged["end_time_sec"] = f"{max(float(existing.get('end_time_sec', 0.0)), float(incoming.get('end_time_sec', 0.0))):.2f}"
-        except Exception:
-            pass
-
-        best_ts_track = _choose_better_timestamp_track(existing, incoming)
-        merged["video_timestamp"] = best_ts_track.get("video_timestamp", keeper.get("video_timestamp"))
-        merged["timestamp_confidence"] = best_ts_track.get("timestamp_confidence", keeper.get("timestamp_confidence"))
-
-        if merged.get("best_crop") is None and other.get("best_crop") is not None:
-            merged["best_crop"] = other.get("best_crop")
-        if merged.get("best_frame") is None and other.get("best_frame") is not None:
-            merged["best_frame"] = other.get("best_frame")
-
-        return merged
-
     def _same_or_unknown_direction(a, b):
         da = str(a.get("direction", "unknown")).lower()
         db = str(b.get("direction", "unknown")).lower()
-        flexible_directions = {"unknown", "stationary", "indecisive"}
-        if da in flexible_directions or db in flexible_directions:
+        if da == "unknown" or db == "unknown" or da == "stationary" or db == "stationary":
             return True
         return da == db
 
@@ -1005,38 +808,11 @@ def dedupe_fragmented_tracks(finished_tracks):
         shorter = max(0.001, min(_duration(a), _duration(b)))
         overlap_ratio = overlap / shorter
         gap = min(abs(a_start - b_end), abs(b_start - a_end))
-        timestamp_delta = _timestamp_delta_seconds(a, b)
 
         # Temporal relationship expected for split IDs.
-        temporal_match = (
-            (overlap_ratio >= 0.75)
-            or (gap <= 0.35)
-            or (gap <= 3.5 and timestamp_delta is not None and timestamp_delta <= 5.0)
-            or (gap <= 3.5 and timestamp_delta is not None and 50.0 <= timestamp_delta <= 70.0)
-            or (gap <= 1.5 and (_timestamp_is_uncertain(a) or _timestamp_is_uncertain(b)))
-        )
+        temporal_match = (overlap_ratio >= 0.75) or (gap <= 0.35)
         if not temporal_match:
             return False
-
-        # If OCR drifted slightly between split track segments, treat near-equal
-        # timestamps as the same fish and merge aggressively.
-        if _timestamps_compatible(a, b):
-            return True
-
-        # Handle tracker handoffs that create nearby sequential segments of the
-        # same fish with slightly different timestamps.
-        if gap <= 3.5 and timestamp_delta is not None and timestamp_delta <= 5.0:
-            return True
-
-        # Handle common OCR minute drift (e.g., 00:35 vs 00:36) during tracker
-        # ID handoffs when segments are temporally adjacent.
-        if gap <= 3.5 and timestamp_delta is not None and 50.0 <= timestamp_delta <= 70.0:
-            return True
-
-        # If one segment only has fallback/uncertain timestamp OCR, trust the
-        # temporal handoff more than the timestamp value.
-        if gap <= 1.5 and (_timestamp_is_uncertain(a) or _timestamp_is_uncertain(b)):
-            return True
 
         # Prefer merging only when one track is clearly weaker/shorter.
         pa = _pct(a)
@@ -1053,7 +829,8 @@ def dedupe_fragmented_tracks(finished_tracks):
         merged = False
         for i, existing in enumerate(kept):
             if _is_likely_duplicate(existing, track):
-                kept[i] = _merge_tracks(existing, track)
+                if _score(track) > _score(existing):
+                    kept[i] = track
                 merged = True
                 break
         if not merged:
@@ -1081,52 +858,51 @@ def no_fish_found(video_path, filename): # TODO: Change function name?
 
 # ***************************************************************
 # Function: save_best_image
-# Description: Saves the best image from each video.
-# Notes: Output path format: fish_images/<species>/<source_directory>/<source_video_name>_track_<id>.jpg
-def save_best_image(finished_tracks, filename, source_video_path=None):
-    source_dir = os.path.basename(os.path.dirname(source_video_path)) if source_video_path else "root"
-    source_dir_safe = _safe_path_component(source_dir, default="root")
+# Description: Saves the best image from each video. 
+# Notes:
+def save_best_image(finished_tracks, filename):
+        for track in finished_tracks:
+            best_crop = track.get("best_crop")
 
-    # Prefer original source video name (e.g., 00000007) over temp/transcoded names.
-    source_name = os.path.basename(source_video_path) if source_video_path else filename
-    source_stem = os.path.splitext(source_name)[0]
-    source_stem_safe = _safe_path_component(source_stem, default="video")
-
-    for track in finished_tracks:
-        best_crop = track.get("best_crop")
-
-        if best_crop is not None:
-            enhanced_crop = enhance_image(best_crop)
-
-            # Classify the image first to determine species folder
-            temp_image_name = f"{source_stem_safe}_track_{track['trackId']}.jpg"
-            temp_image_path = os.path.join(FISH_IMAGE_DIR, temp_image_name)
-            write_ok = cv2.imwrite(temp_image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
-            if not write_ok:
-                print(f"Failed to write image at {temp_image_path}. Skipping classification.")
-                track["species"] = "No data"
-                track["species_confidence"] = "No data"
-                track["image_path"] = None
-                track.pop("best_crop", None)
-                continue
-
-            # Classify the saved image
-            species_data = classify_image(temp_image_path)
-            species = species_data[0] if species_data else "No data"
-            track["species"] = species
-            track["species_confidence"] = f"{species_data[1]:.2f}%" if species_data and len(species_data) > 1 else "No data"
-
-            # Create species subfolder and move image
-            if species in CLASS_NAMES:
-                species_folder = os.path.join(FISH_IMAGE_DIR, species)
-                source_folder = os.path.join(species_folder, source_dir_safe)
-                os.makedirs(source_folder, exist_ok=True)
-                final_image_path = os.path.join(source_folder, temp_image_name)
-                try:
-                    shutil.move(temp_image_path, final_image_path)
-                    track["image_path"] = final_image_path
-                except Exception as e:
-                    print(f"Error moving image to species folder: {e}")
+            if best_crop is not None:
+                enhanced_crop = enhance_image(best_crop)
+                
+                # Classify the image first to determine species folder
+                temp_image_name = f"{os.path.splitext(filename)[0]}_track_{track['trackId']}.jpg"
+                temp_image_path = os.path.join(FISH_IMAGE_DIR, temp_image_name)
+                write_ok = cv2.imwrite(temp_image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                if not write_ok:
+                    print(f"Failed to write image at {temp_image_path}. Skipping classification.")
+                    track["species"] = "No data"
+                    track["species_confidence"] = "No data"
+                    track["image_path"] = None
+                    track.pop("best_crop", None)
+                    continue
+                
+                # Classify the saved image
+                species_data = classify_image(temp_image_path)
+                species = species_data[0] if species_data else "No data"
+                track["species"] = species
+                track["species_confidence"] = f"{species_data[1]:.2f}%" if species_data and len(species_data) > 1 else "No data"
+                
+                # Create species subfolder and move image
+                if species in CLASS_NAMES:
+                    species_folder = os.path.join(FISH_IMAGE_DIR, species)
+                    os.makedirs(species_folder, exist_ok=True)
+                    final_image_path = os.path.join(species_folder, temp_image_name)
+                    try:
+                        shutil.move(temp_image_path, final_image_path)
+                        track["image_path"] = final_image_path
+                    except Exception as e:
+                        print(f"Error moving image to species folder: {e}")
+                        track["image_path"] = None
+                        try:
+                            if os.path.exists(temp_image_path):
+                                os.remove(temp_image_path)
+                        except OSError:
+                            pass
+                else:
+                    # Do not keep unclassified images in root fish_images.
                     track["image_path"] = None
                     try:
                         if os.path.exists(temp_image_path):
@@ -1134,18 +910,10 @@ def save_best_image(finished_tracks, filename, source_video_path=None):
                     except OSError:
                         pass
             else:
-                # Do not keep unclassified images in root fish_images.
                 track["image_path"] = None
-                try:
-                    if os.path.exists(temp_image_path):
-                        os.remove(temp_image_path)
-                except OSError:
-                    pass
-        else:
-            track["image_path"] = None
-
-        # Remove best_crop from track dict (no need to export it)
-        track.pop("best_crop", None)
+            
+            # Remove best_crop from track dict (no need to export it)
+            track.pop("best_crop", None)
 
 
 # ****************************************************************
