@@ -598,6 +598,8 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                 "start_frame": frameData.f_index,
                 "confidences": [],
                 "directions": [],
+                "entry_x": None,
+                "last_x": None,
                 "best_conf": -1.0,
                 "best_crop": None,
                 "video_timestamp": vidData.v_video_timestamp or "Not detected",
@@ -639,6 +641,8 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
 
         x1, y1, x2, y2 = obj["bbox"]
         exit_x = (x1 + x2) / 2  # Center x-position at current frame
+        if vidData.v_active_tracks[trackId].get("entry_x") is None:
+            vidData.v_active_tracks[trackId]["entry_x"] = exit_x
         vidData.v_active_tracks[trackId]["last_x"] = exit_x
         
         # Add 30% margin around the bounding box for zoomed-out view
@@ -704,32 +708,44 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     best_conf = track_data.get("best_conf", 0.0)
     best_conf_pct = best_conf * 100 if best_conf <= 1.0 else best_conf
     
-    # Calculate overall direction based on entry and exit positions
-    entry_x = track_data.get("entry_x", 0)
-    exit_x = track_data.get("last_x", 0)
-    
-    # Determine if entry and exit are on same side of frame
-    # Left side: x < frame_width/2, Right side: x >= frame_width/2
-    entry_side = "left" if entry_x < frame_width / 2 else "right"
-    exit_side = "left" if exit_x < frame_width / 2 else "right"
-    
-    # Determine direction
-    if entry_side == exit_side:
-        # Fish entered and exited from same side - indecisive
-        overall_direction = "indecisive"
-    else:
-        # Fish crossed from one side to other - use direction counts
-        directions = track_data["directions"]
-        overall_direction = "unknown"
-        if directions:
-            upstream_count = directions.count("upstream")
-            downstream_count = directions.count("downstream")
-            if upstream_count > downstream_count:
-                overall_direction = "upstream"
-            elif downstream_count > upstream_count:
-                overall_direction = "downstream"
-            else:
-                overall_direction = directions[-1]
+    # Calculate overall direction using direction votes and net displacement.
+    # This avoids over-reporting "indecisive" when a fish does not cross
+    # from one half of the frame to the other.
+    entry_x = track_data.get("entry_x")
+    exit_x = track_data.get("last_x")
+    dx = None
+    if entry_x is not None and exit_x is not None:
+        dx = exit_x - entry_x
+
+    directions = [
+        d for d in track_data.get("directions", [])
+        if d in ("upstream", "downstream")
+    ]
+    upstream_count = directions.count("upstream")
+    downstream_count = directions.count("downstream")
+    vote_total = upstream_count + downstream_count
+
+    overall_direction = "indecisive"
+
+    # Strong vote majority is most reliable.
+    if vote_total >= 3:
+        if upstream_count / vote_total >= 0.6:
+            overall_direction = "upstream"
+        elif downstream_count / vote_total >= 0.6:
+            overall_direction = "downstream"
+
+    # If votes are weak, fall back to net horizontal displacement.
+    if overall_direction == "indecisive" and dx is not None:
+        min_displacement = max(15.0, frame_width * 0.03)
+        if abs(dx) >= min_displacement:
+            overall_direction = "upstream" if dx < 0 else "downstream"
+
+    # Last fallback: any slight vote advantage.
+    if overall_direction == "indecisive" and vote_total > 0:
+        if upstream_count > downstream_count:
+            overall_direction = "upstream"
+        elif downstream_count > upstream_count:
+            overall_direction = "downstream"
     
     species_data = classify_image(image_path) if image_path else ("No image", 0.0)
     

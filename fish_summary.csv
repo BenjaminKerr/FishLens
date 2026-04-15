@@ -1,3 +1,3 @@
 video_file,trackId,image_path,likely_class,confidence,start_time_sec,end_time_sec,avg_confidence,direction,species,species_confidence,video_timestamp
-00000002.ASF,1,C:\Users\aleks\source\repos\FishLens\fish_images\Omykiss\tmpr_fmzpwy_track_1.jpg,fish,92.05%,27.75,44.00,92.05%,indecisive,Omykiss,72.70%,2025/09/26 23:02:27
-00000002.ASF,2,C:\Users\aleks\source\repos\FishLens\fish_images\Omykiss\tmpr_fmzpwy_track_2.jpg,fish,87.47%,44.75,46.25,87.47%,indecisive,Omykiss,99.86%,2025/09/26 23:02:32
+00000002.ASF,1,C:\Users\aleks\source\repos\FishLens\fish_images\Omykiss\tmpk8vtl5fp_track_1.jpg,fish,92.05%,27.75,44.00,92.05%,upstream,Omykiss,72.70%,2025/09/26 23:02:27
+00000002.ASF,2,C:\Users\aleks\source\repos\FishLens\fish_images\Omykiss\tmpk8vtl5fp_track_2.jpg,fish,87.47%,44.75,46.25,87.47%,upstream,Omykiss,99.86%,2025/09/26 23:02:32
