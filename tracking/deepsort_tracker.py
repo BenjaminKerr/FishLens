@@ -169,7 +169,9 @@ class DeepSortTracker:
                         "centroid": centroid,
                         "direction": direction,
                         "confidence": detConf,
-                        "classId": t.det_class
+                        "classId": t.det_class,
+                        "hits": max(1, int(getattr(t, "hits", 1) or 1)),
+                        "age": max(1, int(getattr(t, "age", 1) or 1))
                     }
                 )
 

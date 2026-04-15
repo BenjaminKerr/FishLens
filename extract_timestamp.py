@@ -276,24 +276,49 @@ def dedupe_tracks_by_timestamp(finished_tracks):
         except Exception:
             return 0.0
 
-    best_by_timestamp = {}
-    passthrough = []
+    def _to_float(track, key, default=0.0):
+        try:
+            return float(track.get(key, default))
+        except Exception:
+            return default
 
+    def _is_near_duplicate(a, b):
+        # Must match timestamp exactly to even be considered.
+        ta = str(a.get("video_timestamp", "")).strip()
+        tb = str(b.get("video_timestamp", "")).strip()
+        if not ta or ta.lower() == "not detected" or ta != tb:
+            return False
+
+        # Must be same detected class/direction to reduce accidental merges.
+        if str(a.get("likely_class", "")).lower() != str(b.get("likely_class", "")).lower():
+            return False
+
+        da = str(a.get("direction", "")).lower()
+        db = str(b.get("direction", "")).lower()
+        if da and db and da != "unknown" and db != "unknown" and da != db:
+            return False
+
+        a_start = _to_float(a, "start_time_sec")
+        a_end = _to_float(a, "end_time_sec")
+        b_start = _to_float(b, "start_time_sec")
+        b_end = _to_float(b, "end_time_sec")
+
+        # Only collapse tracks that are effectively the same window.
+        return abs(a_start - b_start) <= 0.35 and abs(a_end - b_end) <= 0.35
+
+    kept = []
     for track in finished_tracks:
-        ts = str(track.get("video_timestamp", "")).strip()
-        if not ts or ts.lower() == "not detected":
-            passthrough.append(track)
-            continue
+        replaced = False
+        for i, existing in enumerate(kept):
+            if _is_near_duplicate(existing, track):
+                if _pct_value(track) > _pct_value(existing):
+                    kept[i] = track
+                replaced = True
+                break
+        if not replaced:
+            kept.append(track)
 
-        existing = best_by_timestamp.get(ts)
-        if existing is None or _pct_value(track) > _pct_value(existing):
-            best_by_timestamp[ts] = track
-
-    # Keep original relative ordering of selected tracks where possible.
-    selected_ids = {id(t) for t in best_by_timestamp.values()}
-    ordered_selected = [t for t in finished_tracks if id(t) in selected_ids]
-
-    return ordered_selected + passthrough
+    return kept
 
 
 # ****************************************************************

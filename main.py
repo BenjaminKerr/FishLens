@@ -10,6 +10,7 @@ import warnings
 from fileinput import filename
 import os
 import csv
+import math
 import cv2
 import subprocess
 import importlib
@@ -104,7 +105,8 @@ CSV_KEYS = [
     "direction",
     "species",
     "species_confidence",
-    "video_timestamp"
+    "video_timestamp",
+    "duration_sec"
 ]
 TESSERACT_AVAILABLE = check_tesseract()
 
@@ -127,7 +129,10 @@ SAVE_TIMESTAMP_DEBUG_FRAMES = os.getenv("FISHLENS_SAVE_TIMESTAMP_DEBUG", "0") ==
 TIMESTAMP_MAX_ATTEMPTS = max(1, int(os.getenv("FISHLENS_TIMESTAMP_MAX_ATTEMPTS", "4" if FAST_MODE else "8")))
 SUPPRESS_CODEC_WARNINGS = os.getenv("FISHLENS_SUPPRESS_CODEC_WARNINGS", "1") == "1"
 VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRAMES", "6" if FAST_MODE else "12")))
-MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DURATION_SEC", "0.75")))
+MIN_TRACK_DURATION_SEC = max(0.0, float(os.getenv("FISHLENS_MIN_TRACK_DURATION_SEC", "0.35")))
+FORCE_FPS = float(os.getenv("FISHLENS_FORCE_FPS", "0"))
+ENABLE_TIMESTAMP_DEDUPE = os.getenv("FISHLENS_ENABLE_TIMESTAMP_DEDUPE", "0") == "1"
+ENABLE_FRAGMENT_DEDUPE = os.getenv("FISHLENS_ENABLE_FRAGMENT_DEDUPE", "1") == "1"
 
 # Constants--Classifier
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
@@ -145,9 +150,10 @@ os.makedirs(FISH_IMAGE_DIR, exist_ok=True)
 
 @dataclass
 class FrameData:
-        f_index: int = 0
-        f_found_fish: bool = False 
-        f_detections: List = field(default_factory=list) 
+    f_index: int = 0
+    f_time_sec: float = 0.0
+    f_found_fish: bool = False 
+    f_detections: List = field(default_factory=list) 
 
 class VideoData:
     def __init__(self):
@@ -198,6 +204,42 @@ def _video_capture_open(video_path):
 def _video_capture_read(cap):
     with _suppress_stderr(SUPPRESS_CODEC_WARNINGS):
         return cap.read()
+
+
+def _get_frame_time_sec(frame_index, fps):
+    safe_fps = fps if fps and fps > 0 else FPS_DEFAULT
+    return max(0, frame_index) / safe_fps
+
+
+def _resolve_video_fps(cap):
+    if FORCE_FPS > 0:
+        return FORCE_FPS
+
+    raw_fps = cap.get(cv2.CAP_PROP_FPS)
+    try:
+        raw_fps = float(raw_fps)
+    except Exception:
+        raw_fps = 0.0
+
+    # Only fall back when FPS is clearly invalid.
+    # Low FPS videos are valid and should not be forced to 30.
+    if raw_fps <= 0 or raw_fps > 1000:
+        return FPS_DEFAULT
+
+    return raw_fps
+
+
+def _format_video_timecode(total_seconds, round_up=False):
+    if total_seconds is None:
+        total_seconds = 0.0
+
+    seconds = max(0, math.ceil(total_seconds) if round_up else math.floor(total_seconds))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
 
 
 # ****************************************************************
@@ -421,7 +463,9 @@ def run_video_tracker(video_path, source_video_path=None):
         print(f"[DEBUG] This usually means the video codec is not supported or file is corrupted")
         return []
     
-    vidData.v_fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
+    raw_fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
+    vidData.v_fps = _resolve_video_fps(cap)
+    print(f"[INFO] Timing FPS: source={float(raw_fps):.3f}, used={vidData.v_fps:.3f}")
     ret, frame = _video_capture_read(cap)
 
     # Pre-compute a video-level timestamp fallback from early frames.
@@ -446,7 +490,9 @@ def run_video_tracker(video_path, source_video_path=None):
             continue
 
         # Initialize new FrameData object each frame
-        frameData = FrameData(f_index=vidData.v_frame_index)
+        current_frame_index = vidData.v_frame_index
+        current_time_sec = _get_frame_time_sec(current_frame_index, vidData.v_fps)
+        frameData = FrameData(f_index=current_frame_index, f_time_sec=current_time_sec)
         frameData.f_detections = []
 
         # Determine most common class per-frame
@@ -480,12 +526,23 @@ def run_video_tracker(video_path, source_video_path=None):
         no_fish_found(video_path, vidData.v_filename)
         return []
 
+    pre_dedupe_count = len(vidData.v_finished_tracks)
+    print(f"[INFO] Track count before dedupe: {pre_dedupe_count}")
+
     # Remove duplicate tracks that share the exact same timestamp.
     # Keep the one with higher confidence.
-    vidData.v_finished_tracks = dedupe_tracks_by_timestamp(vidData.v_finished_tracks)
+    if ENABLE_TIMESTAMP_DEDUPE:
+        vidData.v_finished_tracks = dedupe_tracks_by_timestamp(vidData.v_finished_tracks)
+        print(f"[INFO] Track count after timestamp dedupe: {len(vidData.v_finished_tracks)}")
+    else:
+        print("[INFO] Timestamp dedupe disabled")
 
     # Merge likely fragmented/split tracks of the same fish.
-    vidData.v_finished_tracks = dedupe_fragmented_tracks(vidData.v_finished_tracks)
+    if ENABLE_FRAGMENT_DEDUPE:
+        vidData.v_finished_tracks = dedupe_fragmented_tracks(vidData.v_finished_tracks)
+        print(f"[INFO] Track count after fragment dedupe: {len(vidData.v_finished_tracks)}")
+    else:
+        print("[INFO] Fragment dedupe disabled")
 
     # Save the best detection per video for analysis. TODO: Refactor based on edge cases (multiple fish?) and confidence threshold adjustments.
     if MAX_EXPORT_PER_VIDEO and len(vidData.v_finished_tracks) > MAX_EXPORT_PER_VIDEO:
@@ -593,9 +650,18 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         is_new_track = trackId not in vidData.v_active_tracks
 
         if is_new_track:
+            track_hits = max(1, int(obj.get("hits", 1) or 1))
+            track_age = max(1, int(obj.get("age", 1) or 1))
+            history_span = max(track_hits, track_age) - 1
+            backfill_frames = history_span * FRAME_STRIDE
+            start_frame = max(0, frameData.f_index - backfill_frames)
+            start_time_sec = start_frame / vidData.v_fps
             initial_conf = "LOW" if (vidData.v_video_timestamp and vidData.v_video_timestamp != "Not detected") else None
             vidData.v_active_tracks[trackId] = {
-                "start_frame": frameData.f_index,
+                "start_frame": start_frame,
+                "last_frame": frameData.f_index,
+                "start_time_sec": start_time_sec,
+                "last_time_sec": frameData.f_time_sec,
                 "confidences": [],
                 "directions": [],
                 "entry_x": None,
@@ -636,6 +702,8 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                         print(f"    Saved full frame to: {debug_frame_path}")
 
         # Update track data per-frame
+        vidData.v_active_tracks[trackId]["last_frame"] = frameData.f_index
+        vidData.v_active_tracks[trackId]["last_time_sec"] = frameData.f_time_sec
         vidData.v_active_tracks[trackId]["confidences"].append(obj["confidence"])
         vidData.v_active_tracks[trackId]["directions"].append(obj["direction"])
 
@@ -696,9 +764,31 @@ def finalize_tracks(frameData, vidData, termination_reason):
 # Description: Helper function for finalizing track data.
 # Notes: N/A
 def build_track_summary(trackId, track_data, frameData, vidData, image_path=None, frame_width=640):
-    duration_sec = (frameData.f_index - track_data["start_frame"]) / vidData.v_fps
+    start_frame = track_data.get("start_frame", frameData.f_index)
+    end_frame = track_data.get("last_frame", frameData.f_index)
+    start_time_sec = track_data.get("start_time_sec")
+    end_time_sec = track_data.get("last_time_sec")
+
+    if start_time_sec is None:
+        start_time_sec = start_frame / vidData.v_fps
+    if end_time_sec is None:
+        end_time_sec = end_frame / vidData.v_fps
+
+    duration_sec = max(0.0, end_time_sec - start_time_sec)
     if duration_sec < MIN_TRACK_DURATION_SEC:
+        print(
+            f"[INFO] Skipping track {trackId}: duration {duration_sec:.3f}s "
+            f"is below MIN_TRACK_DURATION_SEC={MIN_TRACK_DURATION_SEC:.3f}s"
+        )
         return None
+
+    duration_range = f"{_format_video_timecode(start_time_sec)}-{_format_video_timecode(end_time_sec, round_up=True)}"
+    print(
+        f"[DEBUG] Track {trackId} duration calc: "
+        f"start_frame={start_frame}, end_frame={end_frame}, "
+        f"start_time_sec={start_time_sec:.3f}, end_time_sec={end_time_sec:.3f}, "
+        f"duration_sec={duration_sec:.3f}, duration_range={duration_range}"
+    )
     
     # Calculate DeepSort average confidence
     confidences = [c for c in track_data["confidences"] if c is not None]
@@ -762,13 +852,14 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         "likely_class": vidData.v_most_common_class,
         "confidence": f"{best_conf_pct:.2f}%" if best_conf_pct > 0 else f"{vidData.v_avg_confidence_YL:.2f}%",
         "avg_confidence": f"{best_conf_pct:.2f}%" if best_conf_pct > 0 else f"{avg_conf_DS:.2f}%",
-        "start_time_sec": f"{track_data['start_frame'] / vidData.v_fps:.2f}",
-        "end_time_sec": f"{frameData.f_index / vidData.v_fps:.2f}",
+        "start_time_sec": f"{start_time_sec:.2f}",
+        "end_time_sec": f"{end_time_sec:.2f}",
         "direction": overall_direction,
         "best_crop": track_data.get("best_crop"),
         "species": species_data[0] if species_data else "No data",
         "species_confidence": f"{species_data[1]:.2f}%" if species_data else "No data",
         "video_timestamp": video_timestamp,
+        "duration_sec": duration_range,
         "timestamp_confidence": timestamp_confidence,
         "best_frame": vidData.v_active_tracks.get(trackId, {}).get("best_frame") if trackId in vidData.v_active_tracks else None
     }
