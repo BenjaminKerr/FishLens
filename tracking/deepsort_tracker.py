@@ -9,6 +9,7 @@
 # ******************************
 
 from typing import List, Dict, Tuple, Optional, Any
+import os
 import numpy as np
 from deep_sort_realtime.deepsort_tracker import DeepSort
 import torch
@@ -29,9 +30,10 @@ class DeepSortTracker:
     #              and tracking state containers.
 
     def __init__(self) -> None:
+        n_init = max(1, int(os.getenv("FISHLENS_DEEPSORT_N_INIT", "1")))
         self.tracker = DeepSort(
             max_age=60,
-            n_init=3,
+            n_init=n_init,
             max_iou_distance=0.7,
             max_cosine_distance=0.4
         )

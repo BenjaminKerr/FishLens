@@ -110,7 +110,9 @@ TESSERACT_AVAILABLE = check_tesseract()
 
 # Constants--YOLO
 MODEL = _load_yolo_model("models/fish_detector3.pt")
-YOLO_CONFIDENCE_THRESHOLD = 0.25  # Adjustable: lower = detects more fish (but more false positives), higher = more selective
+STRICT_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_YOLO_CONFIDENCE_THRESHOLD", "0.25"))
+LOOSE_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_LOOSE_YOLO_CONFIDENCE_THRESHOLD", "0.20"))
+YOLO_CONFIDENCE_THRESHOLD = STRICT_YOLO_CONFIDENCE_THRESHOLD  # Adjustable: lower = detects more fish (but more false positives), higher = more selective
 NO_FISH = os.path.join(PROJECT_ROOT, "no_fish")
 
 # Constants--DeepSort
@@ -127,7 +129,9 @@ SAVE_TIMESTAMP_DEBUG_FRAMES = os.getenv("FISHLENS_SAVE_TIMESTAMP_DEBUG", "0") ==
 TIMESTAMP_MAX_ATTEMPTS = max(1, int(os.getenv("FISHLENS_TIMESTAMP_MAX_ATTEMPTS", "4" if FAST_MODE else "8")))
 SUPPRESS_CODEC_WARNINGS = os.getenv("FISHLENS_SUPPRESS_CODEC_WARNINGS", "1") == "1"
 VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRAMES", "6" if FAST_MODE else "12")))
-MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DURATION_SEC", "0.75")))
+STRICT_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DURATION_SEC", "0.60")))
+LOOSE_MIN_TRACK_DURATION_SEC = max(0.0, float(os.getenv("FISHLENS_LOOSE_MIN_TRACK_DURATION_SEC", "0.05")))
+MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
 
 # Constants--Classifier
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
@@ -204,6 +208,39 @@ def _video_capture_read(cap):
 # Function: main
 # Description: Process all videos and export data as a CSV.
 # Notes: N/A
+def _process_video_with_retry(video_path, source_video_path):
+    """Two-pass processing: strict pass, then loose pass at FRAME_STRIDE=1 if needed."""
+    global FRAME_STRIDE, YOLO_CONFIDENCE_THRESHOLD, MIN_TRACK_DURATION_SEC
+
+    original_stride = FRAME_STRIDE
+    original_yolo_conf = YOLO_CONFIDENCE_THRESHOLD
+    original_min_duration = MIN_TRACK_DURATION_SEC
+
+    try:
+        # Pass 1: strict settings
+        FRAME_STRIDE = original_stride
+        YOLO_CONFIDENCE_THRESHOLD = STRICT_YOLO_CONFIDENCE_THRESHOLD
+        MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
+        video_tracks = run_video_tracker(video_path, source_video_path)
+
+        # Pass 2: loose settings with FRAME_STRIDE=1 (only if pass 1 found no fish)
+        if not video_tracks:
+            print(
+                f"[INFO] No fish found with strict settings (FRAME_STRIDE={original_stride}); "
+                "retrying once with FRAME_STRIDE=1 and loose thresholds"
+            )
+            FRAME_STRIDE = 1
+            YOLO_CONFIDENCE_THRESHOLD = LOOSE_YOLO_CONFIDENCE_THRESHOLD
+            MIN_TRACK_DURATION_SEC = LOOSE_MIN_TRACK_DURATION_SEC
+            video_tracks = run_video_tracker(video_path, source_video_path)
+
+        return video_tracks
+    finally:
+        FRAME_STRIDE = original_stride
+        YOLO_CONFIDENCE_THRESHOLD = original_yolo_conf
+        MIN_TRACK_DURATION_SEC = original_min_duration
+
+
 def main():
 
     # Debug: Print paths
@@ -217,7 +254,7 @@ def main():
         video_path, is_temp = convert_asf_to_mp4(SINGLE_VIDEO_FILE)
         filename = os.path.basename(SINGLE_VIDEO_FILE)
         try:
-            video_tracks = run_video_tracker(video_path, SINGLE_VIDEO_FILE)
+            video_tracks = _process_video_with_retry(video_path, SINGLE_VIDEO_FILE)
         finally:
             if is_temp:
                 _cleanup_temp(video_path)
@@ -244,7 +281,7 @@ def main():
                 video_path, is_temp = convert_asf_to_mp4(item_path)
                 print(f"Processing: {filename}")
                 try:
-                    video_tracks = run_video_tracker(video_path, item_path)
+                    video_tracks = _process_video_with_retry(video_path, item_path)
                 finally:
                     if is_temp:
                         _cleanup_temp(video_path)
@@ -480,9 +517,9 @@ def run_video_tracker(video_path, source_video_path=None):
         no_fish_found(video_path, vidData.v_filename)
         return []
 
-    # Remove duplicate tracks that share the exact same timestamp.
-    # Keep the one with higher confidence.
-    vidData.v_finished_tracks = dedupe_tracks_by_timestamp(vidData.v_finished_tracks)
+    # Timestamp dedupe can collapse distinct fish that share the same OCR second.
+    # Keep it disabled in the default pipeline.
+    # vidData.v_finished_tracks = dedupe_tracks_by_timestamp(vidData.v_finished_tracks)
 
     # Merge likely fragmented/split tracks of the same fish.
     vidData.v_finished_tracks = dedupe_fragmented_tracks(vidData.v_finished_tracks)
