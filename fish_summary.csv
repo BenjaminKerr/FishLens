@@ -1,7 +1,7 @@
 video_file,trackId,image_path,likely_class,confidence,start_time_sec,end_time_sec,avg_confidence,direction,species,species_confidence,video_timestamp
-FishTest1.mp4,2,C:\Users\aleks\source\repos\FishLens\fish_images\Chinook\FishTest1_track_2.jpg,fish,92.53%,2.47,3.13,92.53%,upstream,Chinook,99.82%,2025/10/08 15:27:41
-FishTest1.mp4,3,C:\Users\aleks\source\repos\FishLens\fish_images\Chinook\FishTest1_track_3.jpg,fish,92.29%,4.40,5.53,92.29%,downstream,Chinook,53.26%,2025/10/08 15:27:48
+FishTest1.mp4,2,C:\Users\aleks\source\repos\FishLens\fish_images\Chinook\FishTest1_track_2.jpg,fish,92.54%,2.50,3.30,92.54%,upstream,Chinook,99.83%,2025/10/08 15:27:42
+FishTest1.mp4,1,C:\Users\aleks\source\repos\FishLens\fish_images\Chinook\FishTest1_track_1.jpg,fish,92.27%,4.40,5.50,92.27%,upstream,Chinook,52.29%,2025/10/08 15:27:48
 FishTest2.mp4,1,C:\Users\aleks\source\repos\FishLens\fish_images\Omykiss\FishTest2_track_1.jpg,fish,85.29%,9.40,9.50,85.29%,stationary,Omykiss,100.00%,2025/10/01 18:58:39
 FishTest2Fish.mp4,1,C:\Users\aleks\source\repos\FishLens\fish_images\Omykiss\FishTest2Fish_track_1.jpg,fish,93.04%,8.60,12.00,93.04%,downstream,Omykiss,99.99%,2025/10/02 14:10:05
-FishTest2Fish.mp4,5,C:\Users\aleks\source\repos\FishLens\fish_images\Omykiss\FishTest2Fish_track_5.jpg,fish,89.82%,13.33,16.40,89.82%,downstream,Omykiss,100.00%,2025/10/02 14:10:11
-FishTest3.mp4,2,C:\Users\aleks\source\repos\FishLens\fish_images\Omykiss\FishTest3_track_2.jpg,fish,94.24%,10.73,16.53,94.24%,indecisive,Omykiss,99.92%,2025/10/01 19:07:34*
+FishTest2Fish.mp4,5,C:\Users\aleks\source\repos\FishLens\fish_images\Omykiss\FishTest2Fish_track_5.jpg,fish,89.80%,13.40,16.40,89.80%,downstream,Omykiss,100.00%,2025/10/02 14:10:11
+FishTest3.mp4,2,C:\Users\aleks\source\repos\FishLens\fish_images\Omykiss\FishTest3_track_2.jpg,fish,94.24%,10.80,16.30,94.24%,indecisive,Omykiss,99.92%,2025/10/01 19:07:34*
