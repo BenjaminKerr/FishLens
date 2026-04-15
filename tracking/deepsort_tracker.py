@@ -19,8 +19,8 @@ class DeepSortTracker:
     MIN_CONFIDENCE = 0.5
     MIN_MOVE_THRESHOLD = 5
     MAX_TRACK_HISTORY = 50
-    MIN_FRAMES_FOR_SUMMARY = 10
-    DEFAULT_NMS_IOU_THRESHOLD = 0.7
+    MIN_FRAMES_FOR_SUMMARY = 3
+    DEFAULT_NMS_IOU_THRESHOLD = 0.5
     MIN_POSITIONS_FOR_DIRECTION = 2
     
     # ******************************
@@ -30,9 +30,9 @@ class DeepSortTracker:
 
     def __init__(self) -> None:
         self.tracker = DeepSort(
-            max_age=50,
-            n_init=10,
-            max_iou_distance=0.6,
+            max_age=60,
+            n_init=3,
+            max_iou_distance=0.7,
             max_cosine_distance=0.4
         )
 
@@ -122,9 +122,10 @@ class DeepSortTracker:
             and d[4] > self.MIN_CONFIDENCE
         ]
 
-        # Convert to DeepSORT format (bbox, conf, cls)
+        # Convert to DeepSORT format (bbox, conf, cls).
+        # deep_sort_realtime expects [left, top, width, height].
         formatted = [
-            ([x1, y1, x2, y2], conf, cls)
+            ([x1, y1, x2 - x1, y2 - y1], conf, cls)
             for x1, y1, x2, y2, conf, cls in detections
         ]
 
@@ -133,9 +134,12 @@ class DeepSortTracker:
         results = []
 
         for t in tracks:
-            if t.is_confirmed():
+            if t.is_confirmed() and getattr(t, "time_since_update", 1) == 0:
                 trackId = t.track_id
-                x1, y1, x2, y2 = map(int, t.to_ltrb())
+                bbox = t.to_ltrb(orig=True)
+                if bbox is None:
+                    bbox = t.to_ltrb()
+                x1, y1, x2, y2 = map(int, bbox)
                 centroid = ((x1 + x2) // 2, (y1 + y2) // 2)
 
                 direction = self.getDirection(trackId, centroid)

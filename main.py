@@ -109,7 +109,7 @@ CSV_KEYS = [
 TESSERACT_AVAILABLE = check_tesseract()
 
 # Constants--YOLO
-MODEL = _load_yolo_model("models/fish_detector2.pt")
+MODEL = _load_yolo_model("models/fish_detector3.pt")
 YOLO_CONFIDENCE_THRESHOLD = 0.25  # Adjustable: lower = detects more fish (but more false positives), higher = more selective
 NO_FISH = os.path.join(PROJECT_ROOT, "no_fish")
 
@@ -127,6 +127,7 @@ SAVE_TIMESTAMP_DEBUG_FRAMES = os.getenv("FISHLENS_SAVE_TIMESTAMP_DEBUG", "0") ==
 TIMESTAMP_MAX_ATTEMPTS = max(1, int(os.getenv("FISHLENS_TIMESTAMP_MAX_ATTEMPTS", "4" if FAST_MODE else "8")))
 SUPPRESS_CODEC_WARNINGS = os.getenv("FISHLENS_SUPPRESS_CODEC_WARNINGS", "1") == "1"
 VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRAMES", "6" if FAST_MODE else "12")))
+MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DURATION_SEC", "0.75")))
 
 # Constants--Classifier
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
@@ -435,6 +436,7 @@ def run_video_tracker(video_path, source_video_path=None):
 
     # Cycle through video frames until end of video
     while ret:
+        vidData.v_current_track_ids = set()
 
         # Speed mode: process every Nth frame
         if FRAME_STRIDE > 1 and (vidData.v_frame_index % FRAME_STRIDE) != 0:
@@ -531,7 +533,7 @@ def analyze_yolo_detections(frame, model, frameData, vidData):
             cls_id = int(cls_arr[0]) if cls_arr.size > 0 and cls_arr[0] is not None else -1
             box_area = (x2 - x1) * (y2 - y1)
             
-            if box_area < 100:
+            if box_area < 100 or conf < YOLO_CONFIDENCE_THRESHOLD:
                 continue
 
             # Mark if YOLO detected a fish in frame.
@@ -691,7 +693,7 @@ def finalize_tracks(frameData, vidData, termination_reason):
 # Notes: N/A
 def build_track_summary(trackId, track_data, frameData, vidData, image_path=None, frame_width=640):
     duration_sec = (frameData.f_index - track_data["start_frame"]) / vidData.v_fps
-    if duration_sec < 1.0:
+    if duration_sec < MIN_TRACK_DURATION_SEC:
         return None
     
     # Calculate DeepSort average confidence
