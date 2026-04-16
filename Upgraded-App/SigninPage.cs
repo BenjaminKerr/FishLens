@@ -56,6 +56,28 @@ namespace FishLens_App
                             }
                         }
                     }
+                    // Load this user's saved settings from DB
+                    using (SqlCommand settingsCmd = new SqlCommand("kaharra.GetUserSettings", conn))
+                    {
+                        settingsCmd.CommandType = System.Data.CommandType.StoredProcedure;
+                        settingsCmd.Parameters.AddWithValue("@pUserId", app.CurrentUserId);
+
+                        using (SqlDataReader reader = settingsCmd.ExecuteReader())
+                        {
+                            if (reader.Read())
+                            {
+                                app.Configuration.ConfidenceThreshold = reader.GetDouble(0);
+                                app.CheckBoxes.OutputBox = reader.GetBoolean(1);
+                                app.CheckBoxes.ErrorBox = reader.GetBoolean(2);
+                                app.Configuration.HighContrastMode = reader.GetBoolean(3);
+                                app.Configuration.LargeText = reader.GetBoolean(4);
+                            }
+                            // If no row defaults stay in place (first login for this user)
+                        }
+                    }
+
+
+
                 }
             }
             catch (SqlException ex) { Debug.WriteLine("SQL: " + ex.Message); }
@@ -68,6 +90,18 @@ namespace FishLens_App
         {
             if (Signin(SignInUsernameBox.Text, SignInPasswordBox.Password))
             {
+                var app = (App)Application.Current;
+
+                // Apply loaded settings before showing MainWindow
+                ThemeHelper.ApplyHighContrastMode(app.Configuration.HighContrastMode);
+                if (app.Configuration.LargeText)
+                {
+                    Application.Current.Resources["BaseFontSize"] = 18.0;
+                    Application.Current.Resources["HeaderFontSize"] = 32.0;
+                    Application.Current.Resources["LargeHeaderFontSize"] = 42.0;
+                    Application.Current.Resources["TitleFontSize"] = 72.0;
+                }
+
                 new MainWindow().Show();
                 this.Close();
             }
@@ -77,6 +111,9 @@ namespace FishLens_App
                 SignInError.Visibility = Visibility.Visible;
             }
         }
+
+
+
 
         // ── Navigation links from sign-in panel ────────────────────────
         private void GoToSignUp_Click(object sender, MouseButtonEventArgs e)

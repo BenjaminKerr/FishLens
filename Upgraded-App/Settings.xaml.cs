@@ -110,47 +110,47 @@ namespace FishLens_App
         {
             try
             {
-                // Update configuration in memory
-                _config.ConfidenceThreshold = (confidenceThreshold?.Value ?? 0) / 100.0;
+                var app = Application.Current as App;
+                int userId = app.CurrentUserId;
 
-                // Ensure CheckBoxToggle is up to date
+                // Update in-memory state from the UI
+                _config.ConfidenceThreshold = (confidenceThreshold?.Value ?? 0) / 100.0;
                 _checkBoxes.ErrorBox = hideErrors.IsChecked ?? false;
                 _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
+                _config.HighContrastMode = highContrastMode.IsChecked ?? false;
+                _config.LargeText = largeText.IsChecked ?? false;
 
-                bool highContrast = highContrastMode.IsChecked ?? false;
-                bool largeTxt = largeText.IsChecked ?? false;
-
-                // Persist settings to a JSON file in project root
-                // Update additional settings in shared config
-                _config.HighContrastMode = highContrast;
-                _config.LargeText = largeTxt;
-
-                var settingsObj = new
+                // Persist to database
+                using (SqlConnection conn = new SqlConnection(app.connectionString))
                 {
-                    ConfidenceThreshold = _config.ConfidenceThreshold,
-                    OutputBox = _checkBoxes.OutputBox,
-                    ErrorBox = _checkBoxes.ErrorBox,
-                    HighContrastMode = _config.HighContrastMode,
-                    LargeText = _config.LargeText
-                };
-
-                string projectRoot = _pathResolver.ResolveProjectRoot();
-                string configPath = System.IO.Path.Combine(projectRoot ?? string.Empty, "appsettings.json");
-                var options = new JsonSerializerOptions { WriteIndented = true };
-                File.WriteAllText(configPath, JsonSerializer.Serialize(settingsObj, options));
+                    conn.Open();
+                    using (SqlCommand cmd = new SqlCommand("kaharra.SaveUserSettings", conn))
+                    {
+                        cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                        cmd.Parameters.AddWithValue("@pUserId", userId);
+                        cmd.Parameters.AddWithValue("@pConfidenceThreshold", _config.ConfidenceThreshold);
+                        cmd.Parameters.AddWithValue("@pOutputBox", _checkBoxes.OutputBox);
+                        cmd.Parameters.AddWithValue("@pErrorBox", _checkBoxes.ErrorBox);
+                        cmd.Parameters.AddWithValue("@pHighContrastMode", _config.HighContrastMode);
+                        cmd.Parameters.AddWithValue("@pLargeText", _config.LargeText);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
 
                 MessageBox.Show("Settings saved.", "Saved", MessageBoxButton.OK, MessageBoxImage.Information);
-                _logger.LogInformation("Settings saved to {path}", configPath);
+                _logger.LogInformation("Settings saved to database for user {userId}", userId);
 
-                // Apply certain settings immediately to main window
                 ApplySettingsToMainWindow();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to save settings");
+                _logger.LogError(ex, "Failed to save settings to database");
                 MessageBox.Show($"Failed to save settings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
+
+
 
         private void ToggleErrorMessages(object sender, RoutedEventArgs e)
         {
@@ -186,66 +186,68 @@ namespace FishLens_App
                 _logger.LogError(ex, "Failed to load settings");
             }
         }
-       
-        
 
-        
+
+
+
         private void LoadSettings()
         {
-            // Set defaults from current runtime state
+            var app = Application.Current as App;
+            int userId = app.CurrentUserId;
+
+            // Apply runtime-default fallbacks first, in case the DB has no row yet
             confidenceThreshold.Value = Math.Round((_config?.ConfidenceThreshold ?? 0.7) * 100);
             confidenceValue.Text = $"{(int)Math.Round((_config?.ConfidenceThreshold ?? 0.7) * 100)}%";
             hideErrors.IsChecked = _checkBoxes.ErrorBox;
             hideOutput.IsChecked = _checkBoxes.OutputBox;
 
-            // Try to read persisted settings
             try
             {
-                string projectRoot = _pathResolver.ResolveProjectRoot();
-                string configPath = System.IO.Path.Combine(projectRoot ?? string.Empty, "appsettings.json");
-                if (!File.Exists(configPath)) return;
-
-                using var stream = File.OpenRead(configPath);
-                using var doc = JsonDocument.Parse(stream);
-                var root = doc.RootElement;
-
-                if (root.TryGetProperty("ConfidenceThreshold", out var confEl) && confEl.ValueKind == JsonValueKind.Number)
+                using (SqlConnection conn = new SqlConnection(app.connectionString))
                 {
-                    double conf = confEl.GetDouble();
-                    _config.ConfidenceThreshold = conf;
-                    confidenceThreshold.Value = Math.Round(conf * 100);
-                    confidenceValue.Text = $"{(int)Math.Round(conf * 100)}%";
-                }
+                    conn.Open();
+                    using (SqlCommand cmd = new SqlCommand("kaharra.GetUserSettings", conn))
+                    {
+                        cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                        cmd.Parameters.AddWithValue("@pUserId", userId);
 
-                if (root.TryGetProperty("OutputBox", out var outEl) && outEl.ValueKind == JsonValueKind.True || outEl.ValueKind == JsonValueKind.False)
-                {
-                    _checkBoxes.OutputBox = outEl.GetBoolean();
-                    hideOutput.IsChecked = _checkBoxes.OutputBox;
-                }
+                        using (SqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            if (reader.Read())
+                            {
+                                double conf = reader.GetDouble(0);
+                                bool outputBox = reader.GetBoolean(1);
+                                bool errorBox = reader.GetBoolean(2);
+                                bool highContrast = reader.GetBoolean(3);
+                                bool largeTxt = reader.GetBoolean(4);
 
-                if (root.TryGetProperty("ErrorBox", out var errEl) && errEl.ValueKind == JsonValueKind.True || errEl.ValueKind == JsonValueKind.False)
-                {
-                    _checkBoxes.ErrorBox = errEl.GetBoolean();
-                    hideErrors.IsChecked = _checkBoxes.ErrorBox;
-                }
+                                _config.ConfidenceThreshold = conf;
+                                _checkBoxes.OutputBox = outputBox;
+                                _checkBoxes.ErrorBox = errorBox;
+                                _config.HighContrastMode = highContrast;
+                                _config.LargeText = largeTxt;
 
-                if (root.TryGetProperty("HighContrastMode", out var hcEl) && (hcEl.ValueKind == JsonValueKind.True || hcEl.ValueKind == JsonValueKind.False))
-                {
-                    _config.HighContrastMode = hcEl.GetBoolean();
-                    highContrastMode.IsChecked = _config.HighContrastMode;
-                }
-
-                if (root.TryGetProperty("LargeText", out var ltEl) && (ltEl.ValueKind == JsonValueKind.True || ltEl.ValueKind == JsonValueKind.False))
-                {
-                    _config.LargeText = ltEl.GetBoolean();
-                    largeText.IsChecked = _config.LargeText;
+                                confidenceThreshold.Value = Math.Round(conf * 100);
+                                confidenceValue.Text = $"{(int)Math.Round(conf * 100)}%";
+                                hideOutput.IsChecked = outputBox;
+                                hideErrors.IsChecked = errorBox;
+                                highContrastMode.IsChecked = highContrast;
+                                largeText.IsChecked = largeTxt;
+                            }
+                            // If no row exists, the defaults set above will be used.
+                            // First save will INSERT via the MERGE in SaveUserSettings.
+                        }
+                    }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Could not parse settings file; using defaults");
+                _logger.LogWarning(ex, "Could not load settings from database; using defaults");
             }
         }
+
+
+
 
         private void ApplySettingsToMainWindow()
         {
