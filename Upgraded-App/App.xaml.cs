@@ -32,7 +32,51 @@ namespace FishLens_App
             CheckBoxes = new CheckBoxToggle();
             Configuration = new AppConfiguration();
         }
-    
+
+        public void ResetSettingsToDefaults()
+        {
+            CurrentUserId = 0;
+            CurrentUsername = null;
+            CurrentRoleId = 0;
+            CurrentOrganizationId = 0;
+
+            Configuration.ConfidenceThreshold = 0.7;
+            Configuration.HighContrastMode = false;
+            Configuration.LargeText = false;
+            CheckBoxes.OutputBox = false;
+            CheckBoxes.ErrorBox = false;
+
+            ApplyCurrentSettings();
+        }
+
+
+
+
+        public void ApplyCurrentSettings()
+        {
+            ThemeHelper.ApplyHighContrastMode(Configuration.HighContrastMode);
+
+            if (Configuration.LargeText)
+            {
+                Resources["BaseFontSize"] = 18.0;
+                Resources["HeaderFontSize"] = 32.0;
+                Resources["LargeHeaderFontSize"] = 42.0;
+                Resources["TitleFontSize"] = 72.0;
+            }
+            else
+            {
+                Resources["BaseFontSize"] = 14.0;
+                Resources["HeaderFontSize"] = 24.0;
+                Resources["LargeHeaderFontSize"] = 32.0;
+                Resources["TitleFontSize"] = 56.0;
+            }
+        }
+
+
+
+
+
+
 
 
 

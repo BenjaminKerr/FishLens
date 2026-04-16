@@ -91,31 +91,18 @@ namespace FishLens_App
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _pathResolver = pathResolver ?? throw new ArgumentNullException(nameof(pathResolver));
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
+            var app = Application.Current as App;
+          
+
 
             InitializeComponent();
-
+            app.ApplyCurrentSettings();
             _checkBoxes = GetCheckBoxToggleFromApplication();
             _config = GetConfigurationFromApplication();
            
-            var app = Application.Current as App;
 
            AccountSettingsButton.Visibility = app.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
-            
-        
-
-
-
-        // Only reset theme if high contrast mode was enabled
-        Loaded += (s, e) =>
-            {
-                if (_config?.HighContrastMode ?? false)
-                {
-                    // Reset to normal mode
-                    _config.HighContrastMode = false;
-                    ThemeHelper.ApplyHighContrastMode(false);
-                }
-                // Otherwise, leave everything at default XAML values
-            };
+       
         }
 
         // **************************************************
@@ -271,6 +258,7 @@ namespace FishLens_App
         // **************************************************
         private void SignOutButtonClick(object sender, RoutedEventArgs e)
         {
+            ((App)Application.Current).ResetSettingsToDefaults();
             AuthWindow signin = new AuthWindow();
             signin.Show();
             this.Close();
@@ -322,13 +310,6 @@ namespace FishLens_App
             {
                 MainFrame.Navigate(page);
 
-                // Apply high contrast theme if enabled
-                if (_config?.HighContrastMode ?? false)
-                {
-                    MainFrame.Dispatcher.InvokeAsync(
-                        () => ThemeHelper.ApplyHighContrastMode(true),
-                        System.Windows.Threading.DispatcherPriority.Loaded);
-                }
             }
             catch (Exception ex)
             {

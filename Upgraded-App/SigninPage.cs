@@ -16,11 +16,9 @@ namespace FishLens_App
         private bool Signin(string username, string password)
         {
             bool success = false;
-
             try
             {
                 var app = Application.Current as App;
-
                 using (SqlConnection conn = new SqlConnection(app.connectionString))
                 {
                     conn.Open();
@@ -36,13 +34,12 @@ namespace FishLens_App
                     if (success)
                     {
                         string sql = @"SELECT Id, Username, RoleId, OrganizationId
-                                       FROM [kaharra].[FishLensUsers]
-                                       WHERE Username = @user";
+                               FROM [kaharra].[FishLensUsers]
+                               WHERE Username = @user";
 
                         using (SqlCommand cmd = new SqlCommand(sql, conn))
                         {
                             cmd.Parameters.AddWithValue("@user", username);
-
                             using (SqlDataReader reader = cmd.ExecuteReader())
                             {
                                 if (reader.Read())
@@ -55,29 +52,27 @@ namespace FishLens_App
                                 }
                             }
                         }
-                    }
-                    // Load this user's saved settings from DB
-                    using (SqlCommand settingsCmd = new SqlCommand("kaharra.GetUserSettings", conn))
-                    {
-                        settingsCmd.CommandType = System.Data.CommandType.StoredProcedure;
-                        settingsCmd.Parameters.AddWithValue("@pUserId", app.CurrentUserId);
 
-                        using (SqlDataReader reader = settingsCmd.ExecuteReader())
+                        // Load this user's saved settings from DB — only on successful login
+                        using (SqlCommand settingsCmd = new SqlCommand("kaharra.GetUserSettings", conn))
                         {
-                            if (reader.Read())
+                            settingsCmd.CommandType = System.Data.CommandType.StoredProcedure;
+                            settingsCmd.Parameters.AddWithValue("@pUserId", app.CurrentUserId);
+
+                            using (SqlDataReader reader = settingsCmd.ExecuteReader())
                             {
-                                app.Configuration.ConfidenceThreshold = reader.GetDouble(0);
-                                app.CheckBoxes.OutputBox = reader.GetBoolean(1);
-                                app.CheckBoxes.ErrorBox = reader.GetBoolean(2);
-                                app.Configuration.HighContrastMode = reader.GetBoolean(3);
-                                app.Configuration.LargeText = reader.GetBoolean(4);
+                                if (reader.Read())
+                                {
+                                    app.Configuration.ConfidenceThreshold = reader.GetDouble(0);
+                                    app.CheckBoxes.OutputBox = reader.GetBoolean(1);
+                                    app.CheckBoxes.ErrorBox = reader.GetBoolean(2);
+                                    app.Configuration.HighContrastMode = reader.GetBoolean(3);
+                                    app.Configuration.LargeText = reader.GetBoolean(4);
+                                }
+                                // If no row exists, defaults stay in place (first login for this user)
                             }
-                            // If no row defaults stay in place (first login for this user)
                         }
                     }
-
-
-
                 }
             }
             catch (SqlException ex) { Debug.WriteLine("SQL: " + ex.Message); }
@@ -86,21 +81,15 @@ namespace FishLens_App
             return success;
         }
 
+
+
+
         private void SigninButton_Click(object sender, RoutedEventArgs e)
         {
             if (Signin(SignInUsernameBox.Text, SignInPasswordBox.Password))
             {
-                var app = (App)Application.Current;
-
-                // Apply loaded settings before showing MainWindow
-                ThemeHelper.ApplyHighContrastMode(app.Configuration.HighContrastMode);
-                if (app.Configuration.LargeText)
-                {
-                    Application.Current.Resources["BaseFontSize"] = 18.0;
-                    Application.Current.Resources["HeaderFontSize"] = 32.0;
-                    Application.Current.Resources["LargeHeaderFontSize"] = 42.0;
-                    Application.Current.Resources["TitleFontSize"] = 72.0;
-                }
+                // Apply this user's saved settings to app resources before MainWindow renders
+                ((App)Application.Current).ApplyCurrentSettings();
 
                 new MainWindow().Show();
                 this.Close();
@@ -113,6 +102,10 @@ namespace FishLens_App
         }
 
 
+
+
+
+      
 
 
         // ── Navigation links from sign-in panel ────────────────────────

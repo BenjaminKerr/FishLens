@@ -140,7 +140,14 @@ namespace FishLens_App
                 MessageBox.Show("Settings saved.", "Saved", MessageBoxButton.OK, MessageBoxImage.Information);
                 _logger.LogInformation("Settings saved to database for user {userId}", userId);
 
-                ApplySettingsToMainWindow();
+                try
+                {
+                    app.ApplyCurrentSettings();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to apply settings to application resources");
+                }
             }
             catch (Exception ex)
             {
@@ -249,41 +256,14 @@ namespace FishLens_App
 
 
 
-        private void ApplySettingsToMainWindow()
-        {
-            try
-            {
-                var main = Application.Current.MainWindow as MainWindow;
-                if (main != null)
-                {
-                    // Apply high contrast mode (handles both enabled and disabled states)
-                    main.Dispatcher.Invoke(() =>
-                    {
-                        ThemeHelper.ApplyHighContrastMode(_config.HighContrastMode);
-                    });
+       
+        
 
-                    // Apply large text setting
-                    if (_config.LargeText)
-                    {
-                        Application.Current.Resources["BaseFontSize"] = 18.0;
-                        Application.Current.Resources["HeaderFontSize"] = 32.0;
-                        Application.Current.Resources["LargeHeaderFontSize"] = 42.0;
-                        Application.Current.Resources["TitleFontSize"] = 72.0;
-                    }
-                    else
-                    {
-                        Application.Current.Resources["BaseFontSize"] = 14.0;
-                        Application.Current.Resources["HeaderFontSize"] = 24.0;
-                        Application.Current.Resources["LargeHeaderFontSize"] = 32.0;
-                        Application.Current.Resources["TitleFontSize"] = 56.0;
-                    }
-                }
-            }
-            catch { }
-        }
+
+
 
         #endregion
 
-        
+
     }
 }
