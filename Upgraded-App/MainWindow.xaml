@@ -32,6 +32,7 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <Button x:Name="Home" 
                 Background="{x:Null}" 
@@ -74,6 +75,20 @@ Height="70">
                                 <TextBlock Text="⚙️" Foreground="{DynamicResource OnAccentForeground}"/>
                             </Viewbox>
                         </Button>
+                        <Button x:Name="AccountSettingsButton" 
+            Background="{x:Null}" 
+            Foreground="{DynamicResource OnAccentForeground}" 
+            Grid.Column="3" 
+            BorderBrush="Transparent" 
+            Click="AccountSettingsButtonClick"
+            Visibility="Collapsed"
+            Padding="10" Width="70" Height="70"
+            ToolTip="Account Settings">
+                            <Viewbox Width="40" Height="40">
+                                <TextBlock Text="👤" Foreground="{DynamicResource OnAccentForeground}"/>
+                            </Viewbox>
+                        </Button>
+
                     </Grid>
                     <Rectangle x:Name="sidebarSeperator" Height="2" Fill="{DynamicResource HoverBackgroundBrush}" Margin="0,10,0,10"/>
                     <TextBlock Text="Video Library" 

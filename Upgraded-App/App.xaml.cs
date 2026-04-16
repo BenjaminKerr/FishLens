@@ -32,5 +32,9 @@ namespace FishLens_App
             CheckBoxes = new CheckBoxToggle();
             Configuration = new AppConfiguration();
         }
+    
+
+
+
     }
 }

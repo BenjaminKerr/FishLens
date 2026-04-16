@@ -10,6 +10,7 @@
 using FishLens_App.Interfaces;
 using FishLens_App.Models;
 using FishLens_App.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Win32;
@@ -95,9 +96,17 @@ namespace FishLens_App
 
             _checkBoxes = GetCheckBoxToggleFromApplication();
             _config = GetConfigurationFromApplication();
+           
+            var app = Application.Current as App;
 
-            // Only reset theme if high contrast mode was enabled
-            Loaded += (s, e) =>
+           AccountSettingsButton.Visibility = app.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
+            
+        
+
+
+
+        // Only reset theme if high contrast mode was enabled
+        Loaded += (s, e) =>
             {
                 if (_config?.HighContrastMode ?? false)
                 {
@@ -285,6 +294,20 @@ namespace FishLens_App
             CollapseSidebar();
             NavigateToPage(new Settings(_pathResolver, _fileSystemManager, _logger), "Settings");
         }
+        private void AccountSettingsButtonClick(object sender, RoutedEventArgs e)
+        {
+            CollapseSidebar();
+            NavigateToPage(new AccountSettings(), "AccountSettings");
+        }
+
+
+
+
+
+
+
+
+
 
         // **************************************************
         // Function: NavigateToPage
@@ -1226,6 +1249,8 @@ namespace FishLens_App
             ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
 
             Grid.SetRow(Home, 0);
             Grid.SetColumn(Home, 0);
@@ -1233,6 +1258,8 @@ namespace FishLens_App
             Grid.SetColumn(History, 0);
             Grid.SetRow(Settings, 2);
             Grid.SetColumn(Settings, 0);
+            Grid.SetRow(AccountSettingsButton, 3);
+            Grid.SetColumn(AccountSettingsButton, 0);
         }
 
         private void ExpandSidebar()
@@ -1259,6 +1286,8 @@ namespace FishLens_App
             ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
 
             Grid.SetRow(Home, 0);
             Grid.SetColumn(Home, 0);
@@ -1266,6 +1295,8 @@ namespace FishLens_App
             Grid.SetColumn(History, 1);
             Grid.SetRow(Settings, 0);
             Grid.SetColumn(Settings, 2);
+            Grid.SetRow(AccountSettingsButton, 0);
+            Grid.SetColumn(AccountSettingsButton, 3);
         }
 
         // **************************************************
