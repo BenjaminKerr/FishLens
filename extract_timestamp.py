@@ -276,24 +276,64 @@ def dedupe_tracks_by_timestamp(finished_tracks):
         except Exception:
             return 0.0
 
-    best_by_timestamp = {}
-    passthrough = []
+    def _to_float(track, key, default=0.0):
+        try:
+            return float(track.get(key, default))
+        except Exception:
+            return default
 
-    for track in finished_tracks:
-        ts = str(track.get("video_timestamp", "")).strip()
+    def _parse_ts_seconds(track):
+        ts = str(track.get("video_timestamp", "")).strip().rstrip("*")
         if not ts or ts.lower() == "not detected":
-            passthrough.append(track)
-            continue
+            return None
+        try:
+            dt = datetime.strptime(ts, "%Y/%m/%d %H:%M:%S")
+            return int(dt.timestamp())
+        except Exception:
+            return None
 
-        existing = best_by_timestamp.get(ts)
-        if existing is None or _pct_value(track) > _pct_value(existing):
-            best_by_timestamp[ts] = track
+    def _is_near_duplicate(a, b):
+        # Same class/direction (or unknown direction) to avoid merging different fish.
+        if str(a.get("likely_class", "")).lower() != str(b.get("likely_class", "")).lower():
+            return False
 
-    # Keep original relative ordering of selected tracks where possible.
-    selected_ids = {id(t) for t in best_by_timestamp.values()}
-    ordered_selected = [t for t in finished_tracks if id(t) in selected_ids]
+        da = str(a.get("direction", "unknown")).lower()
+        db = str(b.get("direction", "unknown")).lower()
+        if da not in ("unknown", "stationary") and db not in ("unknown", "stationary") and da != db:
+            return False
 
-    return ordered_selected + passthrough
+        # OCR timestamp tolerance: allow ±1 second drift.
+        a_ts = _parse_ts_seconds(a)
+        b_ts = _parse_ts_seconds(b)
+        if a_ts is not None and b_ts is not None and abs(a_ts - b_ts) > 1:
+            return False
+
+        # Must also be temporally adjacent in video timeline.
+        a_start = _to_float(a, "start_time_sec")
+        a_end = _to_float(a, "end_time_sec")
+        b_start = _to_float(b, "start_time_sec")
+        b_end = _to_float(b, "end_time_sec")
+
+        overlap = max(0.0, min(a_end, b_end) - max(a_start, b_start))
+        shorter = max(0.001, min(max(0.0, a_end - a_start), max(0.0, b_end - b_start)))
+        overlap_ratio = overlap / shorter
+        gap = min(abs(a_start - b_end), abs(b_start - a_end))
+
+        return (overlap_ratio >= 0.70) or (gap <= 0.80)
+
+    kept = []
+    for track in finished_tracks:
+        merged = False
+        for i, existing in enumerate(kept):
+            if _is_near_duplicate(existing, track):
+                if _pct_value(track) > _pct_value(existing):
+                    kept[i] = track
+                merged = True
+                break
+        if not merged:
+            kept.append(track)
+
+    return kept
 
 
 # ****************************************************************

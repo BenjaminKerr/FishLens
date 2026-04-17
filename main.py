@@ -10,6 +10,7 @@ import warnings
 from fileinput import filename
 import os
 import csv
+import math
 import cv2
 import subprocess
 import importlib
@@ -104,14 +105,15 @@ CSV_KEYS = [
     "direction",
     "species",
     "species_confidence",
-    "video_timestamp"
+    "video_timestamp",
+    "duration_sec"
 ]
 TESSERACT_AVAILABLE = check_tesseract()
 
 # Constants--YOLO
 MODEL = _load_yolo_model("models/fish_detector3.pt")
 STRICT_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_YOLO_CONFIDENCE_THRESHOLD", "0.25"))
-LOOSE_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_LOOSE_YOLO_CONFIDENCE_THRESHOLD", "0.20"))
+LOOSE_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_LOOSE_YOLO_CONFIDENCE_THRESHOLD", "0.22"))
 YOLO_CONFIDENCE_THRESHOLD = STRICT_YOLO_CONFIDENCE_THRESHOLD  # Adjustable: lower = detects more fish (but more false positives), higher = more selective
 NO_FISH = os.path.join(PROJECT_ROOT, "no_fish")
 
@@ -130,8 +132,9 @@ TIMESTAMP_MAX_ATTEMPTS = max(1, int(os.getenv("FISHLENS_TIMESTAMP_MAX_ATTEMPTS",
 SUPPRESS_CODEC_WARNINGS = os.getenv("FISHLENS_SUPPRESS_CODEC_WARNINGS", "1") == "1"
 VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRAMES", "6" if FAST_MODE else "12")))
 STRICT_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DURATION_SEC", "0.60")))
-LOOSE_MIN_TRACK_DURATION_SEC = max(0.0, float(os.getenv("FISHLENS_LOOSE_MIN_TRACK_DURATION_SEC", "0.05")))
+LOOSE_MIN_TRACK_DURATION_SEC = max(0.0, float(os.getenv("FISHLENS_LOOSE_MIN_TRACK_DURATION_SEC", "0.10")))
 MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
+ENABLE_TIMESTAMP_DEDUPE = os.getenv("FISHLENS_ENABLE_TIMESTAMP_DEDUPE", "1") == "1"
 
 # Constants--Classifier
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
@@ -202,6 +205,19 @@ def _video_capture_open(video_path):
 def _video_capture_read(cap):
     with _suppress_stderr(SUPPRESS_CODEC_WARNINGS):
         return cap.read()
+
+
+def _format_video_timecode(total_seconds, round_up=False):
+    if total_seconds is None:
+        total_seconds = 0.0
+
+    seconds = max(0, math.ceil(total_seconds) if round_up else math.floor(total_seconds))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
 
 
 # ****************************************************************
@@ -517,12 +533,13 @@ def run_video_tracker(video_path, source_video_path=None):
         no_fish_found(video_path, vidData.v_filename)
         return []
 
-    # Timestamp dedupe can collapse distinct fish that share the same OCR second.
-    # Keep it disabled in the default pipeline.
-    # vidData.v_finished_tracks = dedupe_tracks_by_timestamp(vidData.v_finished_tracks)
-
     # Merge likely fragmented/split tracks of the same fish.
     vidData.v_finished_tracks = dedupe_fragmented_tracks(vidData.v_finished_tracks)
+
+    # Optionally remove duplicate tracks that share the exact same OCR timestamp.
+    # Applied after fragment dedupe to reduce obvious overcounting.
+    if ENABLE_TIMESTAMP_DEDUPE:
+        vidData.v_finished_tracks = dedupe_tracks_by_timestamp(vidData.v_finished_tracks)
 
     # Save the best detection per video for analysis. TODO: Refactor based on edge cases (multiple fish?) and confidence threshold adjustments.
     if MAX_EXPORT_PER_VIDEO and len(vidData.v_finished_tracks) > MAX_EXPORT_PER_VIDEO:
@@ -633,6 +650,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
             initial_conf = "LOW" if (vidData.v_video_timestamp and vidData.v_video_timestamp != "Not detected") else None
             vidData.v_active_tracks[trackId] = {
                 "start_frame": frameData.f_index,
+                "last_frame": frameData.f_index,
                 "confidences": [],
                 "directions": [],
                 "entry_x": None,
@@ -673,6 +691,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                         print(f"    Saved full frame to: {debug_frame_path}")
 
         # Update track data per-frame
+        vidData.v_active_tracks[trackId]["last_frame"] = frameData.f_index
         vidData.v_active_tracks[trackId]["confidences"].append(obj["confidence"])
         vidData.v_active_tracks[trackId]["directions"].append(obj["direction"])
 
@@ -733,7 +752,11 @@ def finalize_tracks(frameData, vidData, termination_reason):
 # Description: Helper function for finalizing track data.
 # Notes: N/A
 def build_track_summary(trackId, track_data, frameData, vidData, image_path=None, frame_width=640):
-    duration_sec = (frameData.f_index - track_data["start_frame"]) / vidData.v_fps
+    start_frame = track_data.get("start_frame", frameData.f_index)
+    end_frame = track_data.get("last_frame", frameData.f_index)
+    start_time_sec = start_frame / vidData.v_fps
+    end_time_sec = end_frame / vidData.v_fps
+    duration_sec = max(0.0, end_time_sec - start_time_sec)
     if duration_sec < MIN_TRACK_DURATION_SEC:
         return None
     
@@ -791,19 +814,22 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     # Add * only if timestamp is LOW confidence
     if timestamp_confidence and timestamp_confidence == "LOW":
         video_timestamp = f"{video_timestamp}*"
+
+    duration_range = f"{_format_video_timecode(start_time_sec)}-{_format_video_timecode(end_time_sec, round_up=True)}"
     
     return {
         "trackId": trackId,
         "likely_class": vidData.v_most_common_class,
         "confidence": f"{best_conf_pct:.2f}%" if best_conf_pct > 0 else f"{vidData.v_avg_confidence_YL:.2f}%",
         "avg_confidence": f"{best_conf_pct:.2f}%" if best_conf_pct > 0 else f"{avg_conf_DS:.2f}%",
-        "start_time_sec": f"{track_data['start_frame'] / vidData.v_fps:.2f}",
-        "end_time_sec": f"{frameData.f_index / vidData.v_fps:.2f}",
+        "start_time_sec": f"{start_time_sec:.2f}",
+        "end_time_sec": f"{end_time_sec:.2f}",
         "direction": overall_direction,
         "best_crop": track_data.get("best_crop"),
         "species": species_data[0] if species_data else "No data",
         "species_confidence": f"{species_data[1]:.2f}%" if species_data else "No data",
         "video_timestamp": video_timestamp,
+        "duration_sec": duration_range,
         "timestamp_confidence": timestamp_confidence,
         "best_frame": vidData.v_active_tracks.get(trackId, {}).get("best_frame") if trackId in vidData.v_active_tracks else None
     }
