@@ -27,18 +27,21 @@
                       PreviewMouseWheel="ScrollViewer_PreviewMouseWheel">
             <StackPanel MaxWidth="800" HorizontalAlignment="Center">
 
-                <TextBlock Text="Analysis" 
-                           FontSize="{DynamicResource LargeHeaderFontSize}"
-                           FontWeight="SemiBold"
-                           Foreground="{DynamicResource PrimaryText}"
-                           Margin="0,0,0,15"/>
+                <TextBlock x:Name="AnalysisHeader"
+           Text="Analysis" 
+           FontSize="{DynamicResource LargeHeaderFontSize}"
+           FontWeight="SemiBold"
+           Foreground="{DynamicResource PrimaryText}"
+           Margin="0,0,0,15"/>
 
-                <Border Background="{DynamicResource CardBackground}" 
-                        BorderBrush="{DynamicResource BorderBrush}" 
-                        BorderThickness="1" 
-                        CornerRadius="8"
-                        Padding="20"
-                        Margin="0,0,0,30">
+                <Border x:Name="AnalysisCard"
+        Background="{DynamicResource CardBackground}" 
+        BorderBrush="{DynamicResource BorderBrush}" 
+        BorderThickness="1" 
+        CornerRadius="8"
+        Padding="20"
+        Margin="0,0,0,30">
+                 
                     <StackPanel>
                         <TextBlock Text="Confidence Threshold for Data Entry" 
                                    FontSize="{DynamicResource BaseFontSize}"
