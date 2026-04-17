@@ -904,9 +904,14 @@ namespace FishLens_App
                     var parts = payload.Split('/');
                     if (parts.Length == 2)
                     {
-                        string frameInfo = parts[1] == "?"
+                        int upper;
+                        int lower;
+                        int.TryParse(parts[0], out upper);
+                        int.TryParse(parts[1], out lower);
+                        int percentage = upper * 100 / lower;
+                            string frameInfo = parts[1] == "?"
                             ? $"Frame {parts[0]}"
-                            : $"Frame {parts[0]} / {parts[1]}";
+                            : $"Frame " + percentage;
                         Dispatcher.Invoke(() => SetAnalysisFrameInfo(frameInfo));
                     }
                 }
