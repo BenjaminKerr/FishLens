@@ -63,15 +63,32 @@ namespace FishLens_App
                             {
                                 if (reader.Read())
                                 {
-                                    app.Configuration.ConfidenceThreshold = reader.GetDouble(0);
-                                    app.CheckBoxes.OutputBox = reader.GetBoolean(1);
-                                    app.CheckBoxes.ErrorBox = reader.GetBoolean(2);
-                                    app.Configuration.HighContrastMode = reader.GetBoolean(3);
-                                    app.Configuration.LargeText = reader.GetBoolean(4);
+                                    app.CheckBoxes.OutputBox = reader.GetBoolean(0);
+                                    app.CheckBoxes.ErrorBox = reader.GetBoolean(1);
+                                    app.Configuration.HighContrastMode = reader.GetBoolean(2);
+                                    app.Configuration.LargeText = reader.GetBoolean(3);
                                 }
-                                // If no row exists, defaults stay in place (first login for this user)
                             }
                         }
+
+                        // Load this user's organization's shared settings (e.g., confidence threshold)
+                        using (SqlCommand orgSettingsCmd = new SqlCommand("kaharra.GetOrganizationSettings", conn))
+                        {
+                            orgSettingsCmd.CommandType = System.Data.CommandType.StoredProcedure;
+                            orgSettingsCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
+
+                            using (SqlDataReader reader = orgSettingsCmd.ExecuteReader())
+                            {
+                                if (reader.Read())
+                                {
+                                    app.Configuration.ConfidenceThreshold = reader.GetDouble(0);
+                                }
+                                // No row → defaults stay in place (0.7 from constructor)
+                            }
+                        }
+
+
+
                     }
                 }
             }

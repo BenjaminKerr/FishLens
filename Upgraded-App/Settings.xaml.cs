@@ -112,42 +112,54 @@ namespace FishLens_App
             {
                 var app = Application.Current as App;
                 int userId = app.CurrentUserId;
+                int orgId = app.CurrentOrganizationId;
 
-                // Update in-memory state from the UI
-                _config.ConfidenceThreshold = (confidenceThreshold?.Value ?? 0) / 100.0;
+                // User-scoped settings — everyone saves their own
                 _checkBoxes.ErrorBox = hideErrors.IsChecked ?? false;
                 _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
                 _config.HighContrastMode = highContrastMode.IsChecked ?? false;
                 _config.LargeText = largeText.IsChecked ?? false;
 
-                // Persist to database
+                // Org-scoped setting — admins only
+                if (app.IsAdmin)
+                {
+                    _config.ConfidenceThreshold = (confidenceThreshold?.Value ?? 0) / 100.0;
+                }
+
                 using (SqlConnection conn = new SqlConnection(app.connectionString))
                 {
                     conn.Open();
+
+                    // Save user settings
                     using (SqlCommand cmd = new SqlCommand("kaharra.SaveUserSettings", conn))
                     {
                         cmd.CommandType = System.Data.CommandType.StoredProcedure;
                         cmd.Parameters.AddWithValue("@pUserId", userId);
-                        cmd.Parameters.AddWithValue("@pConfidenceThreshold", _config.ConfidenceThreshold);
                         cmd.Parameters.AddWithValue("@pOutputBox", _checkBoxes.OutputBox);
                         cmd.Parameters.AddWithValue("@pErrorBox", _checkBoxes.ErrorBox);
                         cmd.Parameters.AddWithValue("@pHighContrastMode", _config.HighContrastMode);
                         cmd.Parameters.AddWithValue("@pLargeText", _config.LargeText);
                         cmd.ExecuteNonQuery();
                     }
+
+                    // Save org settings (admins only)
+                    if (app.IsAdmin)
+                    {
+                        using (SqlCommand orgCmd = new SqlCommand("kaharra.SaveOrganizationSettings", conn))
+                        {
+                            orgCmd.CommandType = System.Data.CommandType.StoredProcedure;
+                            orgCmd.Parameters.AddWithValue("@pOrgId", orgId);
+                            orgCmd.Parameters.AddWithValue("@pConfidenceThreshold", _config.ConfidenceThreshold);
+                            orgCmd.Parameters.AddWithValue("@pUpdatedByUserId", userId);
+                            orgCmd.ExecuteNonQuery();
+                        }
+                    }
                 }
 
                 MessageBox.Show("Settings saved.", "Saved", MessageBoxButton.OK, MessageBoxImage.Information);
-                _logger.LogInformation("Settings saved to database for user {userId}", userId);
+                _logger.LogInformation("Settings saved for user {userId}", userId);
+                app.ApplyCurrentSettings();
 
-                try
-                {
-                    app.ApplyCurrentSettings();
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to apply settings to application resources");
-                }
             }
             catch (Exception ex)
             {
@@ -156,6 +168,20 @@ namespace FishLens_App
             }
         }
 
+
+
+
+
+
+        private void LoadPageVisibility()
+        {
+            var app = Application.Current as App;
+            if (!app.IsAdmin)
+            {
+                AnalysisHeader.Visibility = Visibility.Collapsed;
+                AnalysisCard.Visibility = Visibility.Collapsed;
+            }
+        }
 
 
 
@@ -187,6 +213,7 @@ namespace FishLens_App
                 _config = (Application.Current as App).Configuration;
               
                 LoadSettings();
+                LoadPageVisibility();
             }
             catch (Exception ex)
             {
@@ -201,8 +228,9 @@ namespace FishLens_App
         {
             var app = Application.Current as App;
             int userId = app.CurrentUserId;
+            int orgId = app.CurrentOrganizationId;
 
-            // Apply runtime-default fallbacks first, in case the DB has no row yet
+            // Apply runtime-default fallbacks first
             confidenceThreshold.Value = Math.Round((_config?.ConfidenceThreshold ?? 0.7) * 100);
             confidenceValue.Text = $"{(int)Math.Round((_config?.ConfidenceThreshold ?? 0.7) * 100)}%";
             hideErrors.IsChecked = _checkBoxes.ErrorBox;
@@ -213,6 +241,8 @@ namespace FishLens_App
                 using (SqlConnection conn = new SqlConnection(app.connectionString))
                 {
                     conn.Open();
+
+                    // User settings
                     using (SqlCommand cmd = new SqlCommand("kaharra.GetUserSettings", conn))
                     {
                         cmd.CommandType = System.Data.CommandType.StoredProcedure;
@@ -222,27 +252,39 @@ namespace FishLens_App
                         {
                             if (reader.Read())
                             {
-                                double conf = reader.GetDouble(0);
-                                bool outputBox = reader.GetBoolean(1);
-                                bool errorBox = reader.GetBoolean(2);
-                                bool highContrast = reader.GetBoolean(3);
-                                bool largeTxt = reader.GetBoolean(4);
+                                bool outputBox = reader.GetBoolean(0);
+                                bool errorBox = reader.GetBoolean(1);
+                                bool highContrast = reader.GetBoolean(2);
+                                bool largeTxt = reader.GetBoolean(3);
 
-                                _config.ConfidenceThreshold = conf;
                                 _checkBoxes.OutputBox = outputBox;
                                 _checkBoxes.ErrorBox = errorBox;
                                 _config.HighContrastMode = highContrast;
                                 _config.LargeText = largeTxt;
 
-                                confidenceThreshold.Value = Math.Round(conf * 100);
-                                confidenceValue.Text = $"{(int)Math.Round(conf * 100)}%";
                                 hideOutput.IsChecked = outputBox;
                                 hideErrors.IsChecked = errorBox;
                                 highContrastMode.IsChecked = highContrast;
                                 largeText.IsChecked = largeTxt;
                             }
-                            // If no row exists, the defaults set above will be used.
-                            // First save will INSERT via the MERGE in SaveUserSettings.
+                        }
+                    }
+
+                    // Org settings (shared confidence threshold)
+                    using (SqlCommand orgCmd = new SqlCommand("kaharra.GetOrganizationSettings", conn))
+                    {
+                        orgCmd.CommandType = System.Data.CommandType.StoredProcedure;
+                        orgCmd.Parameters.AddWithValue("@pOrgId", orgId);
+
+                        using (SqlDataReader reader = orgCmd.ExecuteReader())
+                        {
+                            if (reader.Read())
+                            {
+                                double conf = reader.GetDouble(0);
+                                _config.ConfidenceThreshold = conf;
+                                confidenceThreshold.Value = Math.Round(conf * 100);
+                                confidenceValue.Text = $"{(int)Math.Round(conf * 100)}%";
+                            }
                         }
                     }
                 }
@@ -256,8 +298,11 @@ namespace FishLens_App
 
 
 
-       
-        
+
+
+
+
+
 
 
 
