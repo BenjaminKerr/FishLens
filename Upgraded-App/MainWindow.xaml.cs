@@ -906,12 +906,26 @@ namespace FishLens_App
                     {
                         int upper;
                         int lower;
-                        int.TryParse(parts[0], out upper);
-                        int.TryParse(parts[1], out lower);
-                        int percentage = upper * 100 / lower;
-                            string frameInfo = parts[1] == "?"
+                        string frameInfo;
+                        int percentage = 0;
+                        if (parts[1] == "?")
+                        {
+                            frameInfo = $"Frame {parts[0]}";
+                        }
+                        else if (int.TryParse(parts[0], out upper) &&
+                                 int.TryParse(parts[1], out lower) &&
+                                 lower != 0)
+                        {
+                            percentage = upper * 100 / lower;
+                            frameInfo = $"Frame {percentage}%";
+                        }
+                        else
+                        {
+                            frameInfo = "Frame ?";
+                        }
+                        frameInfo = parts[1] == "?"
                             ? $"Frame {parts[0]}"
-                            : $"Frame " + percentage;
+                            : $"Progress: " + percentage + "%";
                         Dispatcher.Invoke(() => SetAnalysisFrameInfo(frameInfo));
                     }
                 }
