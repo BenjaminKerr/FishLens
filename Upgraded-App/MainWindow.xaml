@@ -16,7 +16,7 @@
             <ColumnDefinition x:Name ="SidebarColumn" Width="Auto"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
-        <Frame x:Name="MainFrame" NavigationUIVisibility="Hidden" Grid.Column="1" Panel.ZIndex="1"/>
+        <Frame x:Name="MainFrame" NavigationUIVisibility="Hidden" Grid.Column="1" Panel.ZIndex="1" Navigated="MainFrame_Navigated"/>
         <!--Sidebar: Media Selector-->
         <Border x:Name="SideBar" Width="320" Grid.Column="0" Background="{DynamicResource AccentBrush}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource HeaderBackground}">
             <Grid>
@@ -772,15 +772,16 @@ Height="70">
                                                Foreground="{DynamicResource SecondaryText}"
                                                VerticalAlignment="Center"
                                                Margin="0,0,8,0"/>
-                                    <ComboBox x:Name="fishPresentStatus" 
+                                        <ComboBox x:Name="fishPresentStatus" 
                                               FontSize="{DynamicResource BaseFontSize}"
                                               FontWeight="Medium"
                                               Foreground="{DynamicResource PrimaryText}"
                                               BorderBrush="{DynamicResource BorderBrush}"
                                               BorderThickness="1"
                                               Padding="8,4"
-                                              MinWidth="120">
-                                        <ComboBoxItem Content="Present"/>
+                                              MinWidth="120"
+                                              IsEnabled="False">
+                                            <ComboBoxItem Content="Present"/>
                                         <ComboBoxItem Content="Not Present"/>
                                     </ComboBox>
                                 </StackPanel>
@@ -821,7 +822,8 @@ Height="70">
                                               BorderBrush="{DynamicResource BorderBrush}"
                                               BorderThickness="1"
                                               Padding="8,4"
-                                              MinWidth="120">
+                                              MinWidth="120"
+                                              IsEnabled="False">
                                         <ComboBoxItem Content="Upstream"/>
                                         <ComboBoxItem Content="Downstream"/>
                                         <ComboBoxItem Content="Indecisive"/>
@@ -842,15 +844,16 @@ Height="70">
                                                FontSize="{DynamicResource BaseFontSize}"
                                                Foreground="{DynamicResource SecondaryText}"
                                                Margin="0,0,0,4"/>
-                                    <ComboBox x:Name="fishSpecies" 
+                                        <ComboBox x:Name="fishSpecies" 
                                               FontSize="{DynamicResource BaseFontSize}"
                                               FontWeight="Medium"
                                               Foreground="{DynamicResource PrimaryText}"
                                               BorderBrush="{DynamicResource BorderBrush}"
                                               BorderThickness="1"
                                               Padding="8,4"
-                                              MinWidth="120">
-                                        <System:String xmlns:System="clr-namespace:System;assembly=netstandard">Chinook</System:String>
+                                              MinWidth="120"
+                                              IsEnabled="False">
+                                            <System:String xmlns:System="clr-namespace:System;assembly=netstandard">Chinook</System:String>
                                         <System:String xmlns:System="clr-namespace:System;assembly=netstandard">Omykiss</System:String>
                                     </ComboBox>
                                 </StackPanel>

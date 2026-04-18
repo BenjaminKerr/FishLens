@@ -87,6 +87,7 @@ namespace FishLens_App
         private bool _isPlaying = false;
         private int _suppressTimerTicks = 0;
         private string _playbackTempPath = null; // temp MP4 created from ASF for accurate scrubbing
+        private bool _processingComplete = false;
 
         // Multi-track state — all tracks for the currently-displayed video
         private List<FishLens_App.Models.Video> _currentTracks = new List<FishLens_App.Models.Video>();
@@ -925,7 +926,7 @@ namespace FishLens_App
                         }
                         frameInfo = parts[1] == "?"
                             ? $"Frame {parts[0]}"
-                            : $"Progress: " + percentage + "%";
+                            : $"Video progress: " + percentage + "%";
                         Dispatcher.Invoke(() => SetAnalysisFrameInfo(frameInfo));
                     }
                 }
@@ -999,6 +1000,10 @@ namespace FishLens_App
             deleteSelectedVideos.IsEnabled = anyChecked;
             changeLocationForSelected.IsEnabled = anyChecked;
             undoLastDelete.IsEnabled = _deletionHistory.Count > 0;
+            fishPresentStatus.IsEnabled = _processingComplete;
+            travelDirection.IsEnabled = _processingComplete;
+            fishSpecies.IsEnabled = _processingComplete;
+            
         }
 
         // **************************************************
@@ -1115,6 +1120,8 @@ namespace FishLens_App
                     Dispatcher.Invoke(() => LoadVideoInPlayer(firstVideoPath));
                 }
             }
+            _processingComplete = true;
+            UpdateActionButtonState();
         }
 
 
@@ -2932,5 +2939,10 @@ namespace FishLens_App
         }
 
         #endregion
+
+        private void MainFrame_Navigated(object sender, System.Windows.Navigation.NavigationEventArgs e)
+        {
+
+        }
     }
 }
