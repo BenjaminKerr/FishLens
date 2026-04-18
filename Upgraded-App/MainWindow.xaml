@@ -798,7 +798,9 @@ Height="70">
                                              BorderBrush="{DynamicResource BorderBrush}"
                                              BorderThickness="1"
                                              Padding="8,4"
-                                             Width="80"/>
+                                             Width="80"
+                                             IsEnabled="False"
+                                             />
                                 </StackPanel>
                             </StackPanel>
 
@@ -810,12 +812,12 @@ Height="70">
                                            Foreground="{DynamicResource PrimaryText}"
                                            Margin="0,0,0,8"/>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Direction: " 
+                                        <TextBlock Text="Direction: " 
                                                FontSize="{DynamicResource BaseFontSize}"
                                                Foreground="{DynamicResource SecondaryText}"
                                                VerticalAlignment="Center"
-                                               Margin="0,0,8,0"/>
-                                    <ComboBox x:Name="travelDirection" 
+                                               Margin="0,0,8,0">
+                                    <ComboBox x:Name="fishTravelDirection" 
                                               FontSize="{DynamicResource BaseFontSize}"
                                               FontWeight="Medium"
                                               Foreground="{DynamicResource PrimaryText}"
@@ -828,7 +830,8 @@ Height="70">
                                         <ComboBoxItem Content="Downstream"/>
                                         <ComboBoxItem Content="Indecisive"/>
                                     </ComboBox>
-                                </StackPanel>
+                                    </TextBlock>
+                                    </StackPanel>
                             </StackPanel>
 
                             <!-- Fish Species -->
@@ -870,7 +873,9 @@ Height="70">
                                              BorderBrush="{DynamicResource BorderBrush}"
                                              BorderThickness="1"
                                              Padding="8,4"
-                                             Width="80"/>
+                                             Width="80"
+                                             IsEnabled="False"
+                                             />
                                 </StackPanel>
                             </StackPanel>
 
@@ -886,7 +891,8 @@ Height="70">
                                     BorderThickness="0"
                                     Cursor="Hand"
                                     HorizontalAlignment="Stretch"
-                                    Margin="0,0,0,20">
+                                    Margin="0,0,0,20"
+                                    IsEnabled="False">
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Template">

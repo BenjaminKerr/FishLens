@@ -1001,8 +1001,12 @@ namespace FishLens_App
             changeLocationForSelected.IsEnabled = anyChecked;
             undoLastDelete.IsEnabled = _deletionHistory.Count > 0;
             fishPresentStatus.IsEnabled = _processingComplete;
-            travelDirection.IsEnabled = _processingComplete;
+            fishTravelDirection.IsEnabled = _processingComplete;
             fishSpecies.IsEnabled = _processingComplete;
+            saveButton.IsEnabled = _processingComplete;
+            fishPresentConfidence.IsEnabled = _processingComplete;
+            fishTravelDirection.IsEnabled = _processingComplete;
+            fishSpeciesConfidence.IsEnabled = _processingComplete;
             
         }
 
@@ -2039,7 +2043,7 @@ namespace FishLens_App
         // **************************************************
         private string GetTravelDirectionValue()
         {
-            var selectedItem = travelDirection.SelectedItem as ComboBoxItem;
+            var selectedItem = fishTravelDirection.SelectedItem as ComboBoxItem;
 
             if (selectedItem == null)
             {
@@ -2553,7 +2557,7 @@ namespace FishLens_App
             fishPresentStatus.SelectedIndex = fishPresent ? 0 : 1;
             fishPresentConfidence.Text = $"{vid.AvgConfidence * 100:F2}%";
             string dirLower = (vid.Direction ?? string.Empty).ToLower().Trim();
-            travelDirection.SelectedIndex = dirLower == "upstream" ? 0 : dirLower == "downstream" ? 1 : 2;
+            fishTravelDirection.SelectedIndex = dirLower == "upstream" ? 0 : dirLower == "downstream" ? 1 : 2;
             fishSpecies.Text = CapitalizeFirstLetter(vid.Species);
             fishSpeciesConfidence.Text = vid.SpeciesConfidence > 0 ? $"{vid.SpeciesConfidence * 100:F2}%" : "--";
 
