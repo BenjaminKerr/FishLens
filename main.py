@@ -143,7 +143,7 @@ VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRA
 STRICT_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DURATION_SEC", "0.60")))
 LOOSE_MIN_TRACK_DURATION_SEC = max(0.0, float(os.getenv("FISHLENS_LOOSE_MIN_TRACK_DURATION_SEC", "0.05")))
 MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
-ENABLE_TIMESTAMP_DEDUPE = os.getenv("FISHLENS_ENABLE_TIMESTAMP_DEDUPE", "1") == "1"
+ENABLE_TIMESTAMP_DEDUPE = os.getenv("FISHLENS_ENABLE_TIMESTAMP_DEDUPE", "0") == "1"
 ENABLE_FRAGMENT_DEDUPE = os.getenv("FISHLENS_ENABLE_FRAGMENT_DEDUPE", "1") == "1"
 PREFER_FFMPEG_ASF_CONVERSION = os.getenv("FISHLENS_PREFER_FFMPEG_ASF_CONVERSION", "1") == "1"
 
@@ -1085,43 +1085,28 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     best_conf = track_data.get("best_conf", 0.0)
     best_conf_pct = best_conf * 100 if best_conf <= 1.0 else best_conf
     
-    # Determine overall direction using vote majority first, then displacement.
-    entry_x = track_data.get("entry_x")
-    exit_x = track_data.get("last_x")
-    dx = None
-    if entry_x is not None and exit_x is not None:
-        dx = exit_x - entry_x
+    # Determine overall direction based on entry/exit sides of frame (original logic).
+    entry_x = track_data.get("entry_x", 0)
+    exit_x = track_data.get("last_x", 0)
+    entry_side = "left" if entry_x < frame_width / 2 else "right"
+    exit_side = "left" if exit_x < frame_width / 2 else "right"
 
-    valid_directions = [
-        d for d in track_data.get("directions", [])
-        if d in ("upstream", "downstream")
-    ]
-    upstream_count = valid_directions.count("upstream")
-    downstream_count = valid_directions.count("downstream")
-    vote_total = upstream_count + downstream_count
+    if entry_side == exit_side:
+        overall_direction = "indecisive"
+    else:
+        raw_directions = track_data.get("directions", [])
+        if raw_directions:
+            upstream_count = raw_directions.count("upstream")
+            downstream_count = raw_directions.count("downstream")
+            if upstream_count > downstream_count:
+                overall_direction = "upstream"
+            elif downstream_count > upstream_count:
+                overall_direction = "downstream"
+            else:
+                overall_direction = raw_directions[-1]
+        else:
+            overall_direction = "indecisive"
 
-    overall_direction = "indecisive"
-
-    # Majority vote when enough per-frame direction samples exist.
-    if vote_total >= 3:
-        if upstream_count / vote_total >= 0.6:
-            overall_direction = "upstream"
-        elif downstream_count / vote_total >= 0.6:
-            overall_direction = "downstream"
-
-    # If vote is weak/insufficient, use net horizontal displacement.
-    if overall_direction == "indecisive" and dx is not None:
-        min_displacement = max(15.0, frame_width * 0.03)
-        if abs(dx) >= min_displacement:
-            overall_direction = "upstream" if dx < 0 else "downstream"
-
-    # Last fallback: any slight vote advantage.
-    if overall_direction == "indecisive" and vote_total > 0:
-        if upstream_count > downstream_count:
-            overall_direction = "upstream"
-        elif downstream_count > upstream_count:
-            overall_direction = "downstream"
-    
     species_data = classify_image(image_path) if image_path else ("No image", 0.0)
     
     # Handle timestamp with confidence flag
