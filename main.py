@@ -128,6 +128,13 @@ FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
 # Performance tuning (set via env vars when needed)
 FAST_MODE = os.getenv("FISHLENS_FAST_MODE", "1") == "1"
 FRAME_STRIDE = max(1, int(os.getenv("FISHLENS_FRAME_STRIDE", "3" if FAST_MODE else "1")))
+# Rescue pass stride: denser than the strict pass but still faster than stride=1.
+# stride=2 gives 2x detection density vs strict pass at half the cost of stride=1.
+RESCUE_FRAME_STRIDE = max(1, int(os.getenv("FISHLENS_RESCUE_FRAME_STRIDE", "2")))
+# Minimum number of short-duration tracks that must have been dropped before the
+# rescue pass is triggered. Raising this avoids re-processing videos where only
+# a single noise track was filtered, while still rescuing real missed fish.
+RESCUE_MIN_DROPPED_SHORT = max(1, int(os.getenv("FISHLENS_RESCUE_MIN_DROPPED_SHORT", "1")))
 YOLO_IMGSZ = max(320, int(os.getenv("FISHLENS_YOLO_IMGSZ", "448" if FAST_MODE else "512")))
 SAVE_TIMESTAMP_DEBUG_FRAMES = os.getenv("FISHLENS_SAVE_TIMESTAMP_DEBUG", "0") == "1"
 TIMESTAMP_MAX_ATTEMPTS = max(1, int(os.getenv("FISHLENS_TIMESTAMP_MAX_ATTEMPTS", "4" if FAST_MODE else "8")))
@@ -325,11 +332,134 @@ def _format_duration_range(start_time_sec, end_time_sec):
 
 
 # ****************************************************************
-# Function: main
+# Function: refine_track_durations
+# Description: After fish tracks are confirmed, do a targeted dense YOLO scan
+#   (stride=1, no DeepSort) around each track's known window to find the true
+#   first/last frame where YOLO sees the fish. Updates start_time_sec,
+#   end_time_sec, duration_sec, and duration_range without affecting tracking
+#   accuracy or fish count.
+# Notes: N/A
+def refine_track_durations(video_path, tracks, fps):
+    """Scan dense around each confirmed track window to refine start/end times."""
+    if not tracks or not video_path or fps <= 0:
+        return
+
+    # Build per-track scan windows with a ±BUFFER second buffer around known times.
+    BUFFER_SEC = 2.0
+    windows = []
+    for track in tracks:
+        try:
+            start_sec = float(track.get("start_time_sec", 0.0))
+            end_sec = float(track.get("end_time_sec", 0.0))
+        except (ValueError, TypeError):
+            continue
+        scan_start = max(0, int((start_sec - BUFFER_SEC) * fps))
+        scan_end = int((end_sec + BUFFER_SEC) * fps)
+        windows.append((scan_start, scan_end, track))
+
+    if not windows:
+        return
+
+    # Merge overlapping windows so we only scan each region once.
+    windows.sort(key=lambda w: w[0])
+    merged = []
+    cur_start, cur_end, cur_tracks = windows[0]
+    cur_tracks = [cur_tracks]
+    for ws, we, wt in windows[1:]:
+        if ws <= cur_end:
+            cur_end = max(cur_end, we)
+            cur_tracks.append(wt)
+        else:
+            merged.append((cur_start, cur_end, cur_tracks))
+            cur_start, cur_end, cur_tracks = ws, we, [wt]
+    merged.append((cur_start, cur_end, cur_tracks))
+
+    cap = _video_capture_open(video_path)
+    if not cap.isOpened():
+        print("[WARN] refine_track_durations: could not open video")
+        return
+
+    for region_start, region_end, region_tracks in merged:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, region_start)
+
+        frame_idx = region_start
+        # Map each track → earliest/latest refined frame index where YOLO fires.
+        refined = {id(t): {"first": None, "last": None} for t in region_tracks}
+
+        while frame_idx <= region_end:
+            ret, frame = _video_capture_read(cap)
+            if not ret or frame is None:
+                break
+
+            frame_time_sec = frame_idx / fps
+
+            results = MODEL.predict(source=frame, verbose=False, stream=False,
+                                    save=False, imgsz=YOLO_IMGSZ)
+            has_fish = False
+            if results:
+                r = results[0]
+                for box in r.boxes:
+                    conf_arr = box.conf.cpu().numpy()
+                    conf = float(conf_arr[0]) if conf_arr.size > 0 else 0.0
+                    cls_arr = box.cls.cpu().numpy()
+                    cls_id = int(cls_arr[0]) if cls_arr.size > 0 else -1
+                    x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
+                    if (x2 - x1) * (y2 - y1) < 100 or conf < LOOSE_YOLO_CONFIDENCE_THRESHOLD:
+                        continue
+                    try:
+                        cls_name = MODEL.names[cls_id].lower()
+                    except Exception:
+                        cls_name = ""
+                    if "fish" in cls_name:
+                        has_fish = True
+                        break
+
+            if has_fish:
+                for t in region_tracks:
+                    t_start = float(t.get("start_time_sec", 0.0))
+                    t_end = float(t.get("end_time_sec", 0.0))
+                    # Only credit this frame to a track if it falls in its search window.
+                    if (t_start - BUFFER_SEC) <= frame_time_sec <= (t_end + BUFFER_SEC):
+                        key = id(t)
+                        if refined[key]["first"] is None:
+                            refined[key]["first"] = frame_idx
+                        refined[key]["last"] = frame_idx
+
+            frame_idx += 1
+
+        # Apply refined times back to each track.
+        for t in region_tracks:
+            key = id(t)
+            first = refined[key]["first"]
+            last = refined[key]["last"]
+            if first is not None and last is not None:
+                new_start = first / fps
+                new_end = last / fps
+                new_dur = max(0.0, new_end - new_start)
+                # Only update if the refinement found a wider or equal window.
+                old_start = float(t.get("start_time_sec", new_start))
+                old_end = float(t.get("end_time_sec", new_end))
+                refined_start = min(old_start, new_start)
+                refined_end = max(old_end, new_end)
+                refined_dur = max(0.0, refined_end - refined_start)
+                t["start_time_sec"] = f"{refined_start:.2f}"
+                t["end_time_sec"] = f"{refined_end:.2f}"
+                t["duration_sec"] = f"{refined_dur:.2f}"
+                t["duration_range"] = _format_duration_range(refined_start, refined_end)
+                print(f"[INFO] Duration refined: {old_start:.2f}-{old_end:.2f}s → {refined_start:.2f}-{refined_end:.2f}s (Δ={refined_dur - (old_end - old_start):+.2f}s)")
+
+    cap.release()
+
+
+# ****************************************************************
+# Function: _process_video_with_retry
 # Description: Process all videos and export data as a CSV.
 # Notes: N/A
 def _process_video_with_retry(video_path, source_video_path):
-    """Two-pass processing with ASF enrichment for short/late fish tracks."""
+    """Two-pass detection: strict (fast, stride=3), then loose if no fish found.
+    After fish are confirmed a targeted dense YOLO scan refines start/end durations
+    without re-running DeepSort or affecting track count/accuracy.
+    """
     global FRAME_STRIDE, YOLO_CONFIDENCE_THRESHOLD, MIN_TRACK_DURATION_SEC
 
     original_stride = FRAME_STRIDE
@@ -337,95 +467,35 @@ def _process_video_with_retry(video_path, source_video_path):
     original_min_duration = MIN_TRACK_DURATION_SEC
 
     try:
-        # Pass 1: strict settings
+        # Pass 1: strict settings (fast, stride=3)
         FRAME_STRIDE = original_stride
         YOLO_CONFIDENCE_THRESHOLD = STRICT_YOLO_CONFIDENCE_THRESHOLD
         MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
-        video_tracks, strict_diag = run_video_tracker(video_path, source_video_path, return_diagnostics=True)
+        video_tracks = run_video_tracker(video_path, source_video_path)
 
-        source_ext = os.path.splitext((source_video_path or video_path))[1].lower()
-        is_asf_source = source_ext == ".asf"
-
-        def _norm_ts(track):
-            return str(track.get("video_timestamp", "")).strip().rstrip("*")
-
-        def _pct(track):
-            value = track.get("avg_confidence") or track.get("confidence") or "0%"
-            try:
-                return float(str(value).replace("%", "").strip())
-            except Exception:
-                return 0.0
-
-        def _duration(track):
-            try:
-                start = float(track.get("start_time_sec", 0.0))
-                end = float(track.get("end_time_sec", 0.0))
-                return max(0.0, end - start)
-            except Exception:
-                return 0.0
-
-        def _merge_rescue_tracks(primary, rescue, expected_missing):
-            merged = list(primary)
-            known_ts = {_norm_ts(t) for t in merged if _norm_ts(t)}
-
-            candidates = []
-            for candidate in rescue:
-                ts = _norm_ts(candidate)
-                if not ts or ts in known_ts:
-                    continue
-
-                # Only rescue robust tracks.
-                if str(candidate.get("timestamp_confidence", "")).upper() != "HIGH":
-                    continue
-                if _duration(candidate) < STRICT_MIN_TRACK_DURATION_SEC:
-                    continue
-
-                candidates.append(candidate)
-
-            # Prefer strongest rescued tracks first, but never add more than the
-            # strict-pass diagnostics suggest were likely missed.
-            candidates.sort(key=lambda t: (_pct(t), _duration(t)), reverse=True)
-            for candidate in candidates[:max(0, expected_missing)]:
-                ts = _norm_ts(candidate)
-                merged.append(candidate)
-                known_ts.add(ts)
-
-            return merged
-
-        # Pass 2 rescue trigger (ASF only):
-        # - strict found no fish, or
-        # - strict created more tracks than it finalized pre-dedupe, or
-        # - strict dropped tracks due to minimum duration filter.
-        strict_created = int(strict_diag.get("tracks_created", 0))
-        strict_before_dedupe = int(strict_diag.get("tracks_before_dedupe", len(video_tracks)))
-        strict_dropped_short = int(strict_diag.get("tracks_dropped_short", 0))
-
-        should_retry_loose = (not video_tracks)
-        if is_asf_source and (strict_created > strict_before_dedupe or strict_dropped_short > 0):
-            should_retry_loose = True
-
-        if should_retry_loose:
+        # Pass 2: loose retry — only if strict pass found nothing
+        if not video_tracks:
             print(
-                f"[INFO] Retrying with loose settings (FRAME_STRIDE=1). "
-                f"strict_count={len(video_tracks)} created={strict_created} "
-                f"before_dedupe={strict_before_dedupe} dropped_short={strict_dropped_short} "
-                f"source_ext={source_ext or 'unknown'}"
+                f"[INFO] No fish on strict pass, retrying with loose settings "
+                f"(conf={LOOSE_YOLO_CONFIDENCE_THRESHOLD}, FRAME_STRIDE=1)"
             )
             FRAME_STRIDE = 1
             YOLO_CONFIDENCE_THRESHOLD = LOOSE_YOLO_CONFIDENCE_THRESHOLD
             MIN_TRACK_DURATION_SEC = LOOSE_MIN_TRACK_DURATION_SEC
-            loose_tracks, _ = run_video_tracker(video_path, source_video_path, return_diagnostics=True)
+            video_tracks = run_video_tracker(video_path, source_video_path)
 
-            # Rescue merge: keep strict pass as baseline, append only robust,
-            # timestamp-distinct tracks, and only up to likely-missed count.
-            if video_tracks:
-                expected_missing = max(0, strict_created - strict_before_dedupe, strict_dropped_short)
-                merged_tracks = _merge_rescue_tracks(video_tracks, loose_tracks, expected_missing)
-                if len(merged_tracks) > len(video_tracks):
-                    print(f"[INFO] Rescue pass added {len(merged_tracks) - len(video_tracks)} track(s)")
-                    video_tracks = merged_tracks
-            else:
-                video_tracks = loose_tracks
+        # Pass 3: duration refinement — targeted dense YOLO scan around each
+        # confirmed track window. Does not re-run DeepSort; only refines times.
+        if video_tracks:
+            cap_fps = None
+            try:
+                _cap = _video_capture_open(video_path)
+                cap_fps = _cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
+                _cap.release()
+            except Exception:
+                cap_fps = FPS_DEFAULT
+            print(f"[INFO] Refining durations for {len(video_tracks)} track(s) at stride=1")
+            refine_track_durations(video_path, video_tracks, cap_fps)
 
         return video_tracks
     finally:
