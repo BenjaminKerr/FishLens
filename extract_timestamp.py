@@ -302,11 +302,19 @@ def dedupe_tracks_by_timestamp(finished_tracks):
         if da not in ("unknown", "stationary") and db not in ("unknown", "stationary") and da != db:
             return False
 
-        # OCR timestamp tolerance: allow ±1 second drift.
+        # OCR timestamp proximity: allow ±1 second, but only with additional
+        # temporal checks below so distinct fish are not merged aggressively.
         a_ts = _parse_ts_seconds(a)
         b_ts = _parse_ts_seconds(b)
-        if a_ts is not None and b_ts is not None and abs(a_ts - b_ts) > 1:
+        if a_ts is None or b_ts is None:
             return False
+
+        ts_delta = abs(a_ts - b_ts)
+        if ts_delta > 1:
+            return False
+
+        same_exact_timestamp = (ts_delta == 0)
+        near_timestamp = (ts_delta <= 1)
 
         # Must also be temporally adjacent in video timeline.
         a_start = _to_float(a, "start_time_sec")
@@ -314,12 +322,35 @@ def dedupe_tracks_by_timestamp(finished_tracks):
         b_start = _to_float(b, "start_time_sec")
         b_end = _to_float(b, "end_time_sec")
 
+        a_dur = max(0.0, a_end - a_start)
+        b_dur = max(0.0, b_end - b_start)
         overlap = max(0.0, min(a_end, b_end) - max(a_start, b_start))
-        shorter = max(0.001, min(max(0.0, a_end - a_start), max(0.0, b_end - b_start)))
+        shorter = max(0.001, min(a_dur, b_dur))
         overlap_ratio = overlap / shorter
         gap = min(abs(a_start - b_end), abs(b_start - a_end))
 
-        return (overlap_ratio >= 0.70) or (gap <= 0.80)
+        # Be conservative: two distinct fish can share similar OCR timestamps.
+        # Prefer true handoff patterns (adjacent tracks, little overlap).
+        adjacent_or_light_overlap = (gap <= 0.80) and (overlap_ratio <= 0.35)
+
+        # Allow short-fragment cleanup when one track is tiny.
+        short_fragment = min(a_dur, b_dur) <= 0.60 and overlap_ratio <= 0.80
+
+        temporal_match = adjacent_or_light_overlap or short_fragment
+        if not temporal_match:
+            return False
+
+        # If OCR timestamp is equal or within 1 second and timing relationship
+        # looks like a split handoff, treat as duplicate.
+        if near_timestamp:
+            return True
+
+        # Require asymmetry so two similarly strong/long tracks are kept as separate fish.
+        conf_gap = abs(_pct_value(a) - _pct_value(b))
+        longer = max(0.001, max(a_dur, b_dur))
+        dur_ratio = min(a_dur, b_dur) / longer
+
+        return (conf_gap >= 8.0) or (dur_ratio <= 0.45)
 
     kept = []
     for track in finished_tracks:

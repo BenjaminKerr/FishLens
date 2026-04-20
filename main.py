@@ -14,6 +14,7 @@ import math
 import cv2
 import subprocess
 import importlib
+import glob
 from contextlib import contextmanager
 import tempfile
 import numpy as np
@@ -106,7 +107,8 @@ CSV_KEYS = [
     "species",
     "species_confidence",
     "video_timestamp",
-    "duration_sec"
+    "duration_sec",
+    "duration_range"
 ]
 TESSERACT_AVAILABLE = check_tesseract()
 
@@ -119,7 +121,7 @@ NO_FISH = os.path.join(PROJECT_ROOT, "no_fish")
 
 # Constants--DeepSort
 FPS_DEFAULT = 30 
-MAX_EXPORT_PER_VIDEO = 5  
+MAX_EXPORT_PER_VIDEO = max(0, int(os.getenv("FISHLENS_MAX_EXPORT_PER_VIDEO", "0")))
 OUTPUT_CSV = os.path.join(PROJECT_ROOT, "fish_summary.csv")
 FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
 
@@ -132,9 +134,11 @@ TIMESTAMP_MAX_ATTEMPTS = max(1, int(os.getenv("FISHLENS_TIMESTAMP_MAX_ATTEMPTS",
 SUPPRESS_CODEC_WARNINGS = os.getenv("FISHLENS_SUPPRESS_CODEC_WARNINGS", "1") == "1"
 VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRAMES", "6" if FAST_MODE else "12")))
 STRICT_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DURATION_SEC", "0.60")))
-LOOSE_MIN_TRACK_DURATION_SEC = max(0.0, float(os.getenv("FISHLENS_LOOSE_MIN_TRACK_DURATION_SEC", "0.10")))
+LOOSE_MIN_TRACK_DURATION_SEC = max(0.0, float(os.getenv("FISHLENS_LOOSE_MIN_TRACK_DURATION_SEC", "0.05")))
 MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
 ENABLE_TIMESTAMP_DEDUPE = os.getenv("FISHLENS_ENABLE_TIMESTAMP_DEDUPE", "1") == "1"
+ENABLE_FRAGMENT_DEDUPE = os.getenv("FISHLENS_ENABLE_FRAGMENT_DEDUPE", "1") == "1"
+PREFER_FFMPEG_ASF_CONVERSION = os.getenv("FISHLENS_PREFER_FFMPEG_ASF_CONVERSION", "1") == "1"
 
 # Constants--Classifier
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
@@ -152,9 +156,10 @@ os.makedirs(FISH_IMAGE_DIR, exist_ok=True)
 
 @dataclass
 class FrameData:
-        f_index: int = 0
-        f_found_fish: bool = False 
-        f_detections: List = field(default_factory=list) 
+    f_index: int = 0
+    f_time_sec: float = 0.0
+    f_found_fish: bool = False
+    f_detections: List = field(default_factory=list)
 
 class VideoData:
     def __init__(self):
@@ -173,6 +178,12 @@ class VideoData:
         self.v_confidence_sum = 0.0
         self.v_confidence_count = 0 
         self.v_video_timestamp = None
+        self.v_source_duration_sec = None
+        self.v_processed_duration_sec = None
+        self.v_duration_scale = 1.0
+        self.v_tracks_created = 0
+        self.v_tracks_before_dedupe = 0
+        self.v_tracks_dropped_short = 0
 
 
 @contextmanager
@@ -207,6 +218,92 @@ def _video_capture_read(cap):
         return cap.read()
 
 
+def _resolve_ffmpeg_path():
+    """Resolve ffmpeg executable from env, PATH, or common winget install locations."""
+    env_path = os.getenv("FISHLENS_FFMPEG_PATH", "").strip()
+    if env_path and os.path.isfile(env_path):
+        return env_path
+
+    path_ffmpeg = shutil.which("ffmpeg")
+    if path_ffmpeg:
+        return path_ffmpeg
+
+    local_app_data = os.getenv("LOCALAPPDATA", "")
+    if local_app_data:
+        winget_globs = [
+            os.path.join(
+                local_app_data,
+                "Microsoft",
+                "WinGet",
+                "Packages",
+                "Gyan.FFmpeg_*",
+                "ffmpeg-*",
+                "bin",
+                "ffmpeg.exe"
+            ),
+            os.path.join(
+                local_app_data,
+                "Microsoft",
+                "WinGet",
+                "Packages",
+                "*FFmpeg*",
+                "*",
+                "bin",
+                "ffmpeg.exe"
+            ),
+        ]
+        for pattern in winget_globs:
+            matches = glob.glob(pattern)
+            if matches:
+                return matches[0]
+
+    return None
+
+
+def _resolve_ffprobe_path():
+    """Resolve ffprobe executable from env, PATH, or ffmpeg sibling path."""
+    env_path = os.getenv("FISHLENS_FFPROBE_PATH", "").strip()
+    if env_path and os.path.isfile(env_path):
+        return env_path
+
+    path_ffprobe = shutil.which("ffprobe")
+    if path_ffprobe:
+        return path_ffprobe
+
+    ffmpeg_path = _resolve_ffmpeg_path()
+    if ffmpeg_path:
+        sibling = os.path.join(os.path.dirname(ffmpeg_path), "ffprobe.exe")
+        if os.path.isfile(sibling):
+            return sibling
+
+    return None
+
+
+def _probe_video_duration_sec(video_path):
+    """Get container duration in seconds using ffprobe. Returns None on failure."""
+    ffprobe_path = _resolve_ffprobe_path()
+    if not ffprobe_path or not os.path.isfile(video_path):
+        return None
+
+    cmd = [
+        ffprobe_path,
+        "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        video_path,
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            return None
+        value = (result.stdout or "").strip()
+        duration = float(value)
+        return duration if duration > 0 else None
+    except Exception:
+        return None
+
+
 def _format_video_timecode(total_seconds, round_up=False):
     if total_seconds is None:
         total_seconds = 0.0
@@ -220,12 +317,19 @@ def _format_video_timecode(total_seconds, round_up=False):
     return f"{minutes}:{secs:02d}"
 
 
+def _format_duration_range(start_time_sec, end_time_sec):
+    """Format detection window as video-position seconds (not OCR datetime)."""
+    safe_start = max(0.0, start_time_sec or 0.0)
+    safe_end = max(safe_start, end_time_sec or safe_start)
+    return f"{safe_start:.2f}s-{safe_end:.2f}s"
+
+
 # ****************************************************************
 # Function: main
 # Description: Process all videos and export data as a CSV.
 # Notes: N/A
 def _process_video_with_retry(video_path, source_video_path):
-    """Two-pass processing: strict pass, then loose pass at FRAME_STRIDE=1 if needed."""
+    """Two-pass processing with ASF enrichment for short/late fish tracks."""
     global FRAME_STRIDE, YOLO_CONFIDENCE_THRESHOLD, MIN_TRACK_DURATION_SEC
 
     original_stride = FRAME_STRIDE
@@ -237,18 +341,91 @@ def _process_video_with_retry(video_path, source_video_path):
         FRAME_STRIDE = original_stride
         YOLO_CONFIDENCE_THRESHOLD = STRICT_YOLO_CONFIDENCE_THRESHOLD
         MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
-        video_tracks = run_video_tracker(video_path, source_video_path)
+        video_tracks, strict_diag = run_video_tracker(video_path, source_video_path, return_diagnostics=True)
 
-        # Pass 2: loose settings with FRAME_STRIDE=1 (only if pass 1 found no fish)
-        if not video_tracks:
+        source_ext = os.path.splitext((source_video_path or video_path))[1].lower()
+        is_asf_source = source_ext == ".asf"
+
+        def _norm_ts(track):
+            return str(track.get("video_timestamp", "")).strip().rstrip("*")
+
+        def _pct(track):
+            value = track.get("avg_confidence") or track.get("confidence") or "0%"
+            try:
+                return float(str(value).replace("%", "").strip())
+            except Exception:
+                return 0.0
+
+        def _duration(track):
+            try:
+                start = float(track.get("start_time_sec", 0.0))
+                end = float(track.get("end_time_sec", 0.0))
+                return max(0.0, end - start)
+            except Exception:
+                return 0.0
+
+        def _merge_rescue_tracks(primary, rescue, expected_missing):
+            merged = list(primary)
+            known_ts = {_norm_ts(t) for t in merged if _norm_ts(t)}
+
+            candidates = []
+            for candidate in rescue:
+                ts = _norm_ts(candidate)
+                if not ts or ts in known_ts:
+                    continue
+
+                # Only rescue robust tracks.
+                if str(candidate.get("timestamp_confidence", "")).upper() != "HIGH":
+                    continue
+                if _duration(candidate) < STRICT_MIN_TRACK_DURATION_SEC:
+                    continue
+
+                candidates.append(candidate)
+
+            # Prefer strongest rescued tracks first, but never add more than the
+            # strict-pass diagnostics suggest were likely missed.
+            candidates.sort(key=lambda t: (_pct(t), _duration(t)), reverse=True)
+            for candidate in candidates[:max(0, expected_missing)]:
+                ts = _norm_ts(candidate)
+                merged.append(candidate)
+                known_ts.add(ts)
+
+            return merged
+
+        # Pass 2 rescue trigger (ASF only):
+        # - strict found no fish, or
+        # - strict created more tracks than it finalized pre-dedupe, or
+        # - strict dropped tracks due to minimum duration filter.
+        strict_created = int(strict_diag.get("tracks_created", 0))
+        strict_before_dedupe = int(strict_diag.get("tracks_before_dedupe", len(video_tracks)))
+        strict_dropped_short = int(strict_diag.get("tracks_dropped_short", 0))
+
+        should_retry_loose = (not video_tracks)
+        if is_asf_source and (strict_created > strict_before_dedupe or strict_dropped_short > 0):
+            should_retry_loose = True
+
+        if should_retry_loose:
             print(
-                f"[INFO] No fish found with strict settings (FRAME_STRIDE={original_stride}); "
-                "retrying once with FRAME_STRIDE=1 and loose thresholds"
+                f"[INFO] Retrying with loose settings (FRAME_STRIDE=1). "
+                f"strict_count={len(video_tracks)} created={strict_created} "
+                f"before_dedupe={strict_before_dedupe} dropped_short={strict_dropped_short} "
+                f"source_ext={source_ext or 'unknown'}"
             )
             FRAME_STRIDE = 1
             YOLO_CONFIDENCE_THRESHOLD = LOOSE_YOLO_CONFIDENCE_THRESHOLD
             MIN_TRACK_DURATION_SEC = LOOSE_MIN_TRACK_DURATION_SEC
-            video_tracks = run_video_tracker(video_path, source_video_path)
+            loose_tracks, _ = run_video_tracker(video_path, source_video_path, return_diagnostics=True)
+
+            # Rescue merge: keep strict pass as baseline, append only robust,
+            # timestamp-distinct tracks, and only up to likely-missed count.
+            if video_tracks:
+                expected_missing = max(0, strict_created - strict_before_dedupe, strict_dropped_short)
+                merged_tracks = _merge_rescue_tracks(video_tracks, loose_tracks, expected_missing)
+                if len(merged_tracks) > len(video_tracks):
+                    print(f"[INFO] Rescue pass added {len(merged_tracks) - len(video_tracks)} track(s)")
+                    video_tracks = merged_tracks
+            else:
+                video_tracks = loose_tracks
 
         return video_tracks
     finally:
@@ -356,31 +533,39 @@ def convert_asf_to_mp4(video_path):
     fd, output_path = tempfile.mkstemp(suffix='.mp4')
     os.close(fd)
 
-    # Prefer ffmpeg CLI conversion when available to avoid noisy OpenCV decode warnings.
-    ffmpeg_path = shutil.which("ffmpeg")
-    if ffmpeg_path:
-        ffmpeg_cmd = [
-            ffmpeg_path,
-            "-hide_banner",
-            "-loglevel", "error",
-            "-y",
-            "-i", video_path,
-            "-an",
-            "-c:v", "libx264",
-            "-preset", "veryfast",
-            "-crf", "23",
-            output_path
-        ]
-        try:
-            result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, check=False)
-            if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                print(f"Converted ASF to MP4 (temp): {os.path.basename(video_path)}")
-                return output_path, True
-            else:
-                print("Warning: ffmpeg conversion failed, falling back to OpenCV conversion.")
-        except Exception:
-            print("Warning: ffmpeg invocation failed, falling back to OpenCV conversion.")
+    # Keep legacy detection behavior by default (OpenCV conversion).
+    # ffmpeg path remains available behind an opt-in flag when needed.
+    if PREFER_FFMPEG_ASF_CONVERSION:
+        ffmpeg_path = _resolve_ffmpeg_path()
+        if ffmpeg_path:
+            if not shutil.which("ffmpeg"):
+                print(f"Found ffmpeg via fallback path: {ffmpeg_path}")
+            ffmpeg_cmd = [
+                ffmpeg_path,
+                "-hide_banner",
+                "-loglevel", "error",
+                "-y",
+                "-i", video_path,
+                "-an",
+                "-c:v", "libx264",
+                "-vsync", "0",
+                "-preset", "veryfast",
+                "-crf", "23",
+                output_path
+            ]
+            try:
+                result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, check=False)
+                if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                    print(f"Converted ASF to MP4 (temp, ffmpeg): {os.path.basename(video_path)}")
+                    return output_path, True
+                else:
+                    print("Warning: ffmpeg conversion failed, falling back to OpenCV conversion.")
+            except Exception:
+                print("Warning: ffmpeg invocation failed, falling back to OpenCV conversion.")
+        else:
+            print("Warning: ffmpeg not found, using OpenCV conversion fallback.")
 
+    # OpenCV fallback conversion to improve detector stability when ffmpeg is unavailable.
     cap = _video_capture_open(video_path)
     if not cap.isOpened():
         print(f"Warning: Could not open ASF for conversion: {video_path}")
@@ -433,7 +618,7 @@ def convert_asf_to_mp4(video_path):
         _cleanup_temp(output_path)
         return video_path, False
 
-    print(f"Converted ASF to MP4 (temp): {os.path.basename(video_path)}")
+    print(f"Converted ASF to MP4 (temp, OpenCV fallback): {os.path.basename(video_path)}")
     return output_path, True
 
 
@@ -449,7 +634,7 @@ def _cleanup_temp(path):
 # Description: Process a single video through both YOLO and DeepSort;
 # return tracked fish data.
 # Notes: N/A
-def run_video_tracker(video_path, source_video_path=None):
+def run_video_tracker(video_path, source_video_path=None, return_diagnostics=False):
 
     # Initialize new VideoData and DeepSort tracker for each video
     vidData = VideoData()
@@ -463,6 +648,8 @@ def run_video_tracker(video_path, source_video_path=None):
     # Debug: Check file before attempting to open
     if not os.path.exists(video_path):
         print(f"[ERROR] File does not exist: {video_path}")
+        if return_diagnostics:
+            return [], {"tracks_created": 0, "tracks_before_dedupe": 0, "tracks_dropped_short": 0}
         return []
     
 
@@ -472,9 +659,30 @@ def run_video_tracker(video_path, source_video_path=None):
     if not cap.isOpened():
         print(f"[ERROR] Could not open video with cv2.VideoCapture: {video_path}")
         print(f"[DEBUG] This usually means the video codec is not supported or file is corrupted")
+        if return_diagnostics:
+            return [], {"tracks_created": 0, "tracks_before_dedupe": 0, "tracks_dropped_short": 0}
         return []
     
     vidData.v_fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
+
+    # Timing-only correction: when processing a converted file, scale exported times
+    # to source duration using ffprobe. This does not change tracking/detection behavior.
+    if source_video_path and os.path.abspath(source_video_path) != os.path.abspath(video_path):
+        vidData.v_source_duration_sec = _probe_video_duration_sec(source_video_path)
+        vidData.v_processed_duration_sec = _probe_video_duration_sec(video_path)
+
+        src = vidData.v_source_duration_sec
+        dst = vidData.v_processed_duration_sec
+        if src and dst and dst > 0:
+            vidData.v_duration_scale = src / dst
+
+            # Ignore tiny variance to avoid unnecessary drift.
+            if abs(vidData.v_duration_scale - 1.0) < 0.01:
+                vidData.v_duration_scale = 1.0
+
+            if vidData.v_duration_scale != 1.0:
+                print(f"[INFO] Duration scaling enabled: source={src:.3f}s processed={dst:.3f}s scale={vidData.v_duration_scale:.6f}")
+
     ret, frame = _video_capture_read(cap)
 
     # Pre-compute a video-level timestamp fallback from early frames.
@@ -498,8 +706,12 @@ def run_video_tracker(video_path, source_video_path=None):
             ret, frame = _video_capture_read(cap)
             continue
 
-        # Initialize new FrameData object each frame
-        frameData = FrameData(f_index=vidData.v_frame_index)
+        # Initialize new FrameData object each frame.
+        # Keep a single timing source (frame index / fps) so ASF timing remains
+        # stable after conversion and does not depend on CAP_PROP_POS_MSEC drift.
+        frame_time_sec = vidData.v_frame_index / vidData.v_fps
+
+        frameData = FrameData(f_index=vidData.v_frame_index, f_time_sec=frame_time_sec)
         frameData.f_detections = []
 
         # Determine most common class per-frame
@@ -531,31 +743,56 @@ def run_video_tracker(video_path, source_video_path=None):
     if not vidData.v_found_fish:
         print(f"[INFO] No fish detected in {vidData.v_filename}")
         no_fish_found(video_path, vidData.v_filename)
+        if return_diagnostics:
+            return [], {
+                "tracks_created": int(getattr(vidData, "v_tracks_created", 0)),
+                "tracks_before_dedupe": 0,
+                "tracks_dropped_short": int(getattr(vidData, "v_tracks_dropped_short", 0))
+            }
         return []
 
-    # Merge likely fragmented/split tracks of the same fish.
-    vidData.v_finished_tracks = dedupe_fragmented_tracks(vidData.v_finished_tracks)
+    vidData.v_tracks_before_dedupe = len(vidData.v_finished_tracks)
 
-    # Optionally remove duplicate tracks that share the exact same OCR timestamp.
-    # Applied after fragment dedupe to reduce obvious overcounting.
+    # Debug: show all tracks before any dedupe
+    print(f"[DEBUG] Tracks before dedupe ({len(vidData.v_finished_tracks)}):")
+    for t in vidData.v_finished_tracks:
+        print(f"  trackId={t.get('trackId')} start={t.get('start_time_sec')} end={t.get('end_time_sec')} conf={t.get('avg_confidence')} ts={t.get('video_timestamp')}")
+
+    # Fragment dedupe can also collapse valid fish when IDs are already correct.
+    # Keep it opt-in so detected tracks export unless explicitly reduced.
+    if ENABLE_FRAGMENT_DEDUPE:
+        vidData.v_finished_tracks = dedupe_fragmented_tracks(vidData.v_finished_tracks)
+        print(f"[DEBUG] Tracks after fragment dedupe: {len(vidData.v_finished_tracks)}")
+
+    # Timestamp dedupe can collapse distinct fish that share the same OCR second.
+    # Keep it opt-in so export behavior matches the pre-duration pipeline unless
+    # explicitly enabled for a dataset that is known to overcount.
     if ENABLE_TIMESTAMP_DEDUPE:
         vidData.v_finished_tracks = dedupe_tracks_by_timestamp(vidData.v_finished_tracks)
+        print(f"[DEBUG] Tracks after timestamp dedupe: {len(vidData.v_finished_tracks)}")
 
     # Save the best detection per video for analysis. TODO: Refactor based on edge cases (multiple fish?) and confidence threshold adjustments.
-    if MAX_EXPORT_PER_VIDEO and len(vidData.v_finished_tracks) > MAX_EXPORT_PER_VIDEO:
+    if MAX_EXPORT_PER_VIDEO > 0 and len(vidData.v_finished_tracks) > MAX_EXPORT_PER_VIDEO:
         vidData.v_finished_tracks.sort(
             key=lambda x: float(x["avg_confidence"].replace("%", "")),
             reverse=True
         )
 
-    # Save finalized tracks 
-    vidData.v_finished_tracks = vidData.v_finished_tracks[:MAX_EXPORT_PER_VIDEO]
+        # Save finalized tracks 
+        vidData.v_finished_tracks = vidData.v_finished_tracks[:MAX_EXPORT_PER_VIDEO]
 
     # Save the best image from each video for analysis.
     save_best_image(vidData.v_finished_tracks, vidData.v_filename)
     
     # Save frames for uncertain timestamps
     save_uncertain_timestamp_frames(vidData.v_finished_tracks, source_video_path)
+
+    if return_diagnostics:
+        return vidData.v_finished_tracks, {
+            "tracks_created": int(getattr(vidData, "v_tracks_created", 0)),
+            "tracks_before_dedupe": int(getattr(vidData, "v_tracks_before_dedupe", 0)),
+            "tracks_dropped_short": int(getattr(vidData, "v_tracks_dropped_short", 0))
+        }
 
     return vidData.v_finished_tracks
 
@@ -647,10 +884,13 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         is_new_track = trackId not in vidData.v_active_tracks
 
         if is_new_track:
+            vidData.v_tracks_created += 1
             initial_conf = "LOW" if (vidData.v_video_timestamp and vidData.v_video_timestamp != "Not detected") else None
             vidData.v_active_tracks[trackId] = {
                 "start_frame": frameData.f_index,
                 "last_frame": frameData.f_index,
+                "start_time_sec": frameData.f_time_sec,
+                "last_time_sec": frameData.f_time_sec,
                 "confidences": [],
                 "directions": [],
                 "entry_x": None,
@@ -692,6 +932,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
 
         # Update track data per-frame
         vidData.v_active_tracks[trackId]["last_frame"] = frameData.f_index
+        vidData.v_active_tracks[trackId]["last_time_sec"] = frameData.f_time_sec
         vidData.v_active_tracks[trackId]["confidences"].append(obj["confidence"])
         vidData.v_active_tracks[trackId]["directions"].append(obj["direction"])
 
@@ -754,10 +995,16 @@ def finalize_tracks(frameData, vidData, termination_reason):
 def build_track_summary(trackId, track_data, frameData, vidData, image_path=None, frame_width=640):
     start_frame = track_data.get("start_frame", frameData.f_index)
     end_frame = track_data.get("last_frame", frameData.f_index)
+
+    # Keep export timing on the original frame/fps basis.
+    # The newer stream-time scaling logic can shrink otherwise valid tracks
+    # enough to drop them from export even though tracking saw them correctly.
     start_time_sec = start_frame / vidData.v_fps
     end_time_sec = end_frame / vidData.v_fps
+
     duration_sec = max(0.0, end_time_sec - start_time_sec)
     if duration_sec < MIN_TRACK_DURATION_SEC:
+        vidData.v_tracks_dropped_short += 1
         return None
     
     # Calculate DeepSort average confidence
@@ -815,7 +1062,9 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     if timestamp_confidence and timestamp_confidence == "LOW":
         video_timestamp = f"{video_timestamp}*"
 
-    duration_range = f"{_format_video_timecode(start_time_sec)}-{_format_video_timecode(end_time_sec, round_up=True)}"
+    # Keep duration based only on video frame timing (not OCR clock timestamp).
+    # This is the actual detection window on the video timeline.
+    duration_range = _format_duration_range(start_time_sec, end_time_sec)
     
     return {
         "trackId": trackId,
@@ -829,7 +1078,8 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         "species": species_data[0] if species_data else "No data",
         "species_confidence": f"{species_data[1]:.2f}%" if species_data else "No data",
         "video_timestamp": video_timestamp,
-        "duration_sec": duration_range,
+        "duration_sec": f"{duration_sec:.2f}",
+        "duration_range": duration_range,
         "timestamp_confidence": timestamp_confidence,
         "best_frame": vidData.v_active_tracks.get(trackId, {}).get("best_frame") if trackId in vidData.v_active_tracks else None
     }
@@ -842,6 +1092,12 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
 def dedupe_fragmented_tracks(finished_tracks):
     if not finished_tracks:
         return finished_tracks
+
+    def _normalized_timestamp(track):
+        ts = str(track.get("video_timestamp", "")).strip().rstrip("*")
+        if not ts or ts.lower() == "not detected":
+            return ""
+        return ts
 
     def _pct(track):
         value = track.get("avg_confidence") or track.get("confidence") or "0%"
@@ -865,7 +1121,7 @@ def dedupe_fragmented_tracks(finished_tracks):
     def _same_or_unknown_direction(a, b):
         da = str(a.get("direction", "unknown")).lower()
         db = str(b.get("direction", "unknown")).lower()
-        if da == "unknown" or db == "unknown" or da == "stationary" or db == "stationary":
+        if da in ("unknown", "stationary", "indecisive") or db in ("unknown", "stationary", "indecisive"):
             return True
         return da == db
 
@@ -874,6 +1130,13 @@ def dedupe_fragmented_tracks(finished_tracks):
         if str(a.get("likely_class", "")).lower() != str(b.get("likely_class", "")).lower():
             return False
         if not _same_or_unknown_direction(a, b):
+            return False
+
+        # If both tracks have OCR timestamps and they disagree, keep them separate.
+        # This avoids collapsing distinct fish that pass close together in time.
+        a_ts = _normalized_timestamp(a)
+        b_ts = _normalized_timestamp(b)
+        if a_ts and b_ts and a_ts != b_ts:
             return False
 
         a_start = float(a.get("start_time_sec", 0.0))

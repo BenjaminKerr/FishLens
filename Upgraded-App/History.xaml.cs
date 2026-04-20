@@ -302,21 +302,31 @@ namespace FishLens_App
                 ProcessVideoData(stats, videoName);
                 totalConfidence += ProcessConfidenceData(stats, columns);
 
-                // NEW: Process date/time data (columns: date at 11, time at 12)
+                // Process detection timestamp from CSV.
+                // Current format: column 11 = video_timestamp (single field).
+                // Legacy fallback: columns 11 (date) + 12 (time).
                 DateTime? timestamp = null;
                 if (columns.Length > 11)
                 {
-                    var datePart = columns[11].Trim();
-                    var timePart = columns.Length > 12 ? columns[12].Trim() : string.Empty;
-                    if (!string.IsNullOrEmpty(timePart))
+                    var timestampRaw = columns[11].Trim();
+                    if (!string.IsNullOrEmpty(timestampRaw) && DateTime.TryParse(timestampRaw, out DateTime tsRaw))
                     {
-                        if (DateTime.TryParse($"{datePart} {timePart}", out DateTime ts))
-                            timestamp = ts;
+                        timestamp = tsRaw;
                     }
                     else
                     {
-                        if (DateTime.TryParse(datePart, out DateTime ts2))
-                            timestamp = ts2;
+                        var datePart = columns[11].Trim();
+                        var timePart = columns.Length > 12 ? columns[12].Trim() : string.Empty;
+                        if (!string.IsNullOrEmpty(timePart))
+                        {
+                            if (DateTime.TryParse($"{datePart} {timePart}", out DateTime ts))
+                                timestamp = ts;
+                        }
+                        else
+                        {
+                            if (DateTime.TryParse(datePart, out DateTime ts2))
+                                timestamp = ts2;
+                        }
                     }
                 }
 
@@ -680,19 +690,28 @@ namespace FishLens_App
                     }
                 }
 
-                // timestamp: columns 11 (date) and 12 (time)
+                // timestamp: current format uses column 11 (video_timestamp),
+                // with legacy fallback columns 11 (date) + 12 (time)
                 DateTime? timestamp = null;
                 if (columns.Length > 11)
                 {
-                    var datePart = columns[11].Trim();
-                    var timePart = columns.Length > 12 ? columns[12].Trim() : string.Empty;
-                    if (!string.IsNullOrEmpty(timePart))
+                    var timestampRaw = columns[11].Trim();
+                    if (!string.IsNullOrEmpty(timestampRaw) && DateTime.TryParse(timestampRaw, out DateTime tsRaw))
                     {
-                        if (DateTime.TryParse($"{datePart} {timePart}", out DateTime ts)) timestamp = ts;
+                        timestamp = tsRaw;
                     }
                     else
                     {
-                        if (DateTime.TryParse(datePart, out DateTime ts2)) timestamp = ts2;
+                        var datePart = columns[11].Trim();
+                        var timePart = columns.Length > 12 ? columns[12].Trim() : string.Empty;
+                        if (!string.IsNullOrEmpty(timePart))
+                        {
+                            if (DateTime.TryParse($"{datePart} {timePart}", out DateTime ts)) timestamp = ts;
+                        }
+                        else
+                        {
+                            if (DateTime.TryParse(datePart, out DateTime ts2)) timestamp = ts2;
+                        }
                     }
                 }
 

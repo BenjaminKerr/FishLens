@@ -1125,7 +1125,9 @@ namespace FishLens_App
             string endTime = originalColumns[6].Trim();
             string avgConfidence = originalColumns[7].Trim();
             string species_confidence = originalColumns[10].Trim();
-            string vidTimeStamp = originalColumns[11].Trim();
+            string vidTimeStamp = originalColumns.Length > 11 ? originalColumns[11].Trim() : string.Empty;
+            string durationSec = originalColumns.Length > 12 ? originalColumns[12].Trim() : string.Empty;
+            string durationRange = originalColumns.Length > 13 ? originalColumns[13].Trim() : string.Empty;
 
             // Read and validate confidence values from UI TextBoxes
             // fishPresentConfidence is displayed as percentage (e.g., "88.00%")
@@ -1164,7 +1166,33 @@ namespace FishLens_App
 
             // Build the CSV row
             
-            return $"{videoFile},{trackId},{imagePath},{likelyClass},{confidence},{startTime},{endTime},{avgConfidence},{direction},{species},{species_confidence},{vidTimeStamp}";
+            var rowParts = new List<string>
+            {
+                videoFile,
+                trackId,
+                imagePath,
+                likelyClass,
+                confidence,
+                startTime,
+                endTime,
+                avgConfidence,
+                direction,
+                species,
+                species_confidence,
+                vidTimeStamp
+            };
+
+            // Preserve newer duration columns when present.
+            if (originalColumns.Length > 12)
+            {
+                rowParts.Add(durationSec);
+            }
+            if (originalColumns.Length > 13)
+            {
+                rowParts.Add(durationRange);
+            }
+
+            return string.Join(",", rowParts);
         }
 
         // **************************************************

@@ -113,7 +113,8 @@ namespace FishLens_App.Services
         // Parse row columns according to CSV layout:
         // 0: video_file, 1: track_id, 2: image_path, 3: likely_class, 4: confidence,
         // 5: start_time_sec, 6: end_time_sec, 7: avg_confidence, 8: direction,
-        // 9: species, 10: species_confidence
+        // 9: species, 10: species_confidence, 11: video_timestamp,
+        // 12: duration_sec, 13: duration_range
         public static Video ParseVideoFromColumns(string[] columns)
         {
             var video = new Video();
@@ -165,14 +166,33 @@ namespace FishLens_App.Services
                 video.SpeciesConfidence = 0.0;
             }
             
-            video.Date = columns.Length > 11 ? columns[11].Trim() : string.Empty;
-            video.Time = columns.Length > 12 ? columns[12].Trim() : string.Empty;
-
-            // Try to parse combined date/time if available
-            if (!string.IsNullOrEmpty(video.Date) && !string.IsNullOrEmpty(video.Time))
+            // New format stores OCR timestamp as a single field at column 11.
+            // Legacy format may split date/time across columns 11 and 12.
+            var rawTimestamp = columns.Length > 11 ? columns[11].Trim() : string.Empty;
+            DateTime parsedTimestamp;
+            if (!string.IsNullOrEmpty(rawTimestamp) && DateTime.TryParse(rawTimestamp, out parsedTimestamp))
             {
-                if (DateTime.TryParse($"{video.Date} {video.Time}", out var ts))
-                    video.DetectionTimestamp = ts;
+                video.DetectionTimestamp = parsedTimestamp;
+                video.Date = parsedTimestamp.ToString("yyyy/MM/dd");
+                video.Time = parsedTimestamp.ToString("HH:mm:ss");
+            }
+            else
+            {
+                var legacyDatePart = columns.Length > 11 ? columns[11].Trim() : string.Empty;
+                var legacyTimePart = columns.Length > 12 ? columns[12].Trim() : string.Empty;
+                if (!string.IsNullOrEmpty(legacyDatePart) &&
+                    !string.IsNullOrEmpty(legacyTimePart) &&
+                    DateTime.TryParse($"{legacyDatePart} {legacyTimePart}", out parsedTimestamp))
+                {
+                    video.DetectionTimestamp = parsedTimestamp;
+                    video.Date = parsedTimestamp.ToString("yyyy/MM/dd");
+                    video.Time = parsedTimestamp.ToString("HH:mm:ss");
+                }
+                else
+                {
+                    video.Date = string.Empty;
+                    video.Time = string.Empty;
+                }
             }
             return video;
         }
