@@ -283,14 +283,16 @@ namespace FishLens_App
 
             var (confidence, hideOutput, hideErrors, highContrast, largeText) = page.GetCurrentValues();
 
+            // Always read from App.Settings directly so we compare against the
+            // last *saved* state, not the stale snapshot captured at construction.
+            var saved = App.Settings;
+
             bool hasUnsavedChanges =
-                confidence != (_config.ConfidenceThreshold * 100.0) || //TODO: Threshold is divided by 100 in settings.xaml.cs to save in _config,
-                                                                       //then mutlipled by 100 here to compare. This is a bit error-prone; consider
-                                                                       //saving threshold as a 0-100 value in _config to avoid this.
-                hideOutput != _config.OutputBox ||
-                hideErrors != _config.ErrorBox ||
-                highContrast != _config.HighContrastMode ||
-                largeText != _config.LargeText;
+                confidence != (saved.ConfidenceThreshold * 100.0) ||
+                hideOutput != saved.OutputBox ||
+                hideErrors != saved.ErrorBox ||
+                highContrast != saved.HighContrastMode ||
+                largeText != saved.LargeText;
 
             if (hasUnsavedChanges)
             {
