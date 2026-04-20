@@ -118,7 +118,7 @@ CORNER_ARTIFACT_MAX_SIZE = 0.20   # box must be < 20 % of frame width AND height
 FPS_DEFAULT = 30 
 MAX_EXPORT_PER_VIDEO = 5
 
-# CSV paths â€” determined by the active run folder passed via FISHLENS_RUN_FOLDER env var.
+# CSV paths are determined by the active run folder passed via the FISHLENS_RUN_FOLDER environment variable.
 _RUN_FOLDER = os.getenv("FISHLENS_RUN_FOLDER", "").strip()
 _IS_DEBUG_RUN = _RUN_FOLDER and os.path.basename(_RUN_FOLDER).lower() == "debug"
 
@@ -227,7 +227,7 @@ class VideoData:
         self.v_confidence_sum = 0.0
         self.v_confidence_count = 0 
         self.v_video_timestamp = None
-        self.v_probe_confidence = None   # "HIGH" / "MEDIUM" / None â€” from probe_video_timestamp
+        self.v_probe_confidence = None   # "HIGH" / "MEDIUM" / None from probe_video_timestamp
         self.v_frame_width = 640
 
 
@@ -830,7 +830,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         if is_new_track:
             x1_e, y1_e, x2_e, y2_e = obj["bbox"]
             # Use the probe confidence when the probe already gave us a timestamp.
-            # "HIGH" probe â†’ skip per-frame retries; "MEDIUM"/None â†’ keep retrying.
+            # "HIGH" probe skips per-frame retries; "MEDIUM"/None keeps retrying.
             _probe_conf_val = getattr(vidData, "v_probe_confidence", None)
             if vidData.v_video_timestamp and vidData.v_video_timestamp != "Not detected":
                 initial_conf = _probe_conf_val if _probe_conf_val in ("HIGH", "MEDIUM") else "LOW"
@@ -920,12 +920,12 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
 
     # Track-level corner-artifact filter.
     # A static IR illuminator or lens artifact stays planted in one corner across
-    # the entire video â€” its entry_x and exit_x (the YOLO bbox center) are both
+    # the entire video; its entry_x and exit_x (the YOLO bbox center) are both
     # close to the same frame edge.  A real small fish will move across the frame,
     # so its traversal (|exit_x - entry_x|) will be at least 10% of frame width
     # even if it is physically tiny.  We only reject a track when:
-    #   â€¢ it barely moved horizontally  (traversal < 10% frame width), AND
-    #   â€¢ both entry and exit are within CORNER_ARTIFACT_ZONE of the same side.
+    #   * it barely moved horizontally (traversal < 10% of frame width), and
+    #   * both entry and exit are within CORNER_ARTIFACT_ZONE of the same side.
     traversal = abs(exit_x - entry_x)
     fw = vidData.v_frame_width
     if traversal < fw * 0.10:
@@ -947,7 +947,7 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     # Determine direction.
     # Uses net displacement (exit_x - entry_x) cross-checked against per-frame DeepSort counts.
     # The center-line "left/right side" approach is unreliable because DeepSort's n_init=10 means
-    # entry_x is recorded ~10 frames in â€” a fast fish may already be past center by then.
+    # entry_x is recorded about 10 frames in; a fast fish may already be past center by then.
     net_dx = exit_x - entry_x  # positive = fish moved right (downstream) overall
 
     directions = track_data["directions"]
@@ -956,7 +956,7 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     total_directional = upstream_count + downstream_count
 
     if total_directional == 0:
-        # Only stationary frames â€” no directional movement.
+        # Only stationary frames; there is no directional movement to infer from them.
         overall_direction = directions[-1] if directions else "unknown"
     elif downstream_count > upstream_count:
         # Majority of frames were downstream; net displacement must also be rightward to confirm.
@@ -965,11 +965,11 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     elif upstream_count > downstream_count:
         overall_direction = "upstream" if net_dx <= 0 else "indecisive"
     else:
-        # Equal upstream and downstream frame counts â†’ genuinely ambiguous.
+        # Equal upstream and downstream frame counts mean the result is genuinely ambiguous.
         overall_direction = "indecisive"
 
     # If upstream direction at this location is right-to-left, the DeepSort labels and
-    # net_dx assumptions are inverted â€” flip upstream/downstream on the final result.
+    # net_dx assumptions are inverted, so flip upstream/downstream on the final result.
     if FISHLENS_UPSTREAM_DIRECTION == "right" and overall_direction in ("upstream", "downstream"):
         overall_direction = "downstream" if overall_direction == "upstream" else "upstream"
 
@@ -1063,18 +1063,18 @@ def dedupe_fragmented_tracks(finished_tracks):
         #
         # Problem with comparing overall midpoints: a fish that has already
         # traversed half the frame has a very different average-x from a fish
-        # just entering â€” yet those two tracks might co-exist in time as two
+        # just entering, yet those two tracks might co-exist in time as two
         # _different_ fish.  Comparing midpoints would incorrectly see them
         # as close and allow a merge.
         #
         # Better: estimate where track A actually IS at the moment track B
-        # first appears (linear interpolation along entry_xâ†’exit_x), then
+        # first appears (linear interpolation along entry_x -> exit_x), then
         # compare that to track B's entry position.
         #
         # Two outcomes:
-        #   â€¢ separation > 20% of A's traversal â†’ different fish, block merge
-        #   â€¢ separation â‰¤ 20% of A's traversal AND overlap_ratio >= 0.50
-        #       â†’ ID split of the same fish, force merge
+        #   * separation > 20% of A's traversal means a different fish, so block the merge
+        #   * separation <= 20% of A's traversal and overlap_ratio >= 0.50
+        #     means an ID split of the same fish, so force the merge
         a_ex = a.get("entry_x")
         a_lx = a.get("exit_x")
         b_ex = b.get("entry_x")
@@ -1101,14 +1101,14 @@ def dedupe_fragmented_tracks(finished_tracks):
             if raw_traversal >= 100:
                 spatial_threshold = raw_traversal * 0.20
                 if separation > spatial_threshold:
-                    # Before blocking, check for a dramatic confidence gap â€” a very
+                    # Before blocking, check for a dramatic confidence gap; a very
                     # high-confidence track and a very low-confidence track at the same
                     # position are almost always the same fish re-detected with a new ID.
                     pa = _pct(a)
                     pb = _pct(b)
                     if abs(pa - pb) >= 30.0:
                         return True   # forced merge: confidence gap overrides spatial guard
-                    # Tracks are spatially far apart at the time they overlap â€”
+                    # Tracks are spatially far apart at the time they overlap,
                     # these are two different fish onscreen simultaneously.
                     return False
 
@@ -1158,7 +1158,7 @@ def _append_no_fish_row(video_file_path, video_timestamp):
         "location": FISHLENS_LOCATION,
         "video_timestamp": video_timestamp or "Not detected"
     }
-    # Full-schema row for the master files â€” likely_class="no_fish" is the fish-present indicator.
+    # Full-schema row for the master files; likely_class="no_fish" is the fish-present indicator.
     # Fish-specific fields are left blank so the master CSV has a uniform shape for every video.
     master_row = {k: "" for k in CSV_KEYS}
     master_row["video_file"]      = video_file_path
@@ -1178,7 +1178,7 @@ def _append_no_fish_row(video_file_path, video_timestamp):
                     writer.writeheader()
                 writer.writerow(slim_row)
 
-        # --- Master files (run_master + all_history) â€” full CSV_KEYS schema ---
+        # --- Master files (run_master + all_history) use the full CSV_KEYS schema. ---
         # session_fish + session_no_fish rolls up into run_master;
         # all run_master files roll up into all_history.
         if _RUN_FOLDER and _IS_DEBUG_RUN:

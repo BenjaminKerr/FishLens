@@ -77,7 +77,6 @@ namespace FishLens_App
         // hasn't changed - i.e. the process died unexpectedly, not because we restarted it.
         private int _yoloKillCount;
         private int _totalVideos;
-        private readonly System.Text.StringBuilder _outputBuilder = new System.Text.StringBuilder();
         private readonly System.Text.StringBuilder _errorBuilder = new System.Text.StringBuilder();
         private string _currentVideoStatus = string.Empty;
 
@@ -105,8 +104,16 @@ namespace FishLens_App
         private class DeletionBatch
         {
             public List<(string originalPath, Grid grid, FishLens_App.Models.Video video, string folder)> Items { get; } = new List<(string, Grid, FishLens_App.Models.Video, string)>();
-            // Preserves the full header display text (e.g. "FolderName : Location") keyed by folder name so undo can restore it.
+            // Preserves the full header display text keyed by section key so undo can restore it.
             public Dictionary<string, string> FolderHeaderTexts { get; } = new Dictionary<string, string>();
+        }
+
+        private class LibrarySectionContext
+        {
+            public string SectionKey { get; set; } = string.Empty;
+            public string FolderName { get; set; } = string.Empty;
+            public string FolderPath { get; set; } = string.Empty;
+            public string Run { get; set; } = string.Empty;
         }
 
         #endregion
@@ -412,7 +419,6 @@ namespace FishLens_App
             // NOTE: this await is inside the try so that if a dying ReadYoloOutputLoop from a
             // previous process restart poisons _yoloReadyTcs, the exception is caught here instead
             // of propagating uncaught up through the async void call chain and crashing the app.
-            _outputBuilder.Clear();
             lock (_errorBuilder) _errorBuilder.Clear();
             _currentVideoStatus = "Processing videos, please wait...";
             _totalVideos = 0;
@@ -679,6 +685,148 @@ namespace FishLens_App
             };
         }
 
+        private string ResolveVideoRun(FishLens_App.Models.Video video)
+        {
+            if (!string.IsNullOrWhiteSpace(video?.Run))
+                return video.Run;
+
+            return (Application.Current as App)?.ActiveRun ?? string.Empty;
+        }
+
+        private string BuildLibrarySectionKey(string videoPath, string run)
+        {
+            string folderPath = string.Empty;
+            try
+            {
+                folderPath = Path.GetDirectoryName(videoPath) ?? string.Empty;
+            }
+            catch { }
+
+            return $"{run ?? string.Empty}|{folderPath}";
+        }
+
+        private string GetHeaderTag(string sectionKey) => $"header:{sectionKey}";
+
+        private LibrarySectionContext CreateLibrarySectionContext(string videoPath, string run)
+        {
+            string folderPath = string.Empty;
+            string folderName = _currentFolderName;
+
+            try
+            {
+                folderPath = Path.GetDirectoryName(videoPath) ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(folderPath))
+                    folderName = Path.GetFileName(folderPath);
+            }
+            catch { }
+
+            return new LibrarySectionContext
+            {
+                SectionKey = BuildLibrarySectionKey(videoPath, run),
+                FolderName = folderName ?? string.Empty,
+                FolderPath = folderPath,
+                Run = run ?? string.Empty,
+            };
+        }
+
+        private bool SameVideoIdentity(FishLens_App.Models.Video left, FishLens_App.Models.Video right)
+        {
+            if (left == null || right == null) return false;
+
+            bool pathMatch = !string.IsNullOrWhiteSpace(left.VideoFilePath) &&
+                !string.IsNullOrWhiteSpace(right.VideoFilePath) &&
+                string.Equals(left.VideoFilePath, right.VideoFilePath, StringComparison.OrdinalIgnoreCase);
+            bool fileMatch = string.Equals(left.Name, right.Name, StringComparison.OrdinalIgnoreCase);
+            bool runMatch = string.Equals(ResolveVideoRun(left), ResolveVideoRun(right), StringComparison.OrdinalIgnoreCase);
+
+            return runMatch && (pathMatch || fileMatch);
+        }
+
+        private bool CsvRowMatchesVideo(string[] cols, FishLens_App.Models.Video video, string csvPath)
+        {
+            if (cols.Length == 0 || video == null) return false;
+
+            string storedPath = cols[0].Trim();
+            bool pathMatch = !string.IsNullOrWhiteSpace(video.VideoFilePath) &&
+                string.Equals(storedPath, video.VideoFilePath, StringComparison.OrdinalIgnoreCase);
+            bool nameMatch = string.Equals(Path.GetFileName(storedPath), video.Name, StringComparison.OrdinalIgnoreCase);
+            if (!pathMatch && !nameMatch)
+                return false;
+
+            bool isAllHistory = string.Equals(Path.GetFileName(csvPath), "all_history.csv", StringComparison.OrdinalIgnoreCase);
+            if (!isAllHistory)
+                return true;
+
+            if (cols.Length <= 10)
+                return true;
+
+            return string.Equals(cols[10].Trim(), ResolveVideoRun(video), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private TextBox FindSectionHeaderTextBox(string sectionKey)
+        {
+            foreach (var child in videoList.Children)
+            {
+                if (child is Grid headerGrid &&
+                    headerGrid.Tag is string tag &&
+                    tag == GetHeaderTag(sectionKey))
+                {
+                    return headerGrid.Children.OfType<TextBox>().FirstOrDefault();
+                }
+            }
+
+            return null;
+        }
+
+        private string GetSectionDisplayText(LibrarySectionContext sectionContext, IEnumerable<FishLens_App.Models.Video> seedVideos = null)
+        {
+            var videos = new List<FishLens_App.Models.Video>();
+            if (seedVideos != null)
+                videos.AddRange(seedVideos.Where(v => v != null));
+
+            foreach (var child in videoList.Children)
+            {
+                if (child is Grid rowGrid &&
+                    rowGrid.Tag is string tag &&
+                    tag == sectionContext.SectionKey)
+                {
+                    foreach (var button in rowGrid.Children.OfType<Button>())
+                    {
+                        if (button.DataContext is FishLens_App.Models.Video video)
+                            videos.Add(video);
+                    }
+                }
+            }
+
+            string runText = videos.Select(ResolveVideoRun)
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .SingleOrDefault() ?? sectionContext.Run;
+            string locationText = videos.Select(v => v.Location)
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList() switch
+                {
+                    var list when list.Count == 0 => "--",
+                    var list when list.Count == 1 => list[0],
+                    _ => "Mixed Locations",
+                };
+
+            return $"{(string.IsNullOrWhiteSpace(runText) ? "--" : runText)} : {locationText} : {sectionContext.FolderName}";
+        }
+
+        private void RefreshLibrarySectionHeader(string sectionKey)
+        {
+            var headerTextBox = FindSectionHeaderTextBox(sectionKey);
+            if (headerTextBox == null) return;
+
+            if (headerTextBox.Parent is Grid headerGrid &&
+                headerGrid.DataContext is LibrarySectionContext sectionContext)
+            {
+                headerTextBox.Text = GetSectionDisplayText(sectionContext);
+            }
+        }
+
         // **************************************************
         // Function: BulkUpdateLocationInCsvs
         // Description: Overwrites the location column (col 1) in all run CSVs with a new value.
@@ -739,25 +887,34 @@ namespace FishLens_App
         //              Also flips the direction column (upstream<->downstream) whenever the upstream
         //              direction differs between old and new location.  "indecisive" is left alone.
         // **************************************************
-        private void UpdateLocationForVideosInCsvs(IEnumerable<string> filenames, string newLocation, string activeRun)
+        private void UpdateLocationForVideosInCsvs(IEnumerable<FishLens_App.Models.Video> videos, string newLocation)
         {
-            var fileSet = new HashSet<string>(filenames, StringComparer.OrdinalIgnoreCase);
+            var selectedVideos = videos
+                .Where(v => v != null)
+                .ToList();
+            if (selectedVideos.Count == 0) return;
+
             var dirMap = LoadUpstreamDirectionMap();
             dirMap.TryGetValue(newLocation, out string newUpstreamDir);
 
-            var csvPaths = GetLocationCsvPaths(activeRun);
-
-            foreach (string path in csvPaths)
+            foreach (var runGroup in selectedVideos.GroupBy(v => ResolveVideoRun(v)))
             {
-                if (!File.Exists(path)) continue;
-                try
+                var csvPaths = GetLocationCsvPaths(runGroup.Key);
+                foreach (string path in csvPaths)
                 {
-                    var lines = File.ReadAllLines(path);
-                    for (int i = 1; i < lines.Length; i++)
+                    if (!File.Exists(path)) continue;
+                    try
                     {
-                        var cols = lines[i].Split(',');
-                        if (cols.Length > 1 && fileSet.Contains(Path.GetFileName(cols[0])))
+                        var lines = File.ReadAllLines(path);
+                        bool updated = false;
+                        for (int i = 1; i < lines.Length; i++)
                         {
+                            var cols = lines[i].Split(',');
+                            if (cols.Length <= 1) continue;
+
+                            var matchedVideo = runGroup.FirstOrDefault(v => CsvRowMatchesVideo(cols, v, path));
+                            if (matchedVideo == null) continue;
+
                             // Flip direction if upstream direction differs (fish CSVs only - col 6 exists)
                             if (cols.Length > 6 && newUpstreamDir != null)
                             {
@@ -773,15 +930,37 @@ namespace FishLens_App
 
                             cols[1] = newLocation;
                             lines[i] = string.Join(",", cols);
+                            updated = true;
                         }
+
+                        if (updated)
+                            File.WriteAllLines(path, lines);
                     }
-                    File.WriteAllLines(path, lines);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to update location in {Path}", path);
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to update location in {Path}", path);
+                    }
                 }
             }
+
+            foreach (var video in selectedVideos)
+                video.Location = newLocation;
+
+            bool currentTrackUpdated = false;
+            foreach (var track in _currentTracks)
+            {
+                if (selectedVideos.Any(v => SameVideoIdentity(v, track)))
+                {
+                    track.Location = newLocation;
+                    currentTrackUpdated = true;
+                }
+            }
+
+            foreach (string sectionKey in selectedVideos.Select(v => BuildLibrarySectionKey(v.VideoFilePath, ResolveVideoRun(v))).Distinct(StringComparer.OrdinalIgnoreCase))
+                RefreshLibrarySectionHeader(sectionKey);
+
+            if (currentTrackUpdated && _currentTracks.Count > 0)
+                DisplayTrackInUi(_currentTracks[_currentTrackIndex]);
         }
 
         // **************************************************
@@ -856,9 +1035,6 @@ namespace FishLens_App
             string line;
             while ((line = myProcess.StandardOutput.ReadLine()) != null)
             {
-                if (!line.StartsWith("[PROGRESS]"))
-                    _outputBuilder.AppendLine(line);
-
                 if (line == "[PROGRESS] STARTUP")
                 {
                     Dispatcher.Invoke(() => SetAnalysisStatus("Starting up, please wait..."));
@@ -930,16 +1106,13 @@ namespace FishLens_App
                 }
                 else if (line == "[PROGRESS] DONE")
                 {
-                    string output = _outputBuilder.ToString();
-                    _outputBuilder.Clear();
                     string error;
                     lock (_errorBuilder) { error = _errorBuilder.ToString(); _errorBuilder.Clear(); }
                     Dispatcher.Invoke(() =>
                     {
                         analysisProgressBar.Value = analysisProgressBar.Maximum;
                         HideAnalysisProgress();
-                        if (_checkBoxes?.OutputBox == true || _checkBoxes?.ErrorBox == true)
-                            DisplayProcessOutputIfNeeded(output, error);
+                        DisplayProcessOutputIfNeeded(error);
                     });
                     _processingTcs?.TrySetResult(true);
                 }
@@ -1034,21 +1207,14 @@ namespace FishLens_App
 
         // **************************************************
         // Function: DisplayProcessOutputIfNeeded
-        // Description: Shows process output/errors if present
+        // Description: Shows process errors if present
         // **************************************************
-        private void DisplayProcessOutputIfNeeded(string output, string error)
+        private void DisplayProcessOutputIfNeeded(string error)
         {
-            // Always show if there's an error, otherwise only if checkbox is enabled
             if (!string.IsNullOrEmpty(error))
             {
                 Dispatcher.Invoke(() =>
                     MessageBox.Show($"Python Error:\n{error}", "Process Error", MessageBoxButton.OK, MessageBoxImage.Error)
-                );
-            }
-            else if (_checkBoxes.OutputBox && !string.IsNullOrEmpty(output))
-            {
-                Dispatcher.Invoke(() =>
-                    MessageBox.Show($"Output:\n{output}", "Process Output", MessageBoxButton.OK, MessageBoxImage.Information)
                 );
             }
         }
@@ -1109,11 +1275,10 @@ namespace FishLens_App
                 if (videoDataList.Count > 0)
                 {
                     // Step 3: update detail panel with first video
-                    DisplayDataInUi(videoDataList[0].vid.Name);
+                    DisplayDataInUi(videoDataList[0].vid.Name, videoDataList[0].data.Run, videoDataList[0].vid.FullName);
 
                     // Step 4: create sidebar buttons (sorted by confidence)
-                    string activeLocation = (Application.Current as App)?.ActiveLocation ?? "Unknown";
-                    CreateVideoButtonsList(videoDataList, activeLocation);
+                    CreateVideoButtonsList(videoDataList);
                     RefreshSessionOverview();
                     UpdateActionButtonState();
 
@@ -1149,26 +1314,21 @@ namespace FishLens_App
 
             // Build an undo batch (UI state only - no files are touched).
             var batch = new DeletionBatch();
-            string csvPath = _pathResolver.ResolveCsvScriptPath();
-            foreach (var (grid, path) in selected)
+            foreach (var (grid, path, video) in selected)
             {
-                string fileName = Path.GetFileName(path);
-                var videoData = File.Exists(csvPath)
-                    ? FishLens_App.Services.CsvUtils.ReadVideoFromCsv(csvPath, fileName, path)
-                    : new FishLens_App.Models.Video();
-                string folder = GetFolderTagForPath(path);
-                batch.Items.Add((path, grid, videoData, folder));
+                string sectionKey = grid.Tag as string ?? BuildLibrarySectionKey(path, ResolveVideoRun(video));
+                batch.Items.Add((path, grid, video ?? new FishLens_App.Models.Video(), sectionKey));
 
-                // Capture the folder header display text (includes location) for undo reconstruction.
-                if (!batch.FolderHeaderTexts.ContainsKey(folder))
+                // Capture the full header display text for undo reconstruction.
+                if (!batch.FolderHeaderTexts.ContainsKey(sectionKey))
                 {
                     foreach (var child in videoList.Children)
                     {
-                        if (child is Grid hg && hg.Tag is string ht && ht == $"header:{folder}")
+                        if (child is Grid hg && hg.Tag is string ht && ht == GetHeaderTag(sectionKey))
                         {
                             foreach (var elem in hg.Children)
                             {
-                                if (elem is TextBox tb) { batch.FolderHeaderTexts[folder] = tb.Text; break; }
+                                if (elem is TextBox tb) { batch.FolderHeaderTexts[sectionKey] = tb.Text; break; }
                             }
                             break;
                         }
@@ -1181,7 +1341,7 @@ namespace FishLens_App
             RemoveUiGrids(selected.Select(x => x.grid).ToList());
 
             // If the currently-playing video was hidden, stop the player.
-            foreach (var (_, path) in selected)
+            foreach (var (_, path, _) in selected)
             {
                 if (videoPlayer.Source != null && string.Equals(videoPlayer.Source.LocalPath, path, StringComparison.OrdinalIgnoreCase))
                 {
@@ -1222,9 +1382,9 @@ namespace FishLens_App
             string newLocation = ShowLocationPickerDialog();
             if (newLocation == null) return;
 
-            string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
-            var filenames = selected.Select(x => Path.GetFileName(x.path));
-            UpdateLocationForVideosInCsvs(filenames, newLocation, activeRun);
+            UpdateLocationForVideosInCsvs(selected.Select(x => x.video), newLocation);
+            RefreshSessionOverview();
+            UpdateActionButtonState();
 
             MessageBox.Show(
                 $"Location updated to \"{newLocation}\" for {selected.Count} video(s).",
@@ -1287,24 +1447,29 @@ namespace FishLens_App
         // Function: GetSelectedVideoGrids
         // Description: Returns list of selected video grids and their file paths
         // **************************************************
-        private List<(Grid grid, string path)> GetSelectedVideoGrids()
+        private List<(Grid grid, string path, FishLens_App.Models.Video video)> GetSelectedVideoGrids()
         {
-            var result = new List<(Grid, string)>();
+            var result = new List<(Grid, string, FishLens_App.Models.Video)>();
             foreach (var child in videoList.Children)
             {
                 if (child is Grid g)
                 {
                     CheckBox cb = null;
                     Button btn = null;
+                    FishLens_App.Models.Video video = null;
                     foreach (var elem in g.Children)
                     {
                         if (elem is CheckBox c) cb = c;
-                        if (elem is Button b) btn = b;
+                        if (elem is Button b)
+                        {
+                            btn = b;
+                            video = b.DataContext as FishLens_App.Models.Video;
+                        }
                     }
 
                     if (cb != null && cb.IsChecked == true && btn != null && btn.Tag is string path)
                     {
-                        result.Add((g, path));
+                        result.Add((g, path, video));
                     }
                 }
             }
@@ -1340,11 +1505,11 @@ namespace FishLens_App
             {
                 if (child is Grid headerGrid && headerGrid.Tag is string t && t.StartsWith("header:"))
                 {
-                    string folder = t.Substring("header:".Length);
+                    string sectionKey = t.Substring("header:".Length);
                     bool anyRemaining = false;
                     foreach (var c2 in videoList.Children)
                     {
-                        if (c2 is Grid g2 && g2.Tag is string t2 && t2 == folder)
+                        if (c2 is Grid g2 && g2.Tag is string t2 && t2 == sectionKey)
                         {
                             anyRemaining = true;
                             break;
@@ -1418,7 +1583,7 @@ namespace FishLens_App
                 bool headerExists = false;
                 foreach (var child in videoList.Children)
                 {
-                    if (child is Grid g && g.Tag is string t && t == $"header:{item.folder}")
+                    if (child is Grid g && g.Tag is string t && t == GetHeaderTag(item.folder))
                     {
                         headerExists = true;
                         break;
@@ -1426,12 +1591,9 @@ namespace FishLens_App
                 }
                 if (!headerExists)
                 {
-                    var prev = _currentFolderName;
-                    _currentFolderName = item.folder;
-                    // Restore the original display text (e.g. "FolderName : Location") captured at delete time.
-                    string headerDisplay = batch.FolderHeaderTexts.TryGetValue(item.folder, out var saved) ? saved : item.folder;
-                    CreateFolderHeader(headerDisplay);
-                    _currentFolderName = prev;
+                    var sectionContext = item.grid.DataContext as LibrarySectionContext ??
+                        CreateLibrarySectionContext(item.originalPath, ResolveVideoRun(item.video));
+                    CreateFolderHeader(sectionContext, batch.FolderHeaderTexts.TryGetValue(item.folder, out var saved) ? saved : null);
                 }
 
                 // Re-add the original grid (checkbox state is reset to unchecked).
@@ -1460,6 +1622,10 @@ namespace FishLens_App
                 if (IsVideoFile(vid))
                 {
                     FishLens_App.Models.Video data = GetData(vid.Name, vid.FullName);
+                    if (string.IsNullOrWhiteSpace(data.VideoFilePath))
+                        data.VideoFilePath = vid.FullName;
+                    if (string.IsNullOrWhiteSpace(data.Run))
+                        data.Run = (Application.Current as App)?.ActiveRun ?? string.Empty;
                     videoDataList.Add((vid, data));
                 }
             }
@@ -2487,7 +2653,7 @@ namespace FishLens_App
         //              and one directional emoji per track above it.
         //              The active track is full opacity; inactive tracks are 50% opacity.
         //              Colors: upstream=#2AB5B5 teal, downstream=#E05C5C coral, indecisive=#E8A038 amber.
-        //              Emojis: upstream="<><fish>", downstream="<fish>>", indecisive="<-><fish>"
+        //              The displayed markers use the escaped emoji strings defined below.
         // **************************************************
         private void UpdateFishMarkers()
         {
@@ -2711,26 +2877,31 @@ namespace FishLens_App
         // Function: CreateVideoButtonsList
         // Description: Creates and adds buttons for all videos to sidebar
         // **************************************************
-        private void CreateVideoButtonsList(List<(FileInfo videoFile, FishLens_App.Models.Video videoData)> videoDataList, string location)
+        private void CreateVideoButtonsList(List<(FileInfo videoFile, FishLens_App.Models.Video videoData)> videoDataList)
         {
-            CreateFolderHeader($"{_currentFolderName} : {location}");
-            CreateVideoButtons(videoDataList);
+            if (videoDataList.Count == 0) return;
+
+            string sectionRun = ResolveVideoRun(videoDataList[0].videoData);
+            var sectionContext = CreateLibrarySectionContext(videoDataList[0].videoFile.FullName, sectionRun);
+            CreateFolderHeader(sectionContext, GetSectionDisplayText(sectionContext, videoDataList.Select(x => x.videoData)));
+            CreateVideoButtons(videoDataList, sectionContext);
         }
 
         // **************************************************
         // Function: CreateFolderHeader
         // Description: Creates folder name display with checkbox and separator
         // **************************************************
-        private void CreateFolderHeader(string displayText)
+        private void CreateFolderHeader(LibrarySectionContext sectionContext, string displayText = null)
         {
             Grid folderNameGrid = new Grid();
             folderNameGrid.HorizontalAlignment = HorizontalAlignment.Stretch;
             folderNameGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             folderNameGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            folderNameGrid.DataContext = sectionContext;
 
-            // Folder name (includes location suffix, e.g. "FolderName : Location")
+            // Folder name (includes run and location context)
             TextBox textBox = new TextBox();
-            textBox.Text = displayText;
+            textBox.Text = displayText ?? GetSectionDisplayText(sectionContext);
             textBox.Foreground = new SolidColorBrush(Colors.White);
             textBox.Background = Brushes.Transparent;
             textBox.BorderThickness = new Thickness(0);
@@ -2741,16 +2912,15 @@ namespace FishLens_App
             folderCheckBox.Padding = new Thickness(5);
             folderCheckBox.VerticalAlignment = VerticalAlignment.Center;
 
-            // capture folder name at time of header creation so handlers affect only this folder's videos
-            string thisFolder = _currentFolderName;
-            folderNameGrid.Tag = $"header:{thisFolder}";
+            string thisSectionKey = sectionContext.SectionKey;
+            folderNameGrid.Tag = GetHeaderTag(thisSectionKey);
 
             // When folder checkbox toggled, check/uncheck all video checkboxes belonging to this folder
             folderCheckBox.Checked += (s, e) =>
             {
                 foreach (var child in videoList.Children)
                 {
-                    if (child is Grid g && g.Tag is string t && t == thisFolder)
+                    if (child is Grid g && g.Tag is string t && t == thisSectionKey)
                     {
                         foreach (var elem in g.Children)
                         {
@@ -2768,7 +2938,7 @@ namespace FishLens_App
             {
                 foreach (var child in videoList.Children)
                 {
-                    if (child is Grid g && g.Tag is string t && t == thisFolder)
+                    if (child is Grid g && g.Tag is string t && t == thisSectionKey)
                     {
                         foreach (var elem in g.Children)
                         {
@@ -2798,13 +2968,13 @@ namespace FishLens_App
         // Function: CreateVideoButtons
         // Description: Creates individual video buttons with checkboxes
         // **************************************************
-        private void CreateVideoButtons(List<(FileInfo videoFile, FishLens_App.Models.Video videoData)> videoDataList)
+        private void CreateVideoButtons(List<(FileInfo videoFile, FishLens_App.Models.Video videoData)> videoDataList, LibrarySectionContext sectionContext)
         {
             foreach (var (videoFile, videoData) in videoDataList)
             {
                 Grid grid = new Grid();
-                // tag this grid with the current folder name so folder header can target it
-                grid.Tag = _currentFolderName;
+                grid.Tag = sectionContext.SectionKey;
+                grid.DataContext = sectionContext;
                 grid.HorizontalAlignment = HorizontalAlignment.Stretch;
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -2836,6 +3006,12 @@ namespace FishLens_App
         private Button CreateSingleVideoButton(FileInfo videoFile, FishLens_App.Models.Video videoData)
         {
             bool isLowConfidence = IsLowConfidence(videoData.AvgConfidence);
+            if (string.IsNullOrWhiteSpace(videoData.VideoFilePath))
+                videoData.VideoFilePath = videoFile.FullName;
+            if (string.IsNullOrWhiteSpace(videoData.Run))
+                videoData.Run = (Application.Current as App)?.ActiveRun ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(videoData.Name))
+                videoData.Name = videoFile.Name;
 
             return new Button
             {
@@ -2861,6 +3037,21 @@ namespace FishLens_App
         private bool IsLowConfidence(double confidence)
         {
             return confidence < (_config?.ConfidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD);
+        }
+
+        public void RefreshLibraryConfidenceStyles()
+        {
+            foreach (var child in videoList.Children)
+            {
+                if (child is not Grid rowGrid)
+                    continue;
+
+                foreach (var button in rowGrid.Children.OfType<Button>())
+                {
+                    if (button.DataContext is FishLens_App.Models.Video video)
+                        button.Style = CreateButtonStyle(IsLowConfidence(video.AvgConfidence));
+                }
+            }
         }
 
         #endregion

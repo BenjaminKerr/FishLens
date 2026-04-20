@@ -1,4 +1,4 @@
-﻿<Page x:Class="FishLens_App.Settings"
+<Page x:Class="FishLens_App.Settings"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Title="Settings"
@@ -56,13 +56,13 @@
                         Padding="20"
                         Margin="0,0,0,30">
                     <StackPanel>
-                        <TextBlock Text="Confidence Threshold for Data Entry" 
+                        <TextBlock Text="Low-Confidence Highlight Threshold"
                                    FontSize="{DynamicResource BaseFontSize}"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource PrimaryText}"
                                    Margin="0,0,0,8"/>
 
-                        <TextBlock Text="Minimum confidence level required to automatically populate analysis fields" 
+                        <TextBlock Text="Detections below this percent stay populated, but they get the red low-confidence tint in the video library."
                                    FontSize="{DynamicResource BaseFontSize}"
                                    Foreground="{DynamicResource SecondaryText}"
                                    Margin="0,0,0,10"
@@ -79,25 +79,30 @@
                                     Minimum="0"
                                     Maximum="100"
                                     Value="75"
-                                    TickFrequency="5"
+                                    TickFrequency="1"
                                     IsSnapToTickEnabled="True"
                                     IsMoveToPointEnabled="True"
                                     VerticalAlignment="Center"
                                     Margin="0,0,15,0"
+                                    SmallChange="1"
+                                    LargeChange="5"
                                     ValueChanged="ConfidenceThreshold_ValueChanged"/>
 
-                            <Border Grid.Column="1"
-                                    Background="{DynamicResource HeaderBackground}"
-                                    CornerRadius="4"
-                                    Padding="12,6"
-                                    MinWidth="60">
-                                <TextBlock x:Name="confidenceValue" 
-                                           Text="75%"
-                                           FontSize="{DynamicResource BaseFontSize}"
-                                           FontWeight="SemiBold"
-                                           Foreground="{DynamicResource OnAccentForeground}"
-                                           HorizontalAlignment="Center"/>
-                            </Border>
+                            <TextBox x:Name="confidenceValueBox"
+                                     Grid.Column="1"
+                                     Text="75"
+                                     Width="56"
+                                     Padding="8,4"
+                                     FontSize="{DynamicResource BaseFontSize}"
+                                     FontWeight="SemiBold"
+                                     Foreground="{DynamicResource PrimaryColorBrush}"
+                                     Background="{DynamicResource PageBackgroundBrush}"
+                                     BorderBrush="{DynamicResource BorderBrush}"
+                                     HorizontalContentAlignment="Center"
+                                     VerticalContentAlignment="Center"
+                                     VerticalAlignment="Center"
+                                     LostFocus="ConfidenceValueBox_LostFocus"
+                                     KeyDown="ConfidenceValueBox_KeyDown"/>
                         </Grid>
                     </StackPanel>
                 </Border>
@@ -291,34 +296,6 @@
                            Margin="0,0,0,15"/>
 
                 <StackPanel>
-                    <CheckBox x:Name="hideOutput"
-                              Content="Redirect Output Messages"
-                              FontSize="{DynamicResource BaseFontSize}"
-                              Foreground="{DynamicResource PrimaryText}"
-                              Margin="0,0,0,0"
-                              IsChecked="False"
-                              Click="ToggleOutputMessages"/>
-
-                    <TextBlock Text="Show output messages as a pop-up window at the end of the program instead of in the terminal."
-                               FontSize="{DynamicResource BaseFontSize}"
-                               Foreground="{DynamicResource SecondaryText}"
-                               Margin="0,0,0,15"
-                               TextWrapping="Wrap"/>
-
-                    <CheckBox x:Name="hideErrors"
-                              Content="Redirect Error Messages"
-                              FontSize="{DynamicResource BaseFontSize}"
-                              Foreground="{DynamicResource PrimaryText}"
-                              Margin="0,0,0,0"
-                              IsChecked="False"
-                              Click="ToggleErrorMessages"/>
-
-                    <TextBlock Text="Show error messages as a pop-up window at the end of the program instead of in the terminal."
-                               FontSize="{DynamicResource BaseFontSize}"
-                               Foreground="{DynamicResource SecondaryText}"
-                               Margin="0,0,0,15"
-                               TextWrapping="Wrap"/>
-
                     <CheckBox x:Name="enableFastMode"
                               Content="Enable Fast Mode"
                               FontSize="{DynamicResource BaseFontSize}"
@@ -338,7 +315,8 @@
                               FontSize="{DynamicResource BaseFontSize}"
                               Foreground="{DynamicResource PrimaryText}"
                               Margin="0,0,0,0"
-                              IsChecked="False"/>
+                              IsChecked="False"
+                              Click="SettingsControl_Changed"/>
 
                     <TextBlock Text="When enabled, videos that were previously analyzed will be processed again. Use this after fixing data or changing settings that affect accuracy."
                                FontSize="{DynamicResource BaseFontSize}"
@@ -364,13 +342,15 @@
                                   Content="High contrast mode"
                                   FontSize="{DynamicResource BaseFontSize}"
                                   Foreground="{DynamicResource PrimaryText}"
-                                  Margin="0,0,0,15"/>
+                                  Margin="0,0,0,15"
+                                  Click="SettingsControl_Changed"/>
 
                         <CheckBox x:Name="largeText"
                                   Content="Use larger text throughout the application"
                                   FontSize="{DynamicResource BaseFontSize}"
                                   Foreground="{DynamicResource PrimaryText}"
-                                  Margin="0,0,0,15"/>
+                                  Margin="0,0,0,15"
+                                  Click="SettingsControl_Changed"/>
                     </StackPanel>
                 </Border>
 
@@ -963,8 +943,14 @@
                 Padding="30,20">
             <StackPanel Orientation="Horizontal" 
                         HorizontalAlignment="Right">
+                <TextBlock x:Name="saveStatusText"
+                           Visibility="Collapsed"
+                           FontSize="{DynamicResource BaseFontSize}"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           Margin="0,0,16,0"/>
 
-                        <Button x:Name="saveSettingsButton"
+                <Button x:Name="saveSettingsButton"
                         Content="Save Settings" 
                         Click="SaveSettings_Click"
                         Background="{DynamicResource HeaderBackground}"

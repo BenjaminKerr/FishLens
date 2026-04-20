@@ -41,6 +41,8 @@ namespace FishLens_App
         private AppConfiguration _config;
         private Dictionary<int, (string Username, int RoleId, string email)> _originalUserData = new();
         private bool _loadingSettings = false;
+        private bool _hasUnsavedSettingsChanges = false;
+        private bool _isUpdatingConfidenceControls = false;
 
         public List<Role> Roles { get; set; } = new List<Role>();
         private List<User> _users = new List<User>();
@@ -163,9 +165,45 @@ namespace FishLens_App
 
         private void ConfidenceThreshold_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
         {
-            if (confidenceValue == null) return;
+            if (confidenceValueBox == null || _isUpdatingConfidenceControls) return;
             var percent = (int)Math.Round(e.NewValue);
-            confidenceValue.Text = $"{percent}%";
+            _isUpdatingConfidenceControls = true;
+            confidenceValueBox.Text = percent.ToString();
+            _isUpdatingConfidenceControls = false;
+            MarkSettingsDirty();
+        }
+
+        private void ConfidenceValueBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            ApplyConfidenceThresholdFromTextBox();
+        }
+
+        private void ConfidenceValueBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter)
+                return;
+
+            ApplyConfidenceThresholdFromTextBox();
+            e.Handled = true;
+        }
+
+        private void ApplyConfidenceThresholdFromTextBox()
+        {
+            if (confidenceThreshold == null || confidenceValueBox == null)
+                return;
+
+            string raw = (confidenceValueBox.Text ?? string.Empty).Trim().TrimEnd('%');
+            if (!double.TryParse(raw, out double value))
+                value = confidenceThreshold.Value;
+
+            value = Math.Max(0, Math.Min(100, Math.Round(value)));
+
+            _isUpdatingConfidenceControls = true;
+            confidenceThreshold.Value = value;
+            confidenceValueBox.Text = $"{value:F0}";
+            _isUpdatingConfidenceControls = false;
+
+            MarkSettingsDirty();
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
@@ -199,8 +237,6 @@ namespace FishLens_App
                 _config.ConfidenceThreshold = (confidenceThreshold?.Value ?? 0) / 100.0;
 
                 // Ensure CheckBoxToggle is up to date
-                _checkBoxes.ErrorBox = hideErrors.IsChecked ?? false;
-                _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
                 bool prevFastMode = _checkBoxes.FastMode;
                 _checkBoxes.FastMode = enableFastMode.IsChecked ?? false;
                 _checkBoxes.ForceReanalyze = forceReanalyze.IsChecked ?? false;
@@ -216,8 +252,6 @@ namespace FishLens_App
                 var settingsObj = new
                 {
                     ConfidenceThreshold = _config.ConfidenceThreshold,
-                    OutputBox = _checkBoxes.OutputBox,
-                    ErrorBox = _checkBoxes.ErrorBox,
                     FastMode = _checkBoxes.FastMode,
                     ForceReanalyze = _checkBoxes.ForceReanalyze,
                     HighContrastMode = _config.HighContrastMode,
@@ -230,10 +264,7 @@ namespace FishLens_App
 
                 string projectRoot = _pathResolver.ResolveProjectRoot();
                 string configPath = System.IO.Path.Combine(projectRoot ?? string.Empty, "appsettings.json");
-                var options = new JsonSerializerOptions { WriteIndented = true };
-                File.WriteAllText(configPath, JsonSerializer.Serialize(settingsObj, options));
-
-                MessageBox.Show("Settings saved.", "Saved", MessageBoxButton.OK, MessageBoxImage.Information);
+                SaveSettingsFile(configPath, settingsObj);
                 _logger.LogInformation("Settings saved to {path}", configPath);
 
                 // Apply certain settings immediately to main window
@@ -248,6 +279,8 @@ namespace FishLens_App
                 if (appInst != null)
                     appInst.ActiveLocation = _config.ActiveLocation;
                 App.RaiseLocationChanged();
+
+                SetSaveStatusSaved();
             }
             catch (Exception ex)
             {
@@ -256,20 +289,18 @@ namespace FishLens_App
             }
         }
 
-        private void ToggleErrorMessages(object sender, RoutedEventArgs e)
-        {
-            _checkBoxes.ErrorBox = hideErrors.IsChecked ?? false;
-        }
-
-        private void ToggleOutputMessages(object sender, RoutedEventArgs e)
-        {
-            _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
-        }
-
         private void ToggleFastMode(object sender, RoutedEventArgs e)
         {
             if (!_loadingSettings)
+            {
                 _checkBoxes.FastMode = enableFastMode.IsChecked ?? false;
+                MarkSettingsDirty();
+            }
+        }
+
+        private void SettingsControl_Changed(object sender, RoutedEventArgs e)
+        {
+            MarkSettingsDirty();
         }
 
         private void AddLocation_Click(object sender, RoutedEventArgs e)
@@ -293,6 +324,7 @@ namespace FishLens_App
             newLocationName.Text = string.Empty;
             newLocationDirection.SelectedIndex = 0;
             RefreshLocationsPanel();
+            MarkSettingsDirty();
         }
 
         private void DeleteLocation_Click(object sender, RoutedEventArgs e)
@@ -314,6 +346,7 @@ namespace FishLens_App
                     }
 
                     RefreshLocationsPanel();
+                    MarkSettingsDirty();
                 }
             }
         }
@@ -323,10 +356,9 @@ namespace FishLens_App
         #region Private Methods
 
         // ****************************************************************
-        // Function: Signup
+        // Function: SignUp
         // Description: Creates username and password credentials for signin with salting
-        //     
-        // Notes: Temporarily stores into Kaharra SQL
+        // Notes: Writes the new user into the temporary Kaharra SQL-backed flow.
         private bool SignUp(string username, string email, string password, int roleId)
         {
             bool success = false;
@@ -361,8 +393,7 @@ namespace FishLens_App
 
         // ****************************************************************
         // Function: LoadAll
-        // Description: Function to cleanup code Initializes UI from current state / persisted settings / database values
-        // Notes: N/A
+        // Description: Initializes the page from app state, persisted settings, and database-backed data.
         private void LoadAll()
         { 
             try
@@ -374,6 +405,7 @@ namespace FishLens_App
                 LoadUsers();
                 LoadPageVisibility();
                 LoadSettings();
+                ClearSaveStatus();
             }
             catch (Exception ex)
             {
@@ -620,10 +652,10 @@ namespace FishLens_App
             try
             {
             // Set defaults from current runtime state
+            _isUpdatingConfidenceControls = true;
             confidenceThreshold.Value = Math.Round((_config?.ConfidenceThreshold ?? 0.7) * 100);
-            confidenceValue.Text = $"{(int)Math.Round((_config?.ConfidenceThreshold ?? 0.7) * 100)}%";
-            hideErrors.IsChecked = _checkBoxes.ErrorBox;
-            hideOutput.IsChecked = _checkBoxes.OutputBox;
+            confidenceValueBox.Text = $"{(int)Math.Round((_config?.ConfidenceThreshold ?? 0.7) * 100)}";
+            _isUpdatingConfidenceControls = false;
             enableFastMode.IsChecked = _checkBoxes.FastMode;
             forceReanalyze.IsChecked = _checkBoxes.ForceReanalyze;
 
@@ -642,20 +674,10 @@ namespace FishLens_App
                 {
                     double conf = confEl.GetDouble();
                     _config.ConfidenceThreshold = conf;
+                    _isUpdatingConfidenceControls = true;
                     confidenceThreshold.Value = Math.Round(conf * 100);
-                    confidenceValue.Text = $"{(int)Math.Round(conf * 100)}%";
-                }
-
-                if (root.TryGetProperty("OutputBox", out var outEl) && outEl.ValueKind == JsonValueKind.True || outEl.ValueKind == JsonValueKind.False)
-                {
-                    _checkBoxes.OutputBox = outEl.GetBoolean();
-                    hideOutput.IsChecked = _checkBoxes.OutputBox;
-                }
-
-                if (root.TryGetProperty("ErrorBox", out var errEl) && errEl.ValueKind == JsonValueKind.True || errEl.ValueKind == JsonValueKind.False)
-                {
-                    _checkBoxes.ErrorBox = errEl.GetBoolean();
-                    hideErrors.IsChecked = _checkBoxes.ErrorBox;
+                    confidenceValueBox.Text = $"{(int)Math.Round(conf * 100)}";
+                    _isUpdatingConfidenceControls = false;
                 }
 
                 if (root.TryGetProperty("HighContrastMode", out var hcEl) && (hcEl.ValueKind == JsonValueKind.True || hcEl.ValueKind == JsonValueKind.False))
@@ -687,11 +709,11 @@ namespace FishLens_App
                     _config.ActiveLocation = alEl.GetString() ?? "Unknown";
                 }
 
-                if (root.TryGetProperty("ActiveRun", out var arEl) && arEl.ValueKind == JsonValueKind.String)
-                {
-                    _config.ActiveRun = arEl.GetString() ?? string.Empty;
-                    var app = Application.Current as App;
-                    if (app != null) app.ActiveRun = _config.ActiveRun;
+            if (root.TryGetProperty("ActiveRun", out var arEl) && arEl.ValueKind == JsonValueKind.String)
+            {
+                _config.ActiveRun = arEl.GetString() ?? string.Empty;
+                var app = Application.Current as App;
+                if (app != null) app.ActiveRun = _config.ActiveRun;
                 }
 
                 if (root.TryGetProperty("Runs", out var runsEl) && runsEl.ValueKind == JsonValueKind.Array)
@@ -732,6 +754,7 @@ namespace FishLens_App
             finally
             {
                 _loadingSettings = false;
+                _hasUnsavedSettingsChanges = false;
             }
         }
 
@@ -800,6 +823,7 @@ namespace FishLens_App
                     main.Dispatcher.Invoke(() =>
                     {
                         ThemeHelper.ApplyHighContrastMode(_config.HighContrastMode);
+                        main.RefreshLibraryConfidenceStyles();
                     });
 
                     // Apply large text setting
@@ -826,7 +850,8 @@ namespace FishLens_App
 
         private void UsersGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-
+            // Intentionally left blank. The grid still raises SelectionChanged, but the page
+            // does not currently perform any action when a row becomes selected.
         }
 
         #region Run Management
@@ -879,6 +904,7 @@ namespace FishLens_App
             PersistRuns();
             LoadRunsDropdown();
             UpdateRunStatusText();
+            UpdateSaveStatusAfterImmediateRunPersist();
         }
 
         // ****************************************************************
@@ -909,6 +935,7 @@ namespace FishLens_App
             PersistRuns();
             UpdateRunStatusText();
             App.RaiseRunChanged();
+            UpdateSaveStatusAfterImmediateRunPersist();
         }
 
         // ****************************************************************
@@ -942,6 +969,7 @@ namespace FishLens_App
                     runEntry.Locked = false;
                     PersistRuns();
                     UpdateRunStatusText();
+                    UpdateSaveStatusAfterImmediateRunPersist();
                 }
                 return;
             }
@@ -967,6 +995,7 @@ namespace FishLens_App
 
             PersistRuns();
             UpdateRunStatusText();
+            UpdateSaveStatusAfterImmediateRunPersist();
         }
 
         // ****************************************************************
@@ -1049,13 +1078,64 @@ namespace FishLens_App
                 dict["ActiveRun"] = (object)_config.ActiveRun;
                 dict["Runs"] = (object)_config.Runs.Select(r => new { r.Name, r.Locked }).ToList();
 
-                var options = new JsonSerializerOptions { WriteIndented = true };
-                File.WriteAllText(configPath, JsonSerializer.Serialize(dict, options));
+                SaveSettingsFile(configPath, dict);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to persist runs");
             }
+        }
+
+        private static void SaveSettingsFile(string configPath, object settingsObj)
+        {
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            File.WriteAllText(configPath, JsonSerializer.Serialize(settingsObj, options));
+        }
+
+        private void MarkSettingsDirty()
+        {
+            if (_loadingSettings)
+                return;
+
+            _hasUnsavedSettingsChanges = true;
+            UpdateSaveStatus("\u26A0 Unsaved Changes", Brushes.DarkOrange);
+        }
+
+        private void SetSaveStatusSaved()
+        {
+            _hasUnsavedSettingsChanges = false;
+            UpdateSaveStatus("\u2714 Saved Changes", Brushes.ForestGreen);
+        }
+
+        private void UpdateSaveStatusAfterImmediateRunPersist()
+        {
+            if (_hasUnsavedSettingsChanges)
+            {
+                UpdateSaveStatus("\u26A0 Unsaved Changes", Brushes.DarkOrange);
+                return;
+            }
+
+            SetSaveStatusSaved();
+        }
+
+        private void ClearSaveStatus()
+        {
+            _hasUnsavedSettingsChanges = false;
+            if (saveStatusText != null)
+            {
+                saveStatusText.Text = string.Empty;
+                saveStatusText.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void UpdateSaveStatus(string text, Brush brush)
+        {
+            if (saveStatusText == null)
+                return;
+
+            saveStatusText.Text = text;
+            saveStatusText.Foreground = brush;
+            saveStatusText.Visibility = Visibility.Visible;
         }
 
         #endregion

@@ -51,7 +51,7 @@ namespace FishLens_App
             string error = null;
 
 
-            //TODO: Make this a helper function
+            // Inline validation is kept here for now so the account-creation rules stay easy to find.
             if (string.IsNullOrWhiteSpace(orgName))
                 error = "Please enter an organization name.";
             else if (string.IsNullOrWhiteSpace(email))

@@ -1,4 +1,4 @@
-﻿<Page x:Class="FishLens_App.History"
+<Page x:Class="FishLens_App.History"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Title="History"
@@ -222,20 +222,31 @@
                                     Minimum="0"
                                     Maximum="100"
                                     Value="0"
-                                    TickFrequency="10"
-                                    IsSnapToTickEnabled="True"/>
+                                    TickFrequency="1"
+                                    IsSnapToTickEnabled="True"
+                                    SmallChange="1"
+                                    LargeChange="5"
+                                    ValueChanged="ConfidenceSlider_ValueChanged"/>
 
-                            <TextBlock x:Name="confidenceValueText"
-                                       Grid.Column="1"
-                                       Text="0%"
-                                       FontSize="{DynamicResource BaseFontSize}"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource PrimaryColorBrush}"
-                                       Margin="10,0,0,0"
-                                       VerticalAlignment="Center"/>
+                            <TextBox x:Name="confidenceValueBox"
+                                     Grid.Column="1"
+                                     Text="0"
+                                     Width="56"
+                                     Padding="8,4"
+                                     FontSize="{DynamicResource BaseFontSize}"
+                                     FontWeight="SemiBold"
+                                     Foreground="{DynamicResource PrimaryColorBrush}"
+                                     Background="{DynamicResource PageBackgroundBrush}"
+                                     BorderBrush="{DynamicResource BorderColorBrush}"
+                                     HorizontalContentAlignment="Center"
+                                     VerticalContentAlignment="Center"
+                                     Margin="10,0,0,0"
+                                     VerticalAlignment="Center"
+                                     LostFocus="ConfidenceValueBox_LostFocus"
+                                     KeyDown="ConfidenceValueBox_KeyDown"/>
                         </Grid>
 
-                        <TextBlock Text="Filter detections below this confidence level" 
+                        <TextBlock Text="Show detections at or above this confidence level"
                                    FontSize="{DynamicResource BaseFontSize}"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    Margin="0,0,0,20"/>

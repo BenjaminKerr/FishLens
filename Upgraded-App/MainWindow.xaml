@@ -132,7 +132,7 @@ Height="70">
                                      Maximum="100"
                                      Value="0"
                                      Background="{DynamicResource CardBackground}"
-                                     Foreground="{DynamicResource AccentBrush}"/>
+                                     Foreground="#E8A038"/>
                     </StackPanel>
                 </Border>
 

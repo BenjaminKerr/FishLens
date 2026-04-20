@@ -8,8 +8,6 @@
     // **************************************************
     public class CheckBoxToggle
     {
-        public bool OutputBox { get; set; }
-        public bool ErrorBox { get; set; }
         public bool FastMode { get; set; }
         public bool ForceReanalyze { get; set; }
     }

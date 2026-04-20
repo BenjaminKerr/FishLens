@@ -117,6 +117,7 @@ namespace FishLens_App
             {
                 string allHistoryDir = Path.Combine(GetProjectRoot(), "All History");
                 Directory.CreateDirectory(allHistoryDir);
+                CleanupFishImages();
 
                 EnsureRunStorageExists("debug", isDebugRun: true);
                 foreach (var run in Configuration.Runs.Where(r => !string.IsNullOrWhiteSpace(r.Name)))
@@ -146,6 +147,71 @@ namespace FishLens_App
         {
             if (File.Exists(path)) return;
             File.WriteAllText(path, header + Environment.NewLine);
+        }
+
+        private static void CleanupFishImages()
+        {
+            try
+            {
+                string fishImagesDir = Path.Combine(GetProjectRoot(), "fish_images");
+                if (!Directory.Exists(fishImagesDir))
+                    return;
+
+                DateTime cutoffUtc = DateTime.UtcNow.AddDays(-3);
+                var imageFiles = Directory
+                    .EnumerateFiles(fishImagesDir, "*.jpg", SearchOption.AllDirectories)
+                    .Select(path => new FileInfo(path))
+                    .Where(file => file.Exists)
+                    .OrderByDescending(file => file.LastWriteTimeUtc)
+                    .ToList();
+
+                foreach (var file in imageFiles.Where(file => file.LastWriteTimeUtc < cutoffUtc))
+                    TryDeleteFile(file);
+
+                imageFiles = Directory
+                    .EnumerateFiles(fishImagesDir, "*.jpg", SearchOption.AllDirectories)
+                    .Select(path => new FileInfo(path))
+                    .Where(file => file.Exists)
+                    .OrderByDescending(file => file.LastWriteTimeUtc)
+                    .ToList();
+
+                const int maxImages = 50;
+                foreach (var file in imageFiles.Skip(maxImages))
+                    TryDeleteFile(file);
+
+                RemoveEmptyDirectories(fishImagesDir);
+            }
+            catch { /* non-critical */ }
+        }
+
+        private static void TryDeleteFile(FileInfo file)
+        {
+            try
+            {
+                if (file.Exists)
+                    file.Delete();
+            }
+            catch
+            {
+                // Best effort only. If a file is locked or in use, leave it alone.
+            }
+        }
+
+        private static void RemoveEmptyDirectories(string rootPath)
+        {
+            try
+            {
+                foreach (string directory in Directory.GetDirectories(rootPath))
+                {
+                    RemoveEmptyDirectories(directory);
+                    if (!Directory.EnumerateFileSystemEntries(directory).Any())
+                        Directory.Delete(directory, recursive: false);
+                }
+            }
+            catch
+            {
+                // Non-critical cleanup only.
+            }
         }
 
         private static string GetProjectRoot()

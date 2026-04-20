@@ -6,6 +6,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
@@ -35,8 +36,10 @@ namespace FishLens_App
         private double _filterMinConfidence = 0.0;
         private string _currentGroupBy = "species"; // "species", "datetime", "location"
         private string _currentReportStyle = "Standard Report";
+        private Dictionary<string, string[]> _lastGroupedLinesByRun = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        private bool _isUpdatingConfidenceControls;
 
-        // Frozen brush cache � avoids creating new SolidColorBrush objects on every report render
+        // Frozen brush cache avoids creating new SolidColorBrush objects on every report render.
         private static readonly Dictionary<string, SolidColorBrush> _brushCache = new();
         private static SolidColorBrush Brush(string hex)
         {
@@ -48,6 +51,8 @@ namespace FishLens_App
         }
         private string[] _lastFilteredLines = Array.Empty<string>();
         private ReportStatistics _lastStats;
+
+        private bool IsAllHistoryScope => string.Equals(_filterRun, "All", StringComparison.OrdinalIgnoreCase);
 
 
         #endregion
@@ -191,28 +196,73 @@ namespace FishLens_App
             }
         }
 
-        // Additional button handlers and filter helpers moved into Button Event Handlers region
-        // GroupBy removed from UI; keep default grouping behavior (species)
-
         // **************************************************
         // Function: ConfidenceSlider_ValueChanged
         // Description: Updates confidence filter and display when slider changes
-        public void ConfidenceSlider_ValueChanged(object sender, RoutedPropertyChangedEventHandler<double> e)
+        public void ConfidenceSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (confidenceSlider == null || confidenceValueText == null)
+            if (confidenceSlider == null || confidenceValueBox == null || _isUpdatingConfidenceControls)
                 return;
 
             _filterMinConfidence = confidenceSlider.Value / 100.0; // Convert to 0-1 range
-            confidenceValueText.Text = $"{confidenceSlider.Value:F0}%";
+            _isUpdatingConfidenceControls = true;
+            confidenceValueBox.Text = $"{confidenceSlider.Value:F0}";
+            _isUpdatingConfidenceControls = false;
+
+            if (reportPanel != null && reportPanel.Children.Count > 0)
+                GenerateReportClick(sender, new RoutedEventArgs());
+        }
+
+        // **************************************************
+        // Function: ConfidenceValueBox_LostFocus
+        // Description: Applies a typed confidence threshold when the textbox loses focus
+        public void ConfidenceValueBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            ApplyConfidenceValueFromTextBox();
+        }
+
+        // **************************************************
+        // Function: ConfidenceValueBox_KeyDown
+        // Description: Applies a typed confidence threshold when the user presses Enter
+        public void ConfidenceValueBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter)
+                return;
+
+            ApplyConfidenceValueFromTextBox();
+            e.Handled = true;
+        }
+
+        // **************************************************
+        // Function: ApplyConfidenceValueFromTextBox
+        // Description: Parses the typed percentage and syncs it back to the slider
+        private void ApplyConfidenceValueFromTextBox()
+        {
+            if (confidenceSlider == null || confidenceValueBox == null)
+                return;
+
+            string raw = (confidenceValueBox.Text ?? string.Empty).Trim().TrimEnd('%');
+            if (!double.TryParse(raw, out double value))
+                value = confidenceSlider.Value;
+
+            value = Math.Max(0, Math.Min(100, Math.Round(value)));
+
+            _isUpdatingConfidenceControls = true;
+            confidenceSlider.Value = value;
+            confidenceValueBox.Text = $"{value:F0}";
+            _isUpdatingConfidenceControls = false;
+
+            _filterMinConfidence = value / 100.0;
+
+            if (reportPanel != null && reportPanel.Children.Count > 0)
+                GenerateReportClick(confidenceValueBox, new RoutedEventArgs());
         }
 
         // **************************************************
         // Function: ApplyFiltersClick
-        // **************************************************
-        // Function: ApplyFiltersClick
         // Description: Saves current UI filter selections. If a report is already displayed,
         //              regenerates it immediately with the new filters. If no report exists yet,
-        //              only saves the settings � the user must click Generate Report.
+        //              only saves the filters; the user must click Generate Report.
         public void ApplyFiltersClick(object sender, RoutedEventArgs e)
         {
             UpdateFiltersFromUI();
@@ -221,7 +271,6 @@ namespace FishLens_App
                 GenerateReportClick(sender, e);
         }
 
-        // **************************************************
         // **************************************************
         // Function: ResetFiltersToDefaults
         // Description: Resets all filter state and UI controls to their default (show-all) values.
@@ -242,6 +291,7 @@ namespace FishLens_App
             if (directionFilter  != null) directionFilter.SelectedIndex = 0;
             if (cameraFilter     != null) cameraFilter.SelectedIndex    = 0;
             if (confidenceSlider != null) confidenceSlider.Value        = 0;
+            if (confidenceValueBox != null) confidenceValueBox.Text     = "0";
             if (runFilter        != null) runFilter.SelectedIndex       = 0;
         }
 
@@ -466,14 +516,17 @@ namespace FishLens_App
             try
             {
                 _lastFilteredLines = csvLines;
+                _lastGroupedLinesByRun = IsAllHistoryScope ? GroupLinesByRun(csvLines) : new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
                 ConfigureReportView();
                 ClearPreviousReport();
 
                 var stats = CalculateStatistics(csvLines);
                 _lastStats = stats;
                 _currentReportText = GenerateReportText(stats);
-
-                BuildVisualReport(stats);
+                if (IsAllHistoryScope && _lastGroupedLinesByRun.Count > 1)
+                    BuildAllHistoryVisualReport(stats, _lastGroupedLinesByRun);
+                else
+                    BuildVisualReport(stats);
             }
             catch (Exception ex)
             {
@@ -494,7 +547,7 @@ namespace FishLens_App
             var headerPanel = new StackPanel { Margin = new Thickness(0, 0, 0, 20) };
 
             var title = CreateTitleTextBlock();
-            var subtitle = CreateSubtitleTextBlock();
+            var subtitle = CreateSubtitleTextBlock(_lastStats);
 
             headerPanel.Children.Add(title);
             headerPanel.Children.Add(subtitle);
@@ -552,7 +605,7 @@ namespace FishLens_App
         // Description: Adds bar charts showing fish and bird detection counts
         private void AddDetectionCharts(ReportStatistics stats)
         {
-            // Only show fish � this is a fish monitoring application, bird detections are not charted.
+            // Only show fish; this is a fish monitoring application, so bird detections are not charted.
             AddBarChart("Fish Detected", stats.FishCount, Math.Max(1, stats.TotalDetections), "#1E88E5");
         }
 
@@ -1025,8 +1078,8 @@ namespace FishLens_App
                             if (string.IsNullOrWhiteSpace(line)) continue;
                             var parts = line.Split(',');
                             if (parts.Length < 3) continue;
-                            // Pad to 10 columns; timestamp (col 2 in no-fish) moves to col 9.
-                            string padded = $"{parts[0]},{parts[1]},,0,no_fish,0,,0,0,{parts[2]}";
+                            // Pad to fish schema; timestamp (col 2 in no-fish) moves to col 9 and run to col 10.
+                            string padded = $"{parts[0]},{parts[1]},,0,no_fish,0,,0,0,{parts[2]},{activeRun}";
                             lines.Add(padded);
                         }
                     }
@@ -1034,6 +1087,43 @@ namespace FishLens_App
             }
 
             return lines.ToArray();
+        }
+
+        private string ExtractRunFromColumns(string[] columns)
+        {
+            if (columns.Length > 10 && !string.IsNullOrWhiteSpace(columns[10].Trim()))
+                return columns[10].Trim();
+
+            if (columns.Length > 0)
+            {
+                try
+                {
+                    string videoPath = columns[0].Trim();
+                    string folderPath = System.IO.Path.GetDirectoryName(videoPath);
+                    if (!string.IsNullOrWhiteSpace(folderPath))
+                    {
+                        string folderName = System.IO.Path.GetFileName(folderPath);
+                        if (!string.IsNullOrWhiteSpace(folderName))
+                            return folderName;
+                    }
+                }
+                catch { }
+            }
+
+            return "Unknown Run";
+        }
+
+        private Dictionary<string, string[]> GroupLinesByRun(string[] csvLines)
+        {
+            return csvLines
+                .Where(line => !string.IsNullOrWhiteSpace(line))
+                .GroupBy(line => ExtractRunFromColumns(line.Split(',')), StringComparer.OrdinalIgnoreCase)
+                .OrderBy(group =>
+                {
+                    var stats = CalculateStatistics(group.ToArray());
+                    return stats.MinDetectionTimestamp ?? DateTime.MaxValue;
+                })
+                .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
         }
 
         // **************************************************
@@ -1197,7 +1287,7 @@ namespace FishLens_App
                     stats.BirdCount++;
             }
 
-            // Track breakdown by species label � normalize blank entries to a readable display name.
+            // Track breakdown by species label; normalize blank entries to a readable display name.
             string displaySpecies = string.IsNullOrWhiteSpace(species)
                 ? (likelyClass.Equals("fish", StringComparison.OrdinalIgnoreCase)
                     ? "Unknown Species"
@@ -1287,7 +1377,8 @@ namespace FishLens_App
         }
 
         // **************************************************
-        // Function: AppendSummaryStatistics (kept for legacy compatibility � new text uses style-specific helpers)
+        // Function: AppendSummaryStatistics
+        // Description: Legacy summary writer retained because text export still routes through it.
         private void AppendSummaryStatistics(StringBuilder sb, ReportStatistics stats) { }
 
         // **************************************************
@@ -1351,11 +1442,26 @@ namespace FishLens_App
         // **************************************************
         // Function: CreateSubtitleTextBlock
         // Description: Creates the subtitle text block showing generation time
-        private TextBlock CreateSubtitleTextBlock()
+        private TextBlock CreateSubtitleTextBlock(ReportStatistics stats = null, string prefix = null)
         {
+            string generatedText = $"Generated on {DateTime.Now:MMMM dd, yyyy} at {DateTime.Now:h:mm tt}";
+            string dateRangeText = string.Empty;
+            if (stats?.MinDetectionTimestamp.HasValue == true && stats?.MaxDetectionTimestamp.HasValue == true)
+            {
+                dateRangeText = $"{stats.MinDetectionTimestamp.Value:MMMM dd, yyyy} - {stats.MaxDetectionTimestamp.Value:MMMM dd, yyyy}";
+            }
+
+            string text = generatedText;
+            if (!string.IsNullOrWhiteSpace(prefix) && !string.IsNullOrWhiteSpace(dateRangeText))
+                text = $"{prefix} | {dateRangeText} | {generatedText}";
+            else if (!string.IsNullOrWhiteSpace(prefix))
+                text = $"{prefix} | {generatedText}";
+            else if (!string.IsNullOrWhiteSpace(dateRangeText))
+                text = $"{dateRangeText} | {generatedText}";
+
             return new TextBlock
             {
-                Text = $"Generated on {DateTime.Now:MMMM dd, yyyy} at {DateTime.Now:h:mm tt}",
+                Text = text,
                 FontSize = 12,
                 Foreground = Brush("#657786")
             };
@@ -1536,14 +1642,15 @@ namespace FishLens_App
             using (var ctx = dv.RenderOpen())
             {
                 // --- Y-axis grid lines + labels ---
-                int yTicks = 4;
+                int yTicks = Math.Min(4, maxValue);
+                if (yTicks <= 0) yTicks = 1;
                 for (int t = 0; t <= yTicks; t++)
                 {
                     double frac  = (double)t / yTicks;
                     double y     = topMargin + frac * chartH;
                     ctx.DrawLine(gridPen, new Point(leftMargin, y), new Point(leftMargin + chartW, y));
 
-                    int lv = (int)Math.Round((1 - frac) * maxValue);
+                    int lv = (int)Math.Round((double)(yTicks - t) * maxValue / yTicks);
                     var ft = new FormattedText(lv.ToString(), System.Globalization.CultureInfo.InvariantCulture,
                                                FlowDirection.LeftToRight, tf, 11, gray, 96);
                     ctx.DrawText(ft, new Point(leftMargin - ft.Width - 4, y - ft.Height / 2));
@@ -1854,33 +1961,97 @@ namespace FishLens_App
         // **************************************************
         // Function: BuildVisualReport
         // Description: Dispatches to the appropriate report builder based on the selected mode
-        private void BuildVisualReport(ReportStatistics stats)
+        private void BuildVisualReport(ReportStatistics stats, bool includeHeader = true)
         {
             switch (_currentReportStyle)
             {
                 case "Summary Only":
-                    BuildSummaryOnlyReport(stats);
+                    BuildSummaryOnlyReport(stats, includeHeader);
                     break;
                 case "Detailed Analysis":
-                    BuildDetailedReport(stats);
+                    BuildDetailedReport(stats, includeHeader);
                     break;
                 case "Data Table View":
-                    BuildDataTableReport(stats, _lastFilteredLines);
+                    BuildDataTableReport(stats, _lastFilteredLines, includeHeader);
                     break;
                 default:
-                    BuildStandardReport(stats);
+                    BuildStandardReport(stats, includeHeader);
                     break;
             }
+        }
+
+        private void BuildAllHistoryVisualReport(ReportStatistics combinedStats, Dictionary<string, string[]> linesByRun)
+        {
+            AddReportHeader(combinedStats.TotalDetections);
+            AddSectionTitle("Runs Included");
+
+            foreach (var runGroup in linesByRun)
+            {
+                var runStats = CalculateStatistics(runGroup.Value);
+
+                var runPanel = new Border
+                {
+                    Background = Brush("#F5F8FA"),
+                    BorderBrush = Brush("#E1E8ED"),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(8),
+                    Padding = new Thickness(14),
+                    Margin = new Thickness(0, 0, 0, 12)
+                };
+
+                var stack = new StackPanel();
+                stack.Children.Add(new TextBlock
+                {
+                    Text = runGroup.Key,
+                    FontSize = 16,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = Brush("#0D3640"),
+                    Margin = new Thickness(0, 0, 0, 4)
+                });
+                stack.Children.Add(CreateSubtitleTextBlock(runStats, "Run Range"));
+
+                var summary = new TextBlock
+                {
+                    Text = $"Fish: {runStats.FishCount}   |   Videos: {(runStats.TotalVideoCount > 0 ? runStats.TotalVideoCount : runStats.VideoDetections.Count)}   |   Net Upstream: {runStats.UpstreamCount - runStats.DownstreamCount}",
+                    FontSize = 12,
+                    Foreground = Brush("#14171A"),
+                    Margin = new Thickness(0, 10, 0, 0)
+                };
+                stack.Children.Add(summary);
+
+                if (runStats.DetectionsByLocation.Count > 0)
+                {
+                    string locations = string.Join(", ", runStats.DetectionsByLocation
+                        .OrderByDescending(x => x.Value)
+                        .Take(3)
+                        .Select(x => $"{x.Key} ({x.Value})"));
+                    stack.Children.Add(new TextBlock
+                    {
+                        Text = $"Top Locations: {locations}",
+                        FontSize = 12,
+                        Foreground = Brush("#657786"),
+                        Margin = new Thickness(0, 6, 0, 0)
+                    });
+                }
+
+                runPanel.Child = stack;
+                reportPanel.Children.Add(runPanel);
+            }
+
+            AddSpacer(16);
+            AddSectionTitle("Combined Summary");
+            BuildVisualReport(combinedStats, includeHeader: false);
         }
 
         // **************************************************
         // Function: BuildStandardReport
         // Description: Constructs all visual components of the standard report
-        private void BuildStandardReport(ReportStatistics stats)
+        private void BuildStandardReport(ReportStatistics stats, bool includeHeader = true)
         {
-            AddReportHeader(stats.TotalDetections);
+            if (includeHeader)
+                AddReportHeader(stats.TotalDetections);
 
-            // Key metrics row � each stat appears exactly once here
+            // Key metrics row; each stat appears exactly once here.
             AddMainCountSection(stats);
             AddSpacer(20);
 
@@ -1922,9 +2093,10 @@ namespace FishLens_App
         // **************************************************
         // Function: BuildSummaryOnlyReport
         // Description: Renders a compact one-page snapshot: stat cards + location summary + date range
-        private void BuildSummaryOnlyReport(ReportStatistics stats)
+        private void BuildSummaryOnlyReport(ReportStatistics stats, bool includeHeader = true)
         {
-            AddReportHeader(stats.TotalDetections);
+            if (includeHeader)
+                AddReportHeader(stats.TotalDetections);
             AddSpacer(10);
 
             // --- Row 1: Total Fish | Total Videos | Net Upstream ---
@@ -2016,16 +2188,16 @@ namespace FishLens_App
 
         // **************************************************
         // Function: BuildDetailedReport
-        // Description: Renders the Standard report plus per-video table, daily trend, and location�species cross-tab
-        private void BuildDetailedReport(ReportStatistics stats)
+        // Description: Renders the Standard report plus per-video table, daily trend, and location/species cross-tab
+        private void BuildDetailedReport(ReportStatistics stats, bool includeHeader = true)
         {
             // Start with the full standard layout
-            BuildStandardReport(stats);
+            BuildStandardReport(stats, includeHeader);
 
             // Ensure daily trend appears even if DetectionsByDate guard already fired
             if (stats.DetectionsByDate.Count > 0)
             {
-                // Already added in BuildStandardReport � no duplicate needed.
+                // Already added in BuildStandardReport; no duplicate needed.
             }
 
             // --- Per-video table ---
@@ -2058,7 +2230,7 @@ namespace FishLens_App
             };
 
             var table = new Grid();
-            string[] headers = { "Video File", "Location", "Species", "Direction", "Confidence", "Start (s)", "End (s)", "Timestamp" };
+            string[] headers = { "Run", "Video File", "Location", "Species", "Direction", "Confidence", "Start (s)", "End (s)", "Timestamp" };
             foreach (var _ in headers)
                 table.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, MinWidth = 100 });
 
@@ -2066,13 +2238,19 @@ namespace FishLens_App
             table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             for (int c = 0; c < headers.Length; c++)
             {
-                var hdr = new TextBlock
+                var hdr = new Border
                 {
-                    Text = headers[c],
-                    FontWeight = FontWeights.SemiBold,
-                    FontSize = 12,
-                    Foreground = Brush("#14171A"),
-                    Margin = new Thickness(6, 4, 16, 4)
+                    Background = Brush("#0D3640"),
+                    BorderBrush = Brush("#244F5A"),
+                    BorderThickness = new Thickness(0, 0, 1, 1),
+                    Child = new TextBlock
+                    {
+                        Text = headers[c],
+                        FontWeight = FontWeights.SemiBold,
+                        FontSize = 12,
+                        Foreground = Brushes.White,
+                        Margin = new Thickness(8, 5, 16, 5)
+                    }
                 };
                 Grid.SetColumn(hdr, c);
                 Grid.SetRow(hdr, 0);
@@ -2093,6 +2271,7 @@ namespace FishLens_App
                 string start    = cols.Length > 7 ? cols[7].Trim() : "";
                 string end      = cols.Length > 8 ? cols[8].Trim() : "";
                 string ts       = cols.Length > 9 ? cols[9].Trim() : "";
+                string run      = ExtractRunFromColumns(cols);
 
                 // Detect no-fish rows (likely_class col 4 == "no_fish")
                 bool isNoFish = cols.Length > 4 &&
@@ -2112,7 +2291,7 @@ namespace FishLens_App
                     conf = $"{confVal * 100:F1}%";
                 }
 
-                string[] cells = { ShortenVideoPath(video), location, species, dir, conf, start, end, ts };
+                string[] cells = { run, ShortenVideoPath(video), location, species, dir, conf, start, end, ts };
                 var rowBgColor = row % 2 == 0
                     ? (Color)ColorConverter.ConvertFromString("#F5F8FA")
                     : Colors.White;
@@ -2125,14 +2304,16 @@ namespace FishLens_App
                     var cell = new Border
                     {
                         Background = new SolidColorBrush(rowBgColor),
+                        BorderBrush = Brush("#E1E8ED"),
+                        BorderThickness = new Thickness(0, 0, 1, 1),
                         Child = new TextBlock
                         {
                             Text = cells[c],
                             FontSize = 11,
                             Foreground = fg,
-                            Margin = new Thickness(6, 3, 16, 3),
+                            Margin = new Thickness(8, 3, 16, 3),
                             TextTrimming = TextTrimming.CharacterEllipsis,
-                            MaxWidth = 200
+                            MaxWidth = c == 1 ? 220 : 160
                         }
                     };
                     Grid.SetColumn(cell, c);
@@ -2300,9 +2481,10 @@ namespace FishLens_App
         // **************************************************
         // Function: BuildDataTableReport
         // Description: Renders a raw scrollable data grid of every filtered CSV row
-        private void BuildDataTableReport(ReportStatistics stats, string[] lines)
+        private void BuildDataTableReport(ReportStatistics stats, string[] lines, bool includeHeader = true)
         {
-            AddReportHeader(stats.TotalDetections);
+            if (includeHeader)
+                AddReportHeader(stats.TotalDetections);
             AddSpacer(4);
 
             // Quick summary line
@@ -2339,7 +2521,9 @@ namespace FishLens_App
             };
 
             var table = new Grid();
-            string[] headers = { "#", "Video File", "Location", "Species", "Direction", "Confidence", "Start (s)", "End (s)", "Timestamp" };
+            string[] headers = IsAllHistoryScope
+                ? new[] { "#", "Run", "Video File", "Location", "Species", "Direction", "Confidence", "Start (s)", "End (s)", "Timestamp" }
+                : new[] { "#", "Video File", "Location", "Species", "Direction", "Confidence", "Start (s)", "End (s)", "Timestamp" };
             foreach (var _ in headers)
                 table.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, MinWidth = 80 });
 
@@ -2378,11 +2562,14 @@ namespace FishLens_App
                 string start    = cols.Length > 7 ? cols[7].Trim() : "";
                 string end      = cols.Length > 8 ? cols[8].Trim() : "";
                 string ts       = cols.Length > 9 ? cols[9].Trim() : "";
+                string run      = ExtractRunFromColumns(cols);
 
                 if (double.TryParse(conf, out double confVal))
                     conf = $"{confVal * 100:F1}%";
 
-                string[] cells = { rowIdx.ToString(), ShortenVideoPath(video), location, species, dir, conf, start, end, ts };
+                string[] cells = IsAllHistoryScope
+                    ? new[] { rowIdx.ToString(), run, ShortenVideoPath(video), location, species, dir, conf, start, end, ts }
+                    : new[] { rowIdx.ToString(), ShortenVideoPath(video), location, species, dir, conf, start, end, ts };
                 var rowBg = rowIdx % 2 == 0
                     ? (Color)ColorConverter.ConvertFromString("#F5F8FA")
                     : Colors.White;
@@ -2669,6 +2856,20 @@ namespace FishLens_App
             var sb = new StringBuilder();
             AppendReportHeader(sb, stats, _currentReportStyle);
 
+            if (IsAllHistoryScope && _lastGroupedLinesByRun.Count > 1)
+            {
+                sb.AppendLine("RUNS INCLUDED");
+                foreach (var runGroup in _lastGroupedLinesByRun)
+                {
+                    var runStats = CalculateStatistics(runGroup.Value);
+                    string rangeText = runStats.MinDetectionTimestamp.HasValue && runStats.MaxDetectionTimestamp.HasValue
+                        ? $"{runStats.MinDetectionTimestamp.Value:yyyy-MM-dd} -> {runStats.MaxDetectionTimestamp.Value:yyyy-MM-dd}"
+                        : "No date range";
+                    sb.AppendLine($"  {runGroup.Key}: Fish={runStats.FishCount}, Videos={(runStats.TotalVideoCount > 0 ? runStats.TotalVideoCount : runStats.VideoDetections.Count)}, Range={rangeText}");
+                }
+                sb.AppendLine();
+            }
+
             switch (_currentReportStyle)
             {
                 case "Summary Only":
@@ -2794,13 +2995,15 @@ namespace FishLens_App
 
         // **************************************************
         // Function: AppendTextDataTable
-        // Description: Text equivalent of BuildDataTableReport � fixed-width columns aligned to content
+        // Description: Text equivalent of BuildDataTableReport with fixed-width columns aligned to content
         private void AppendTextDataTable(StringBuilder sb)
         {
             if (_lastFilteredLines == null || _lastFilteredLines.Length == 0) return;
 
             // Parse all rows first so we can measure column widths
-            string[] hdr = { "#", "Video", "Location", "Species", "Direction", "Confidence", "Start(s)", "End(s)", "Timestamp" };
+            string[] hdr = IsAllHistoryScope
+                ? new[] { "#", "Run", "Video", "Location", "Species", "Direction", "Confidence", "Start(s)", "End(s)", "Timestamp" }
+                : new[] { "#", "Video", "Location", "Species", "Direction", "Confidence", "Start(s)", "End(s)", "Timestamp" };
             var rows = new List<string[]>();
             int rowNum = 1;
             foreach (string line in _lastFilteredLines)
@@ -2814,8 +3017,11 @@ namespace FishLens_App
                 string start    = cols.Length > 7 ? cols[7].Trim() : "";
                 string end      = cols.Length > 8 ? cols[8].Trim() : "";
                 string ts       = cols.Length > 9 ? cols[9].Trim() : "";
+                string run      = ExtractRunFromColumns(cols);
                 if (double.TryParse(conf, out double confVal)) conf = $"{confVal * 100:F1}%";
-                rows.Add(new[] { rowNum.ToString(), video, location, species, dir, conf, start, end, ts });
+                rows.Add(IsAllHistoryScope
+                    ? new[] { rowNum.ToString(), run, video, location, species, dir, conf, start, end, ts }
+                    : new[] { rowNum.ToString(), video, location, species, dir, conf, start, end, ts });
                 rowNum++;
             }
 
@@ -2929,7 +3135,7 @@ namespace FishLens_App
                                             ? panel.DesiredSize.Height
                                             : panel.ActualHeight);
 
-                // Render the full panel to a bitmap � RenderTargetBitmap is NOT clipped by the
+                // Render the full panel to a bitmap. RenderTargetBitmap is not clipped by the
                 // parent ScrollViewer, so the entire report content is captured regardless of
                 // the current scroll position shown on screen.
                 var rtb = new RenderTargetBitmap(
@@ -2964,6 +3170,8 @@ namespace FishLens_App
                 {
                     double naturalEnd = pageTop + srcPerPage;
                     double breakPt    = Math.Min(naturalEnd, sourceH);
+                    bool splitCurrentSection = false;
+                    double splitChildY = -1;
 
                     if (naturalEnd < sourceH)
                     {
@@ -2976,6 +3184,8 @@ namespace FishLens_App
                             if (cy + ch2 <= naturalEnd) break;        // fully on this page — done
                             // Straddles: move break up ONLY if the child doesn't start near the very top
                             // of this page (otherwise, single oversized elements would create empty pages)
+                            splitCurrentSection = true;
+                            splitChildY = cy;
                             if (cy - pageTop > srcPerPage * 0.10)
                                 breakPt = cy;
                             break;
@@ -3005,7 +3215,8 @@ namespace FishLens_App
                         bool nextOpensWithSection = firstNext.tag == "section_header";
                         // Only repeat section_header when continuing — never repeat col_header
                         // (col_header is a small label; repeating it caused it to leak onto wrong pages)
-                        if (!nextOpensWithSection && lastSecY >= 0)
+                        bool continuingSameSection = splitCurrentSection && lastSecY >= 0 && splitChildY > lastSecY;
+                        if (!nextOpensWithSection && continuingSameSection)
                             { repY = lastSecY; repH = lastSecH; }
                     }
 
@@ -3051,7 +3262,7 @@ namespace FishLens_App
                         }
                     }
 
-                    // Content slice � scale to fill remaining space between drawY and bottom margin
+                    // Content slice; scale to fill remaining space between drawY and bottom margin.
                     var contentCrop = Crop(sl.SrcY, sl.SrcH);
                     if (contentCrop != null)
                     {
