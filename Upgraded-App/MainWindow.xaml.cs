@@ -1,10 +1,10 @@
 ﻿// **************************************************
-// ***********************************
 // File: MainWindow.xaml.cs
-// Description: Handles the analysis page's functionality
+// Description: Handles the analysis page's functionality.
+//              Button-styling logic lives in VideoButtonStyleHelper.cs.
+//              Sidebar list-building logic lives in VideoListUiBuilder.cs.
 // Author: Benjamin Kerr
-// 2025 - 2026
-// ***********************************
+// 2025 – 2026
 // **************************************************
 
 using DocumentFormat.OpenXml.Spreadsheet;
@@ -65,28 +65,34 @@ namespace FishLens_App
         private readonly IUiDialogService _uiDialogService;
         private readonly Stack<DeletionBatch> _deletionHistory = new Stack<DeletionBatch>();
 
+        // Helpers (constructed after InitializeComponent so resource lookups work)
+        private VideoButtonStyleHelper _buttonStyleHelper;
+        private VideoListUiBuilder _listBuilder;
+
         #endregion
 
         #region Nested Classes
 
         // **************************************************
         // Type: DeletionBatch
-        // Description: Tracks moved files and CSV rows for undo
+        // Description: Tracks moved files and CSV rows for undo.
         // **************************************************
         private class DeletionBatch
         {
             public string TrashFolder { get; set; }
-            public List<(string originalPath, string trashPath, string csvRow, FishLens_App.Models.Video video, string folder)> Items { get; } = new List<(string, string, string, FishLens_App.Models.Video, string)>();
+            public List<(string originalPath, string trashPath, string csvRow, FishLens_App.Models.Video video, string folder)> Items { get; }
+                = new List<(string, string, string, FishLens_App.Models.Video, string)>();
         }
 
         #endregion
 
         #region Constructors
 
-        // **************************************************
-        // Function: Constructor (Parameterized)
-        // **************************************************
-        public MainWindow(IProjectPathResolver pathResolver, IFileSystemManager fileSystemManager, ILogger<MainWindow> logger, IUiDialogService uiDialogService = null)
+        public MainWindow(
+            IProjectPathResolver pathResolver,
+            IFileSystemManager fileSystemManager,
+            ILogger<MainWindow> logger,
+            IUiDialogService uiDialogService = null)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _pathResolver = pathResolver ?? throw new ArgumentNullException(nameof(pathResolver));
@@ -98,11 +104,13 @@ namespace FishLens_App
             _config = GetConfigurationFromApplication();
 
             ThemeHelper.ThemeSwap(_config?.HighContrastMode ?? false);
+
+            // Helpers require resource lookup, so they are created after InitializeComponent.
+            double threshold = _config?.ConfidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD;
+            _buttonStyleHelper = new VideoButtonStyleHelper(ResBrush);
+            _listBuilder = new VideoListUiBuilder(videoList, _buttonStyleHelper, ResBrush, threshold);
         }
 
-        // **************************************************
-        // Function: Constructor (Default)
-        // **************************************************
         public MainWindow() : this(
             GetDefaultProjectPathResolver(),
             GetDefaultFileSystemManager(),
@@ -126,13 +134,13 @@ namespace FishLens_App
         // Function: ResBrush
         // Description: Resolves a SolidColorBrush from the app ResourceDictionary,
         //              falling back to a hardcoded hex if the key is missing.
-        //              Keeps code-behind in sync with XAML resource changes.
         // **************************************************
-        private SolidColorBrush ResBrush(string key, string fallbackHex)
+        internal SolidColorBrush ResBrush(string key, string fallbackHex)
         {
             if (TryFindResource(key) is SolidColorBrush brush)
                 return brush;
-            return new SolidColorBrush((System.Windows.Media.Color)ColorConverter.ConvertFromString(fallbackHex));
+            return new SolidColorBrush(
+                (System.Windows.Media.Color)ColorConverter.ConvertFromString(fallbackHex));
         }
 
         #endregion
@@ -160,10 +168,12 @@ namespace FishLens_App
             }
         }
 
-        private void HandleDirectoryCreationError(string errorMessage)
-        {
-            _uiDialogService.ShowMessage($"Cannot create directory: {errorMessage}", "Directory Creation Error", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
+        private void HandleDirectoryCreationError(string errorMessage) =>
+            _uiDialogService.ShowMessage(
+                $"Cannot create directory: {errorMessage}",
+                "Directory Creation Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
 
         #endregion
 
@@ -231,7 +241,11 @@ namespace FishLens_App
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to navigate to {PageName}", pageName);
-                _uiDialogService.ShowMessage($"Navigation Error: {ex.Message}", "Navigation Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                _uiDialogService.ShowMessage(
+                    $"Navigation Error: {ex.Message}",
+                    "Navigation Failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
             }
         }
 
@@ -279,7 +293,8 @@ namespace FishLens_App
             // TODO: Avoid using multiple Parent.Parent chains to find project root.
             //       Use IProjectPathResolver or a robust helper instead.
             string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
-            var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.Parent.Parent.Parent.FullName;
+            var projectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory)
+                                            .Parent.Parent.Parent.Parent.FullName;
             string scriptDirectory = System.IO.Path.Combine(projectRoot, "main.py");
 
             string pythonExe = System.IO.Path.Combine(
@@ -300,12 +315,20 @@ namespace FishLens_App
                 string output = process.StandardOutput.ReadToEnd();
                 string error = process.StandardError.ReadToEnd();
                 process.WaitForExit();
-                _uiDialogService.ShowMessage($"Output:\n{output}\n\nErrors:\n{error}", "YOLO Output", MessageBoxButton.OK, MessageBoxImage.Information);
+                _uiDialogService.ShowMessage(
+                    $"Output:\n{output}\n\nErrors:\n{error}",
+                    "YOLO Output",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to run YOLO process");
-                _uiDialogService.ShowMessage(ex.Message, "Could not process videos.", MessageBoxButton.OK, MessageBoxImage.Error);
+                _uiDialogService.ShowMessage(
+                    ex.Message,
+                    "Could not process videos.",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
             }
         }
 
@@ -344,8 +367,11 @@ namespace FishLens_App
             if (!string.IsNullOrEmpty(error) || !string.IsNullOrEmpty(output))
             {
                 Dispatcher.Invoke(() =>
-                    _uiDialogService.ShowMessage($"Output:\n{output}\n\nErrors:\n{error}", "Process Output", MessageBoxButton.OK, MessageBoxImage.Information)
-                );
+                    _uiDialogService.ShowMessage(
+                        $"Output:\n{output}\n\nErrors:\n{error}",
+                        "Process Output",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information));
             }
         }
 
@@ -376,8 +402,10 @@ namespace FishLens_App
 
         private void ShowVideosInUi(string videoDirectory)
         {
-            List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList = CreateSortedListOfVideos(videoDirectory);
-            CreateVideoButtonsList(videoDataList);
+            List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList =
+                CreateSortedListOfVideos(videoDirectory);
+
+            _listBuilder.CreateVideoButtonsList(videoDataList, _currentFolderName, VideoButtonClick);
 
             try
             {
@@ -416,11 +444,6 @@ namespace FishLens_App
         // **************************************************
         // Function: DisplayDataInUi
         // Description: Updates UI elements with video analysis data.
-        //
-        // FIX: ComboBox.Text is not a settable property that selects items —
-        //      it only works for editable ComboBoxes. We now walk the Items
-        //      collection and select the matching ComboBoxItem by content,
-        //      falling back to index 0 if no match is found.
         // **************************************************
         private void DisplayDataInUi(string videoFileName)
         {
@@ -429,23 +452,15 @@ namespace FishLens_App
             videoName.Text = vid.Name;
             videoDateTime.Text = $"Duration: {vid.StartTime}s - {vid.EndTime}s";
 
-            // Fish present status
             string statusText = vid.LikelyClass == "fish" ? "Present" : "Not Present";
             SelectComboBoxItemByContent(fishPresentStatus, statusText);
 
             fishPresentConfidence.Text = vid.AvgConfidence.ToString();
 
-            // Travel direction — capitalize for display matching
             string directionText = CapitalizeFirstLetter(vid.Direction);
             SelectComboBoxItemByContent(travelDirection, directionText);
         }
 
-        // **************************************************
-        // Function: SelectComboBoxItemByContent
-        // Description: Finds and selects the ComboBoxItem whose Content matches
-        //              the target string (case-insensitive). Falls back to
-        //              SelectedIndex = 0 if no match is found.
-        // **************************************************
         private void SelectComboBoxItemByContent(ComboBox comboBox, string targetContent)
         {
             foreach (var item in comboBox.Items)
@@ -458,7 +473,6 @@ namespace FishLens_App
                 }
             }
 
-            // No match — default to first item rather than leaving stale selection
             if (comboBox.Items.Count > 0)
                 comboBox.SelectedIndex = 0;
         }
@@ -472,7 +486,11 @@ namespace FishLens_App
                 string csvPath = _pathResolver.ResolveCsvScriptPath();
                 DeleteFilesAndCsvEntries(selected.Select(x => x.path).ToList(), csvPath);
                 RemoveUiGrids(selected.Select(x => x.grid).ToList());
-                _uiDialogService.ShowMessage($"Deleted {selected.Count} video(s).", "Delete Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                _uiDialogService.ShowMessage(
+                    $"Deleted {selected.Count} video(s).",
+                    "Delete Complete",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
             }
         }
 
@@ -487,11 +505,11 @@ namespace FishLens_App
                     Button button = null;
                     foreach (var element in grid.Children)
                     {
-                        if (element is CheckBox testingCheckBox) checkBox = testingCheckBox;
-                        if (element is Button testingButton) button = testingButton;
+                        if (element is CheckBox cb) checkBox = cb;
+                        if (element is Button btn) button = btn;
                     }
 
-                    if (checkBox != null && checkBox.IsChecked == true && button != null && button.Tag is string path)
+                    if (checkBox?.IsChecked == true && button?.Tag is string path)
                         result.Add((grid, path));
                 }
             }
@@ -508,11 +526,9 @@ namespace FishLens_App
             var batch = new DeletionBatch { TrashFolder = Path.Combine(trashRoot, Guid.NewGuid().ToString()) };
             Directory.CreateDirectory(batch.TrashFolder);
 
-            for (int i = 0; i < paths.Count; i++)
+            foreach (string fullPath in paths)
             {
-                string fullPath = paths[i];
                 string fileName = Path.GetFileName(fullPath);
-
                 string csvRow = null;
                 var videoData = new FishLens_App.Models.Video();
 
@@ -563,7 +579,8 @@ namespace FishLens_App
                 while (!parser.EndOfData)
                 {
                     string[] fields = parser.ReadFields();
-                    if (fields.Length > 0 && string.Equals(fields[0].Trim(), fileName, StringComparison.OrdinalIgnoreCase))
+                    if (fields.Length > 0 &&
+                        string.Equals(fields[0].Trim(), fileName, StringComparison.OrdinalIgnoreCase))
                         return string.Join(",", fields);
                 }
             }
@@ -616,8 +633,8 @@ namespace FishLens_App
             try
             {
                 var dir = Path.GetDirectoryName(path);
-                if (string.IsNullOrEmpty(dir)) return string.Empty;
-                return Path.GetFileName(dir);
+                if (!string.IsNullOrEmpty(dir))
+                    return Path.GetFileName(dir);
             }
             catch
             {
@@ -644,15 +661,21 @@ namespace FishLens_App
                 {
                     if (File.Exists(item.trashPath))
                     {
-                        Directory.CreateDirectory(Path.GetDirectoryName(item.originalPath) ?? _pathResolver.ResolvePath(SAVED_VIDEOS_FOLDER));
+                        Directory.CreateDirectory(
+                            Path.GetDirectoryName(item.originalPath) ?? _pathResolver.ResolvePath(SAVED_VIDEOS_FOLDER));
                         File.Move(item.trashPath, item.originalPath, overwrite: true);
                     }
                     restoredFiles.Add(item.originalPath);
-                    if (!string.IsNullOrEmpty(item.csvRow)) rowsToRestore.Add(item.csvRow);
+                    if (!string.IsNullOrEmpty(item.csvRow))
+                        rowsToRestore.Add(item.csvRow);
                 }
                 catch (Exception ex)
                 {
-                    _uiDialogService.ShowMessage($"Failed to restore file: {item.originalPath}\nError: {ex.Message}", "Restore Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    _uiDialogService.ShowMessage(
+                        $"Failed to restore file: {item.originalPath}\nError: {ex.Message}",
+                        "Restore Warning",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
                     _logger.LogWarning(ex, "Failed to restore file {path}", item.originalPath);
                 }
             }
@@ -665,7 +688,11 @@ namespace FishLens_App
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to restore CSV rows");
-                _uiDialogService.ShowMessage("Failed to restore CSV data for some videos.", "CSV Restore Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
+                _uiDialogService.ShowMessage(
+                    "Failed to restore CSV data for some videos.",
+                    "CSV Restore Warning",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
             }
 
             RestoreUiForFiles(restoredFiles, batch);
@@ -680,68 +707,41 @@ namespace FishLens_App
                 _logger.LogWarning(ex, "Trash folder could not be deleted.");
             }
 
-            _uiDialogService.ShowMessage($"Restored {restoredFiles.Count} file(s).", "Undo Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            _uiDialogService.ShowMessage(
+                $"Restored {restoredFiles.Count} file(s).",
+                "Undo Complete",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
         }
 
         private void RestoreUiForFiles(List<string> restoredFiles, DeletionBatch batch)
         {
             foreach (var filePath in restoredFiles)
             {
-                var item = batch.Items.Find(x => string.Equals(x.originalPath, filePath, StringComparison.OrdinalIgnoreCase));
+                var item = batch.Items.Find(
+                    x => string.Equals(x.originalPath, filePath, StringComparison.OrdinalIgnoreCase));
                 if (string.IsNullOrEmpty(item.originalPath)) continue;
 
-                EnsureFolderHeaderExists(item.folder);
-                Grid grid = CreateGridForRestoredFile(item.originalPath, item.video, item.folder);
+                _listBuilder.EnsureFolderHeaderExists(item.folder);
+                Grid grid = _listBuilder.CreateGridForRestoredFile(
+                    item.originalPath, item.video, item.folder, VideoButtonClick);
                 videoList.Children.Add(grid);
             }
         }
 
-        private void EnsureFolderHeaderExists(string folder)
-        {
-            foreach (var child in videoList.Children)
-            {
-                if (child is Grid g && g.Tag is string t && t == $"header:{folder}")
-                    return;
-            }
-
-            var previousFolder = _currentFolderName;
-            _currentFolderName = folder;
-            CreateFolderHeader();
-            _currentFolderName = previousFolder;
-        }
-
-        private Grid CreateGridForRestoredFile(string filePath, FishLens_App.Models.Video videoData, string folder)
-        {
-            var grid = new Grid { Tag = folder, HorizontalAlignment = HorizontalAlignment.Stretch };
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            FileInfo fi = new FileInfo(filePath);
-            Button button = CreateSingleVideoButton(fi, videoData);
-            button.Click += VideoButtonClick;
-            Grid.SetColumn(button, 0);
-
-            var checkBox = new CheckBox { Padding = new Thickness(5), VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetColumn(checkBox, 1);
-
-            grid.Children.Add(button);
-            grid.Children.Add(checkBox);
-            return grid;
-        }
-
         private List<(FileInfo vid, FishLens_App.Models.Video data)> CreateSortedListOfVideos(string directory)
         {
-            DirectoryInfo vidsInfo = new DirectoryInfo(directory);
-            FileInfo[] fileInfos = vidsInfo.GetFiles("*");
+            DirectoryInfo dirInfo = new DirectoryInfo(directory);
+            FileInfo[] fileInfos = dirInfo.GetFiles("*");
 
-            var videoDataList = new List<(FileInfo vid, FishLens_App.Models.Video data)>();
+            var videoDataList = new List<(FileInfo, FishLens_App.Models.Video)>();
             foreach (FileInfo vid in fileInfos)
             {
                 if (IsVideoFile(vid))
                     videoDataList.Add((vid, GetData(vid.Name)));
             }
 
-            return videoDataList.OrderBy(x => x.data.AvgConfidence).ToList();
+            return videoDataList.OrderBy(x => x.Item2.AvgConfidence).ToList();
         }
 
         private bool IsVideoFile(FileInfo file)
@@ -757,7 +757,11 @@ namespace FishLens_App
 
             if (!File.Exists(csvPath))
             {
-                _uiDialogService.ShowMessage("Analysis data file not found.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                _uiDialogService.ShowMessage(
+                    "Analysis data file not found.",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
                 return vid;
             }
 
@@ -767,7 +771,11 @@ namespace FishLens_App
             }
             catch (Exception ex)
             {
-                _uiDialogService.ShowMessage($"Error reading analysis data: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                _uiDialogService.ShowMessage(
+                    $"Error reading analysis data: {ex.Message}",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
                 return vid;
             }
         }
@@ -784,18 +792,27 @@ namespace FishLens_App
 
                 if (!File.Exists(csvPath))
                 {
-                    _uiDialogService.ShowMessage("No analysis data found to export.", "Export Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    _uiDialogService.ShowMessage(
+                        "No analysis data found to export.",
+                        "Export Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
                     return;
                 }
 
                 string defaultName = $"FishLens_Analysis_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}";
-                string selectedPath = _uiDialogService.ShowSaveFileDialog("Excel Files (*.xlsx)|*.xlsx", ".xlsx", defaultName);
+                string selectedPath = _uiDialogService.ShowSaveFileDialog(
+                    "Excel Files (*.xlsx)|*.xlsx", ".xlsx", defaultName);
                 if (!string.IsNullOrEmpty(selectedPath))
                     MakeExcelSheetAndInsertData(selectedPath, csvPath);
             }
             catch (Exception ex)
             {
-                _uiDialogService.ShowMessage($"Error exporting data: {ex.Message}", "Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                _uiDialogService.ShowMessage(
+                    $"Error exporting data: {ex.Message}",
+                    "Export Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
             }
         }
 
@@ -837,7 +854,11 @@ namespace FishLens_App
         }
 
         private void ShowExportSuccessMessage(string excelPath) =>
-            _uiDialogService.ShowMessage($"Data exported successfully to:\n{excelPath}", "Export Successful", MessageBoxButton.OK, MessageBoxImage.Information);
+            _uiDialogService.ShowMessage(
+                $"Data exported successfully to:\n{excelPath}",
+                "Export Successful",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
 
         private void PromptToOpenExportedFile(string excelPath)
         {
@@ -853,7 +874,11 @@ namespace FishLens_App
 
                 if (string.IsNullOrEmpty(currentVideoName) || currentVideoName == "--")
                 {
-                    _uiDialogService.ShowMessage("No video selected to save changes for.", "Save Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    _uiDialogService.ShowMessage(
+                        "No video selected to save changes for.",
+                        "Save Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
                     return;
                 }
 
@@ -861,17 +886,29 @@ namespace FishLens_App
 
                 if (!File.Exists(csvPath))
                 {
-                    _uiDialogService.ShowMessage("CSV file not found.", "Save Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    _uiDialogService.ShowMessage(
+                        "CSV file not found.",
+                        "Save Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
                     return;
                 }
 
                 UpdateCsvFile(csvPath, currentVideoName);
-                _uiDialogService.ShowMessage("Changes saved successfully!", "Save Successful", MessageBoxButton.OK, MessageBoxImage.Information);
+                _uiDialogService.ShowMessage(
+                    "Changes saved successfully!",
+                    "Save Successful",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error saving changes to CSV");
-                _uiDialogService.ShowMessage($"Error saving changes: {ex.Message}", "Save Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                _uiDialogService.ShowMessage(
+                    $"Error saving changes: {ex.Message}",
+                    "Save Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
             }
         }
 
@@ -882,7 +919,8 @@ namespace FishLens_App
             for (int i = 1; i < lines.Length; i++)
             {
                 var cols = lines[i].Split(',');
-                if (cols.Length > 0 && string.Equals(cols[0].Trim(), videoFileName, StringComparison.OrdinalIgnoreCase))
+                if (cols.Length > 0 &&
+                    string.Equals(cols[0].Trim(), videoFileName, StringComparison.OrdinalIgnoreCase))
                 {
                     columns = cols;
                     break;
@@ -931,7 +969,7 @@ namespace FishLens_App
 
         #endregion
 
-        #region UI Display
+        #region Sidebar Layout
 
         private void CollapseSidebar()
         {
@@ -987,6 +1025,10 @@ namespace FishLens_App
             Grid.SetRow(Settings, 0); Grid.SetColumn(Settings, 2);
         }
 
+        #endregion
+
+        #region Video Playback
+
         private void VideoButtonClick(object sender, RoutedEventArgs e)
         {
             Button clickedButton = (Button)sender;
@@ -1009,280 +1051,6 @@ namespace FishLens_App
         {
             if (string.IsNullOrEmpty(text)) return text;
             return char.ToUpper(text[0]) + text.Substring(1);
-        }
-
-        private void CreateVideoButtonsList(List<(FileInfo videoFile, FishLens_App.Models.Video videoData)> videoDataList)
-        {
-            CreateFolderHeader();
-            CreateVideoButtons(videoDataList);
-        }
-
-        // **************************************************
-        // Function: CreateFolderHeader
-        // Description: Creates folder name display with checkbox and separator.
-        //
-        // FIX: Foreground was hardcoded to Colors.White. Now resolved from
-        //      OnAccentForeground resource so it adapts to both themes.
-        //      The folder header sits on the AccentBrush sidebar, so
-        //      OnAccentForeground (always a light tone) is the right key.
-        // **************************************************
-        private void CreateFolderHeader()
-        {
-            var folderNameGrid = new Grid { HorizontalAlignment = HorizontalAlignment.Stretch };
-            folderNameGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            folderNameGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            var textBox = new TextBox
-            {
-                Text = _currentFolderName,
-                Foreground = ResBrush("OnAccentForeground", "#F5F8FA"),
-                Background = Brushes.Transparent,
-                BorderThickness = new Thickness(0),
-                IsReadOnly = true,
-                FontWeight = FontWeights.SemiBold,
-                FontSize = 13,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-
-            var folderCheckBox = new CheckBox
-            {
-                Padding = new Thickness(5),
-                VerticalAlignment = VerticalAlignment.Center,
-                // Checkbox tick/border on the teal sidebar reads better with foreground set explicitly
-                Foreground = ResBrush("OnAccentForeground", "#F5F8FA")
-            };
-
-            string thisFolder = _currentFolderName;
-            folderNameGrid.Tag = $"header:{thisFolder}";
-
-            folderCheckBox.Checked += (s, e) => ToggleFolderCheckboxes(thisFolder, true);
-            folderCheckBox.Unchecked += (s, e) => ToggleFolderCheckboxes(thisFolder, false);
-
-            Grid.SetColumn(folderCheckBox, 1);
-            folderNameGrid.Children.Add(textBox);
-            folderNameGrid.Children.Add(folderCheckBox);
-            videoList.Children.Add(folderNameGrid);
-
-            var separator = new Separator
-            {
-                Margin = new Thickness(0, 5, 0, 5),
-                Background = ResBrush("HoverBackgroundBrush", "#2D7A8F"),
-                Opacity = 0.5
-            };
-            videoList.Children.Add(separator);
-        }
-
-        private void ToggleFolderCheckboxes(string folderName, bool isChecked)
-        {
-            foreach (var child in videoList.Children)
-            {
-                if (child is Grid g && g.Tag is string t && t == folderName)
-                {
-                    foreach (var elem in g.Children)
-                    {
-                        if (elem is CheckBox cb)
-                            cb.IsChecked = isChecked;
-                    }
-                }
-            }
-        }
-
-        private void CreateVideoButtons(List<(FileInfo videoFile, FishLens_App.Models.Video videoData)> videoDataList)
-        {
-            foreach (var (videoFile, videoData) in videoDataList)
-            {
-                var grid = new Grid
-                {
-                    Tag = _currentFolderName,
-                    HorizontalAlignment = HorizontalAlignment.Stretch
-                };
-                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-                Button button = CreateSingleVideoButton(videoFile, videoData);
-                button.Click += VideoButtonClick;
-                Grid.SetColumn(button, 0);
-
-                var checkBox = new CheckBox
-                {
-                    Padding = new Thickness(5),
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Foreground = ResBrush("OnAccentForeground", "#F5F8FA")
-                };
-                Grid.SetColumn(checkBox, 1);
-
-                grid.Children.Add(button);
-                grid.Children.Add(checkBox);
-                videoList.Children.Add(grid);
-            }
-        }
-
-        private Button CreateSingleVideoButton(FileInfo videoFile, FishLens_App.Models.Video videoData)
-        {
-            bool isLowConfidence = IsLowConfidence(videoData.AvgConfidence);
-
-            var button = new Button
-            {
-                Content = videoFile.Name,
-                Margin = new Thickness(BUTTON_MARGIN),
-                Padding = new Thickness(BUTTON_PADDING_HORIZONTAL, BUTTON_PADDING_VERTICAL,
-                                               BUTTON_PADDING_HORIZONTAL, BUTTON_PADDING_VERTICAL),
-                Height = BUTTON_HEIGHT,
-                Tag = videoFile.FullName,
-                HorizontalContentAlignment = HorizontalAlignment.Left,
-                FontSize = BUTTON_FONT_SIZE,
-                BorderThickness = new Thickness(0),
-                Cursor = Cursors.Hand
-            };
-
-            // Prefer resource-defined styles; fall back to programmatic style for safety.
-            try
-            {
-                var resourceKey = isLowConfidence ? "VideoButtonLowConfidenceStyle" : "VideoButtonNormalStyle";
-                var style = TryFindResource(resourceKey) as Style;
-                button.Style = style ?? CreateButtonStyle(isLowConfidence);
-            }
-            catch
-            {
-                button.Style = CreateButtonStyle(isLowConfidence);
-            }
-
-            return button;
-        }
-
-        private bool IsLowConfidence(double confidence) =>
-            confidence < (_config?.ConfidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD);
-
-        #endregion
-
-        #region Button Styling
-
-        // **************************************************
-        // Function: CreateButtonStyle
-        // Description: Creates video list button styles that adapt to both themes.
-        //
-        // FIX: Colors were hardcoded to light-theme values. In dark theme the
-        //      normal button (#F9FAFB bg, #374151 fg) is nearly white on a dark
-        //      card — unreadable. We now resolve CardBackground and PrimaryText
-        //      from resources so the button adapts to the active theme.
-        //
-        //      Low-confidence buttons keep their red semantic coloring since
-        //      red-on-any-background communicates "warning" regardless of theme.
-        //      The hover state switches to white text so it stays readable on
-        //      the red hover background in both themes.
-        // **************************************************
-        private Style CreateButtonStyle(bool isLowConfidence)
-        {
-            var style = new Style(typeof(Button));
-            SetButtonDefaultAppearance(style, isLowConfidence);
-            style.Setters.Add(new Setter(Button.TemplateProperty, CreateButtonControlTemplate(isLowConfidence)));
-            return style;
-        }
-
-        private void SetButtonDefaultAppearance(Style style, bool isLowConfidence)
-        {
-            if (isLowConfidence)
-            {
-                // Low-confidence: soft red tint background, dark red text — semantic warning,
-                // works on both light and dark card backgrounds.
-                style.Setters.Add(new Setter(Button.BackgroundProperty,
-                    new SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 220, 38, 38)))); // semi-transparent red overlay
-                style.Setters.Add(new Setter(Button.ForegroundProperty,
-                    new SolidColorBrush(System.Windows.Media.Color.FromRgb(239, 68, 68))));      // bright red — readable on dark & light
-                style.Setters.Add(new Setter(Button.BorderBrushProperty,
-                    new SolidColorBrush(System.Windows.Media.Color.FromArgb(80, 220, 38, 38)))); // subtle red border
-            }
-            else
-            {
-                // Normal: resolve from resources so the button matches the card in whichever theme is active.
-                style.Setters.Add(new Setter(Button.BackgroundProperty,
-                    ResBrush("CardBackground", "#FFFFFF")));
-                style.Setters.Add(new Setter(Button.ForegroundProperty,
-                    ResBrush("PrimaryText", "#0D3640")));
-                style.Setters.Add(new Setter(Button.BorderBrushProperty,
-                    ResBrush("BorderBrush", "#E1E8ED")));
-            }
-        }
-
-        private ControlTemplate CreateButtonControlTemplate(bool isLowConfidence)
-        {
-            var template = new ControlTemplate(typeof(Button));
-            template.VisualTree = CreateButtonBorder();
-            AddButtonTriggers(template, isLowConfidence);
-            return template;
-        }
-
-        private FrameworkElementFactory CreateButtonBorder()
-        {
-            var border = new FrameworkElementFactory(typeof(System.Windows.Controls.Border));
-            border.Name = "border";
-            border.SetValue(System.Windows.Controls.Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
-            border.SetValue(System.Windows.Controls.Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
-            border.SetValue(System.Windows.Controls.Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
-            border.SetValue(System.Windows.Controls.Border.CornerRadiusProperty, new CornerRadius(BUTTON_CORNER_RADIUS));
-            border.AppendChild(CreateContentPresenter());
-            return border;
-        }
-
-        private FrameworkElementFactory CreateContentPresenter()
-        {
-            var cp = new FrameworkElementFactory(typeof(ContentPresenter));
-            cp.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Left);
-            cp.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
-            cp.SetValue(ContentPresenter.MarginProperty, new Thickness(CONTENT_PRESENTER_MARGIN, 0, CONTENT_PRESENTER_MARGIN, 0));
-            return cp;
-        }
-
-        private void AddButtonTriggers(ControlTemplate template, bool isLowConfidence)
-        {
-            template.Triggers.Add(CreateHoverTrigger(isLowConfidence));
-            template.Triggers.Add(CreatePressedTrigger(isLowConfidence));
-        }
-
-        private Trigger CreateHoverTrigger(bool isLowConfidence)
-        {
-            var trigger = new Trigger { Property = Button.IsMouseOverProperty, Value = true };
-
-            if (isLowConfidence)
-            {
-                // Solid red fill on hover — the warning becomes explicit
-                trigger.Setters.Add(new Setter(Button.BackgroundProperty,
-                    new SolidColorBrush(System.Windows.Media.Color.FromRgb(239, 68, 68)), "border"));
-                trigger.Setters.Add(new Setter(Button.ForegroundProperty,
-                    new SolidColorBrush(System.Windows.Media.Colors.White)));
-            }
-            else
-            {
-                // Subtle hover: slightly different shade of the card background.
-                // BorderColorBrush in light = #E1E8ED (light gray), in dark = #444950 (dark gray).
-                // Both look like a gentle highlight on their respective card backgrounds.
-                trigger.Setters.Add(new Setter(Button.BackgroundProperty,
-                    ResBrush("BorderColorBrush", "#E1E8ED"), "border"));
-                trigger.Setters.Add(new Setter(Button.ForegroundProperty,
-                    ResBrush("PrimaryText", "#0D3640")));
-            }
-
-            return trigger;
-        }
-
-        private Trigger CreatePressedTrigger(bool isLowConfidence)
-        {
-            var trigger = new Trigger { Property = Button.IsPressedProperty, Value = true };
-
-            trigger.Setters.Add(new Setter(Button.BackgroundProperty,
-                isLowConfidence
-                    ? new SolidColorBrush(System.Windows.Media.Color.FromRgb(220, 38, 38))
-                    : ResBrush("AccentBrush", "#1B4F5C"),
-                "border"));
-
-            // On press, always flip to on-accent text so it reads on the teal press color
-            if (!isLowConfidence)
-            {
-                trigger.Setters.Add(new Setter(Button.ForegroundProperty,
-                    ResBrush("OnAccentForeground", "#F5F8FA")));
-            }
-
-            return trigger;
         }
 
         #endregion
