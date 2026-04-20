@@ -41,6 +41,10 @@ namespace FishLens_App
         public static event Action RunChanged;
         public static void RaiseRunChanged() => RunChanged?.Invoke();
 
+        // Raised when the saved confidence threshold changes so existing library items can retint
+        public static event Action ConfidenceThresholdChanged;
+        public static void RaiseConfidenceThresholdChanged() => ConfidenceThresholdChanged?.Invoke();
+
         // Raised when YOLO analysis starts or stops so other pages can lock/unlock their controls
         public static bool IsAnalyzing { get; private set; }
         public static event Action<bool> AnalysisStateChanged;
@@ -71,6 +75,9 @@ namespace FishLens_App
                     using var stream = File.OpenRead(configPath);
                     using var doc = JsonDocument.Parse(stream);
                     var root = doc.RootElement;
+                    if (root.TryGetProperty("ConfidenceThreshold", out var ctEl) &&
+                        ctEl.ValueKind == JsonValueKind.Number)
+                        Configuration.ConfidenceThreshold = ctEl.GetDouble();
                     if (root.TryGetProperty("FastMode", out var fmEl) &&
                         (fmEl.ValueKind == JsonValueKind.True || fmEl.ValueKind == JsonValueKind.False))
                         CheckBoxes.FastMode = fmEl.GetBoolean();

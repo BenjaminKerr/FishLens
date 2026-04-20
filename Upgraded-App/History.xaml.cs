@@ -1,4 +1,4 @@
-﻿using FishLens_App.Interfaces;
+using FishLens_App.Interfaces;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using System;
@@ -616,8 +616,8 @@ namespace FishLens_App
         {
             int indecisive = stats.TotalDetections - stats.UpstreamCount - stats.DownstreamCount;
             if (indecisive < 0) indecisive = 0;
-            AddBarChart("Upstream",   stats.UpstreamCount,   stats.TotalDetections, "#0D3640");
-            AddBarChart("Downstream", stats.DownstreamCount, stats.TotalDetections, "#00ACC1");
+            AddBarChart("Upstream",   stats.UpstreamCount,   stats.TotalDetections, "#2AB5B5");
+            AddBarChart("Downstream", stats.DownstreamCount, stats.TotalDetections, "#E05C5C");
             AddBarChart("Indecisive", indecisive,            stats.TotalDetections, "#E8A038");
         }
 

@@ -11,7 +11,6 @@ namespace FishLens.Tests
         {
             var t = new CheckBoxToggle();
             Assert.False(t.FastMode);
-            Assert.False(t.ForceReanalyze);
         }
     }
 }

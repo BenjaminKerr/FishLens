@@ -9,6 +9,5 @@
     public class CheckBoxToggle
     {
         public bool FastMode { get; set; }
-        public bool ForceReanalyze { get; set; }
     }
 }

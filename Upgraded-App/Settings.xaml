@@ -310,19 +310,6 @@
                                Margin="0,0,0,15"
                                TextWrapping="Wrap"/>
 
-                    <CheckBox x:Name="forceReanalyze"
-                              Content="Force Re-analyze Already Processed Videos"
-                              FontSize="{DynamicResource BaseFontSize}"
-                              Foreground="{DynamicResource PrimaryText}"
-                              Margin="0,0,0,0"
-                              IsChecked="False"
-                              Click="SettingsControl_Changed"/>
-
-                    <TextBlock Text="When enabled, videos that were previously analyzed will be processed again. Use this after fixing data or changing settings that affect accuracy."
-                               FontSize="{DynamicResource BaseFontSize}"
-                               Foreground="{DynamicResource SecondaryText}"
-                               Margin="0,0,0,15"
-                               TextWrapping="Wrap"/>
                 </StackPanel>
 
                 <TextBlock Text="Accessibility" 

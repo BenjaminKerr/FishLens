@@ -233,14 +233,14 @@ namespace FishLens_App
         {
             try
             {
+                double previousConfidenceThreshold = _config?.ConfidenceThreshold ?? 0.0;
+
                 // Update configuration in memory
                 _config.ConfidenceThreshold = (confidenceThreshold?.Value ?? 0) / 100.0;
 
                 // Ensure CheckBoxToggle is up to date
                 bool prevFastMode = _checkBoxes.FastMode;
                 _checkBoxes.FastMode = enableFastMode.IsChecked ?? false;
-                _checkBoxes.ForceReanalyze = forceReanalyze.IsChecked ?? false;
-
                 bool highContrast = highContrastMode.IsChecked ?? false;
                 bool largeTxt = largeText.IsChecked ?? false;
 
@@ -253,7 +253,6 @@ namespace FishLens_App
                 {
                     ConfidenceThreshold = _config.ConfidenceThreshold,
                     FastMode = _checkBoxes.FastMode,
-                    ForceReanalyze = _checkBoxes.ForceReanalyze,
                     HighContrastMode = _config.HighContrastMode,
                     LargeText = _config.LargeText,
                     ActiveLocation = _config.ActiveLocation,
@@ -279,6 +278,9 @@ namespace FishLens_App
                 if (appInst != null)
                     appInst.ActiveLocation = _config.ActiveLocation;
                 App.RaiseLocationChanged();
+
+                if (Math.Abs(_config.ConfidenceThreshold - previousConfidenceThreshold) > 0.0001)
+                    App.RaiseConfidenceThresholdChanged();
 
                 SetSaveStatusSaved();
             }
@@ -657,7 +659,6 @@ namespace FishLens_App
             confidenceValueBox.Text = $"{(int)Math.Round((_config?.ConfidenceThreshold ?? 0.7) * 100)}";
             _isUpdatingConfidenceControls = false;
             enableFastMode.IsChecked = _checkBoxes.FastMode;
-            forceReanalyze.IsChecked = _checkBoxes.ForceReanalyze;
 
             // Try to read persisted settings
             try
@@ -696,12 +697,6 @@ namespace FishLens_App
                 {
                     _checkBoxes.FastMode = fmEl.GetBoolean();
                     enableFastMode.IsChecked = _checkBoxes.FastMode;
-                }
-
-                if (root.TryGetProperty("ForceReanalyze", out var frEl) && (frEl.ValueKind == JsonValueKind.True || frEl.ValueKind == JsonValueKind.False))
-                {
-                    _checkBoxes.ForceReanalyze = frEl.GetBoolean();
-                    forceReanalyze.IsChecked = _checkBoxes.ForceReanalyze;
                 }
 
                 if (root.TryGetProperty("ActiveLocation", out var alEl) && alEl.ValueKind == JsonValueKind.String)

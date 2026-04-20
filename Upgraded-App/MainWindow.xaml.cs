@@ -1,4 +1,4 @@
-﻿// **************************************************
+// **************************************************
 // ***********************************
 // File: MainWindow.xaml.cs
 // Description: Handles the analysis page's functionality
@@ -150,12 +150,14 @@ namespace FishLens_App
                 App.FastModeChanged += OnFastModeChanged;
                 App.LocationChanged += OnLocationChanged;
                 App.RunChanged += OnRunChanged;
+                App.ConfidenceThresholdChanged += OnConfidenceThresholdChanged;
             };
             Closing += (s, e) =>
             {
                 App.FastModeChanged -= OnFastModeChanged;
                 App.LocationChanged -= OnLocationChanged;
                 App.RunChanged -= OnRunChanged;
+                App.ConfidenceThresholdChanged -= OnConfidenceThresholdChanged;
                 if (_yoloProcess != null && !_yoloProcess.HasExited)
                     try { _yoloProcess.Kill(); } catch { }
                 CleanupPlaybackTemp();
@@ -491,6 +493,15 @@ namespace FishLens_App
         private void OnRunChanged()
         {
             Dispatcher.Invoke(UpdateRunDisplay);
+        }
+
+        // **************************************************
+        // Function: OnConfidenceThresholdChanged
+        // Description: Reapplies library button tint when Settings saves a new threshold
+        // **************************************************
+        private void OnConfidenceThresholdChanged()
+        {
+            Dispatcher.Invoke(RefreshLibraryConfidenceStyles);
         }
 
         // **************************************************
@@ -999,7 +1010,6 @@ namespace FishLens_App
             else
                 processInfo.Environment["FISHLENS_RUN_FOLDER"] = string.Empty;
 
-            processInfo.Environment["FISHLENS_FORCE_REANALYZE"] = (_checkBoxes?.ForceReanalyze ?? false) ? "1" : "0";
             _yoloReadyTcs = new TaskCompletionSource<bool>();
             _yoloProcess = Process.Start(processInfo);
 
@@ -1264,6 +1274,8 @@ namespace FishLens_App
             {
                 _logger.LogInformation("Found {Count} video files in {Directory}", videoFiles.Count, inputFolder);
 
+                PrepareDebugRunForReanalysis(videoFiles);
+
                 // Step 1: run YOLO directly on the source folder
                 await RunYolo(inputFolder);
 
@@ -1289,6 +1301,48 @@ namespace FishLens_App
             }
             _processingComplete = true;
             UpdateActionButtonState();
+        }
+
+        // **************************************************
+        // Function: PrepareDebugRunForReanalysis
+        // Description: In debug mode, remove existing rows from debug.csv for any video names
+        //              present in the folder being analyzed so the rerun writes fresh rows only.
+        // **************************************************
+        private void PrepareDebugRunForReanalysis(List<string> videoFiles)
+        {
+            string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
+            if (!activeRun.Equals("debug", StringComparison.OrdinalIgnoreCase) || videoFiles.Count == 0)
+                return;
+
+            string debugCsvPath = _pathResolver.ResolveCsvScriptPath();
+            if (!File.Exists(debugCsvPath))
+                return;
+
+            try
+            {
+                var incomingNames = new HashSet<string>(
+                    videoFiles.Select(path => Path.GetFileName(path)),
+                    StringComparer.OrdinalIgnoreCase);
+
+                var lines = File.ReadAllLines(debugCsvPath).ToList();
+                if (lines.Count == 0)
+                    return;
+
+                var remaining = new List<string> { lines[0] };
+                for (int i = 1; i < lines.Count; i++)
+                {
+                    var cols = lines[i].Split(',');
+                    string existingName = cols.Length > 0 ? Path.GetFileName(cols[0].Trim()) : string.Empty;
+                    if (!incomingNames.Contains(existingName))
+                        remaining.Add(lines[i]);
+                }
+
+                File.WriteAllLines(debugCsvPath, remaining);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not prepare debug.csv for reanalysis.");
+            }
         }
 
 
@@ -1645,12 +1699,19 @@ namespace FishLens_App
 
         // **************************************************
         // Function: GetData
-        // Description: Retrieves video analysis data from CSV file (first track only)
+        // Description: Retrieves summary data for a library video card.
+        //              For multi-fish videos, the card uses the lowest track confidence
+        //              so the whole video is flagged if any fish falls below threshold.
         // **************************************************
         private FishLens_App.Models.Video GetData(string videoFileName, string videoFilePath = null, string sourceRun = null)
         {
             var tracks = GetAllTracks(videoFileName, sourceRun, videoFilePath);
-            return tracks.Count > 0 ? tracks[0] : new FishLens_App.Models.Video();
+            if (tracks.Count == 0)
+                return new FishLens_App.Models.Video();
+
+            var summary = tracks[0];
+            summary.AvgConfidence = tracks.Min(track => track.AvgConfidence);
+            return summary;
         }
 
         // **************************************************
@@ -3036,7 +3097,10 @@ namespace FishLens_App
         // **************************************************
         private bool IsLowConfidence(double confidence)
         {
-            return confidence < (_config?.ConfidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD);
+            double threshold = (Application.Current as App)?.Configuration?.ConfidenceThreshold
+                ?? _config?.ConfidenceThreshold
+                ?? DEFAULT_CONFIDENCE_THRESHOLD;
+            return confidence < threshold;
         }
 
         public void RefreshLibraryConfidenceStyles()

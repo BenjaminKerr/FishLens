@@ -53,20 +53,33 @@ def _load_yolo_model(model_path):
 
 
 def _load_classifier_model(model_path):
-    try:
-        keras_models = importlib.import_module("keras.models")
-        return keras_models.load_model(model_path)
-    except Exception as e:
-        print(f"WARNING: Could not load classifier model '{model_path}': {e}")
-        return None
+    loader_attempts = [
+        ("tensorflow.keras.models", {"compile": False}),
+        ("keras.models", {"compile": False}),
+        ("tensorflow.keras.models", {}),
+        ("keras.models", {}),
+    ]
+
+    last_error = None
+    for module_name, load_kwargs in loader_attempts:
+        try:
+            keras_models = importlib.import_module(module_name)
+            return keras_models.load_model(model_path, **load_kwargs)
+        except Exception as e:
+            last_error = e
+
+    print(f"WARNING: Could not load classifier model '{model_path}': {last_error}")
+    return None
 
 
 def _load_keras_image_utils():
-    try:
-        keras_image = importlib.import_module("keras.preprocessing.image")
-        return keras_image.load_img, keras_image.img_to_array
-    except Exception:
-        return None, None
+    for module_name in ("tensorflow.keras.preprocessing.image", "keras.preprocessing.image"):
+        try:
+            keras_image = importlib.import_module(module_name)
+            return keras_image.load_img, keras_image.img_to_array
+        except Exception:
+            continue
+    return None, None
 
 
 def _resolve_classifier_model_path():
