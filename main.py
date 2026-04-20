@@ -96,6 +96,7 @@ CSV_KEYS = [
     "start_time_sec",     # col 7
     "end_time_sec",       # col 8
     "video_timestamp",    # col 9
+    "run",                # col 10
 ]
 NO_FISH_CSV_KEYS = ["video_file", "location", "video_timestamp"]
 TESSERACT_AVAILABLE = check_tesseract()
@@ -117,7 +118,7 @@ CORNER_ARTIFACT_MAX_SIZE = 0.20   # box must be < 20 % of frame width AND height
 FPS_DEFAULT = 30 
 MAX_EXPORT_PER_VIDEO = 5
 
-# CSV paths — determined by the active run folder passed via FISHLENS_RUN_FOLDER env var.
+# CSV paths â€” determined by the active run folder passed via FISHLENS_RUN_FOLDER env var.
 _RUN_FOLDER = os.getenv("FISHLENS_RUN_FOLDER", "").strip()
 _IS_DEBUG_RUN = _RUN_FOLDER and os.path.basename(_RUN_FOLDER).lower() == "debug"
 
@@ -127,6 +128,7 @@ if not _RUN_FOLDER:
 os.makedirs(_RUN_FOLDER, exist_ok=True) if _RUN_FOLDER else None
 _ALL_HISTORY_DIR = os.path.dirname(_RUN_FOLDER) if _RUN_FOLDER else PROJECT_ROOT
 os.makedirs(_ALL_HISTORY_DIR, exist_ok=True)
+_RUN_NAME = os.path.basename(_RUN_FOLDER) if _RUN_FOLDER else ""
 
 if _IS_DEBUG_RUN:
     # Debug mode: single CSV, never writes to all_history or session files
@@ -169,17 +171,34 @@ IMAGE_SIZE = (150, 150)
 os.makedirs(NO_FISH, exist_ok=True)
 os.makedirs(FISH_IMAGE_DIR, exist_ok=True)
 
-# Wipe session CSVs so this session starts fresh (they are appended during the session).
-def _init_session_csvs():
-    for path, keys in [(SESSION_CSV, CSV_KEYS), (SESSION_NO_FISH_CSV, NO_FISH_CSV_KEYS)]:
-        if path:
-            try:
-                with open(path, "w", newline="") as f:
-                    csv.DictWriter(f, fieldnames=keys).writeheader()
-            except Exception as ex:
-                print(f"[WARNING] Could not initialize session CSV {path}: {ex}")
+# Create or refresh CSV headers.
+# Session CSVs are wiped on startup; master CSVs are only created if missing/empty.
+def _initialize_csv_header(path, keys, overwrite=False):
+    if not path:
+        return
 
-_init_session_csvs()
+    try:
+        should_write = overwrite or not os.path.exists(path) or os.path.getsize(path) == 0
+        if not should_write:
+            return
+
+        mode = "w" if overwrite else "a"
+        with open(path, mode, newline="") as f:
+            csv.DictWriter(f, fieldnames=keys).writeheader()
+    except Exception as ex:
+        print(f"[WARNING] Could not initialize CSV header for {path}: {ex}")
+
+def _init_csvs():
+    for path, keys in [(SESSION_CSV, CSV_KEYS), (SESSION_NO_FISH_CSV, NO_FISH_CSV_KEYS)]:
+        _initialize_csv_header(path, keys, overwrite=True)
+
+    if _IS_DEBUG_RUN:
+        _initialize_csv_header(OUTPUT_CSV, CSV_KEYS, overwrite=False)
+    else:
+        for path, keys in [(OUTPUT_CSV, CSV_KEYS), (MASTER_FISH_CSV, CSV_KEYS)]:
+            _initialize_csv_header(path, keys, overwrite=False)
+
+_init_csvs()
 
 # Signal to the host application that models are loaded and we are ready for work.
 print("[PROGRESS] READY", flush=True)
@@ -208,7 +227,7 @@ class VideoData:
         self.v_confidence_sum = 0.0
         self.v_confidence_count = 0 
         self.v_video_timestamp = None
-        self.v_probe_confidence = None   # "HIGH" / "MEDIUM" / None — from probe_video_timestamp
+        self.v_probe_confidence = None   # "HIGH" / "MEDIUM" / None â€” from probe_video_timestamp
         self.v_frame_width = 640
 
 
@@ -280,6 +299,7 @@ def main(input_path=None):
         for t in video_tracks:
             t["video_file"] = single_video_file
             t["location"] = FISHLENS_LOCATION
+            t["run"] = _RUN_NAME
         if video_tracks:
             try:
                 _flush_tracks_to_csv(video_tracks)
@@ -344,6 +364,7 @@ def main(input_path=None):
             for t in video_tracks:
                 t["video_file"] = item_path
                 t["location"] = FISHLENS_LOCATION
+                t["run"] = _RUN_NAME
 
             # Flush this video's tracks to CSV immediately so results are preserved
             # even if the run is cancelled before all videos finish.
@@ -390,10 +411,41 @@ def enhance_image(crop):
 # Description: Appends one video's fish tracks to the session + run master + all-history CSVs.
 #              Called immediately after each video finishes so results survive a cancel.
 # Notes: N/A
+def _ensure_csv_schema(path, keys, fill_values=None):
+    if path is None or not os.path.exists(path) or os.path.getsize(path) == 0:
+        return
+
+    fill_values = fill_values or {}
+    try:
+        with open(path, newline="") as f:
+            rows = list(csv.reader(f))
+    except Exception:
+        return
+
+    if not rows:
+        return
+
+    header = rows[0]
+    if header == keys:
+        return
+
+    expanded_rows = [keys]
+    for row in rows[1:]:
+        row_map = {}
+        for idx, column_name in enumerate(header):
+            row_map[column_name] = row[idx] if idx < len(row) else ""
+        expanded_rows.append([row_map.get(key, fill_values.get(key, "")) for key in keys])
+
+    with open(path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerows(expanded_rows)
+
 def _flush_tracks_to_csv(tracks):
     def _append_csv(path, rows, keys):
         if path is None:
             return
+        fill_values = {"run": _RUN_NAME} if path in (OUTPUT_CSV, SESSION_CSV) else {}
+        _ensure_csv_schema(path, keys, fill_values)
         needs_header = not os.path.exists(path) or os.path.getsize(path) == 0
         with open(path, "a", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=keys, extrasaction="ignore")
@@ -778,7 +830,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         if is_new_track:
             x1_e, y1_e, x2_e, y2_e = obj["bbox"]
             # Use the probe confidence when the probe already gave us a timestamp.
-            # "HIGH" probe → skip per-frame retries; "MEDIUM"/None → keep retrying.
+            # "HIGH" probe â†’ skip per-frame retries; "MEDIUM"/None â†’ keep retrying.
             _probe_conf_val = getattr(vidData, "v_probe_confidence", None)
             if vidData.v_video_timestamp and vidData.v_video_timestamp != "Not detected":
                 initial_conf = _probe_conf_val if _probe_conf_val in ("HIGH", "MEDIUM") else "LOW"
@@ -868,12 +920,12 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
 
     # Track-level corner-artifact filter.
     # A static IR illuminator or lens artifact stays planted in one corner across
-    # the entire video — its entry_x and exit_x (the YOLO bbox center) are both
+    # the entire video â€” its entry_x and exit_x (the YOLO bbox center) are both
     # close to the same frame edge.  A real small fish will move across the frame,
     # so its traversal (|exit_x - entry_x|) will be at least 10% of frame width
     # even if it is physically tiny.  We only reject a track when:
-    #   • it barely moved horizontally  (traversal < 10% frame width), AND
-    #   • both entry and exit are within CORNER_ARTIFACT_ZONE of the same side.
+    #   â€¢ it barely moved horizontally  (traversal < 10% frame width), AND
+    #   â€¢ both entry and exit are within CORNER_ARTIFACT_ZONE of the same side.
     traversal = abs(exit_x - entry_x)
     fw = vidData.v_frame_width
     if traversal < fw * 0.10:
@@ -895,7 +947,7 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     # Determine direction.
     # Uses net displacement (exit_x - entry_x) cross-checked against per-frame DeepSort counts.
     # The center-line "left/right side" approach is unreliable because DeepSort's n_init=10 means
-    # entry_x is recorded ~10 frames in — a fast fish may already be past center by then.
+    # entry_x is recorded ~10 frames in â€” a fast fish may already be past center by then.
     net_dx = exit_x - entry_x  # positive = fish moved right (downstream) overall
 
     directions = track_data["directions"]
@@ -904,7 +956,7 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     total_directional = upstream_count + downstream_count
 
     if total_directional == 0:
-        # Only stationary frames — no directional movement.
+        # Only stationary frames â€” no directional movement.
         overall_direction = directions[-1] if directions else "unknown"
     elif downstream_count > upstream_count:
         # Majority of frames were downstream; net displacement must also be rightward to confirm.
@@ -913,11 +965,11 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     elif upstream_count > downstream_count:
         overall_direction = "upstream" if net_dx <= 0 else "indecisive"
     else:
-        # Equal upstream and downstream frame counts → genuinely ambiguous.
+        # Equal upstream and downstream frame counts â†’ genuinely ambiguous.
         overall_direction = "indecisive"
 
     # If upstream direction at this location is right-to-left, the DeepSort labels and
-    # net_dx assumptions are inverted — flip upstream/downstream on the final result.
+    # net_dx assumptions are inverted â€” flip upstream/downstream on the final result.
     if FISHLENS_UPSTREAM_DIRECTION == "right" and overall_direction in ("upstream", "downstream"):
         overall_direction = "downstream" if overall_direction == "upstream" else "upstream"
 
@@ -1011,18 +1063,18 @@ def dedupe_fragmented_tracks(finished_tracks):
         #
         # Problem with comparing overall midpoints: a fish that has already
         # traversed half the frame has a very different average-x from a fish
-        # just entering — yet those two tracks might co-exist in time as two
+        # just entering â€” yet those two tracks might co-exist in time as two
         # _different_ fish.  Comparing midpoints would incorrectly see them
         # as close and allow a merge.
         #
         # Better: estimate where track A actually IS at the moment track B
-        # first appears (linear interpolation along entry_x→exit_x), then
+        # first appears (linear interpolation along entry_xâ†’exit_x), then
         # compare that to track B's entry position.
         #
         # Two outcomes:
-        #   • separation > 20% of A's traversal → different fish, block merge
-        #   • separation ≤ 20% of A's traversal AND overlap_ratio >= 0.50
-        #       → ID split of the same fish, force merge
+        #   â€¢ separation > 20% of A's traversal â†’ different fish, block merge
+        #   â€¢ separation â‰¤ 20% of A's traversal AND overlap_ratio >= 0.50
+        #       â†’ ID split of the same fish, force merge
         a_ex = a.get("entry_x")
         a_lx = a.get("exit_x")
         b_ex = b.get("entry_x")
@@ -1049,14 +1101,14 @@ def dedupe_fragmented_tracks(finished_tracks):
             if raw_traversal >= 100:
                 spatial_threshold = raw_traversal * 0.20
                 if separation > spatial_threshold:
-                    # Before blocking, check for a dramatic confidence gap — a very
+                    # Before blocking, check for a dramatic confidence gap â€” a very
                     # high-confidence track and a very low-confidence track at the same
                     # position are almost always the same fish re-detected with a new ID.
                     pa = _pct(a)
                     pb = _pct(b)
                     if abs(pa - pb) >= 30.0:
                         return True   # forced merge: confidence gap overrides spatial guard
-                    # Tracks are spatially far apart at the time they overlap —
+                    # Tracks are spatially far apart at the time they overlap â€”
                     # these are two different fish onscreen simultaneously.
                     return False
 
@@ -1106,13 +1158,14 @@ def _append_no_fish_row(video_file_path, video_timestamp):
         "location": FISHLENS_LOCATION,
         "video_timestamp": video_timestamp or "Not detected"
     }
-    # Full-schema row for the master files — likely_class="no_fish" is the fish-present indicator.
+    # Full-schema row for the master files â€” likely_class="no_fish" is the fish-present indicator.
     # Fish-specific fields are left blank so the master CSV has a uniform shape for every video.
     master_row = {k: "" for k in CSV_KEYS}
     master_row["video_file"]      = video_file_path
     master_row["likely_class"]    = "no_fish"
     master_row["video_timestamp"] = video_timestamp or "Not detected"
     master_row["location"]        = FISHLENS_LOCATION
+    master_row["run"]             = _RUN_NAME
 
     try:
         # --- Session no-fish file (slim schema, wiped on startup) ---
@@ -1125,11 +1178,12 @@ def _append_no_fish_row(video_file_path, video_timestamp):
                     writer.writeheader()
                 writer.writerow(slim_row)
 
-        # --- Master files (run_master + all_history) — full CSV_KEYS schema ---
+        # --- Master files (run_master + all_history) â€” full CSV_KEYS schema ---
         # session_fish + session_no_fish rolls up into run_master;
         # all run_master files roll up into all_history.
         if _RUN_FOLDER and _IS_DEBUG_RUN:
             # Debug: append no-fish row to debug.csv only, skip all_history
+            _ensure_csv_schema(OUTPUT_CSV, CSV_KEYS, {"run": _RUN_NAME})
             needs_header = not os.path.exists(OUTPUT_CSV) or os.path.getsize(OUTPUT_CSV) == 0
             with open(OUTPUT_CSV, "a", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=CSV_KEYS, extrasaction="ignore")
@@ -1140,6 +1194,8 @@ def _append_no_fish_row(video_file_path, video_timestamp):
             for path in (OUTPUT_CSV, MASTER_FISH_CSV):
                 if path is None:
                     continue
+                fill_values = {"run": _RUN_NAME} if path == OUTPUT_CSV else {}
+                _ensure_csv_schema(path, CSV_KEYS, fill_values)
                 needs_header = not os.path.exists(path) or os.path.getsize(path) == 0
                 with open(path, "a", newline="") as f:
                     writer = csv.DictWriter(f, fieldnames=CSV_KEYS, extrasaction="ignore")

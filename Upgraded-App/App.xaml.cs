@@ -1,6 +1,7 @@
-﻿using FishLens_App.Models;
+using FishLens_App.Models;
 using System;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Windows;
 
@@ -79,6 +80,22 @@ namespace FishLens_App
                     if (root.TryGetProperty("ActiveRun", out var arEl) &&
                         arEl.ValueKind == JsonValueKind.String)
                         ActiveRun = arEl.GetString() ?? string.Empty;
+                    if (root.TryGetProperty("Runs", out var runsEl) &&
+                        runsEl.ValueKind == JsonValueKind.Array)
+                    {
+                        var runs = new System.Collections.Generic.List<RunEntry>();
+                        foreach (var runEl in runsEl.EnumerateArray())
+                        {
+                            string runName = runEl.TryGetProperty("Name", out var nameEl)
+                                ? nameEl.GetString() ?? string.Empty
+                                : string.Empty;
+                            bool locked = runEl.TryGetProperty("Locked", out var lockedEl) &&
+                                lockedEl.ValueKind == JsonValueKind.True;
+                            if (!string.IsNullOrWhiteSpace(runName))
+                                runs.Add(new RunEntry { Name = runName, Locked = locked });
+                        }
+                        Configuration.Runs = runs;
+                    }
                 }
             }
             catch { /* non-critical; defaults will be used */ }
@@ -93,5 +110,54 @@ namespace FishLens_App
             }
             catch { /* non-critical */ }
         }
+
+        public void EnsureRunStorageInitialized()
+        {
+            try
+            {
+                string allHistoryDir = Path.Combine(GetProjectRoot(), "All History");
+                Directory.CreateDirectory(allHistoryDir);
+
+                EnsureRunStorageExists("debug", isDebugRun: true);
+                foreach (var run in Configuration.Runs.Where(r => !string.IsNullOrWhiteSpace(r.Name)))
+                    EnsureRunStorageExists(run.Name, isDebugRun: false);
+            }
+            catch { /* non-critical */ }
+        }
+
+        private void EnsureRunStorageExists(string runName, bool isDebugRun)
+        {
+            string runFolder = Path.Combine(GetProjectRoot(), "All History", runName);
+            Directory.CreateDirectory(runFolder);
+
+            if (isDebugRun)
+            {
+                EnsureCsvFile(Path.Combine(runFolder, "debug.csv"), FishCsvHeader);
+                return;
+            }
+
+            EnsureCsvFile(Path.Combine(runFolder, "session_fish.csv"), FishCsvHeader);
+            EnsureCsvFile(Path.Combine(runFolder, "session_no_fish.csv"), NoFishCsvHeader);
+            EnsureCsvFile(Path.Combine(runFolder, "run_master.csv"), FishCsvHeader);
+            EnsureCsvFile(Path.Combine(GetProjectRoot(), "All History", "all_history.csv"), FishCsvHeader);
+        }
+
+        private static void EnsureCsvFile(string path, string header)
+        {
+            if (File.Exists(path)) return;
+            File.WriteAllText(path, header + Environment.NewLine);
+        }
+
+        private static string GetProjectRoot()
+        {
+            string appDir = AppDomain.CurrentDomain.BaseDirectory;
+            return Directory.GetParent(appDir)?.Parent?.Parent?.Parent?.Parent?.FullName ?? appDir;
+        }
+
+        private const string FishCsvHeader =
+            "video_file,location,species,species_confidence,likely_class,confidence,direction,start_time_sec,end_time_sec,video_timestamp,run";
+
+        private const string NoFishCsvHeader =
+            "video_file,location,video_timestamp";
     }
 }

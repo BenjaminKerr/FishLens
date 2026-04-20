@@ -1,4 +1,4 @@
-﻿using DocumentFormat.OpenXml.Spreadsheet;
+using DocumentFormat.OpenXml.Spreadsheet;
 using FishLens_App;
 using FishLens_App.Interfaces;
 using FishLens_App.Models;
@@ -983,9 +983,6 @@ namespace FishLens_App
         private void LoadRunsDropdown()
         {
             if (activeRunDropdown == null) return;
-
-            // Ensure the debug folder exists (always present, never persisted in Runs list)
-            try { Directory.CreateDirectory(_pathResolver.ResolveRunFolder("debug")); } catch { }
 
             // Build name list: debug entry first (shown as [Debug]), then normal runs
             var names = new List<string> { "[Debug]" };

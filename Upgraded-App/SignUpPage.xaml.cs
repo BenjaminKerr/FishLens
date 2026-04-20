@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -161,6 +161,7 @@ namespace FishLens_App
                                 app.CurrentOrganizationId = (int)orgIdParam.Value;
                             }
 
+                            (Application.Current as App)?.EnsureRunStorageInitialized();
                             MainWindow main = new MainWindow();
                             main.Show();
                             this.Close();

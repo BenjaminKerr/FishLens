@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -38,10 +38,10 @@ namespace FishLens_App.Services
         // Function: ReadVideoFromCsv
         // Description: Reads a video's row from CSV and returns a Video object
         // **************************************************
-        public static Video ReadVideoFromCsv(string csvPath, string videoFileName)
+        public static Video ReadVideoFromCsv(string csvPath, string videoFileName, string videoFilePath = null, string fallbackRun = "")
         {
-            var tracks = ReadAllTracksFromCsv(csvPath, videoFileName);
-            return tracks.Count > 0 ? tracks[0] : CreateDefaultVideo(videoFileName);
+            var tracks = ReadAllTracksFromCsv(csvPath, videoFileName, fallbackRun, videoFilePath);
+            return tracks.Count > 0 ? tracks[0] : CreateDefaultVideo(videoFileName, fallbackRun);
         }
 
         // **************************************************
@@ -49,7 +49,7 @@ namespace FishLens_App.Services
         // Description: Returns ALL rows for a given video filename as a list of Video objects.
         //              A single video can have multiple tracks (one row per fish detected).
         // **************************************************
-        public static List<Video> ReadAllTracksFromCsv(string csvPath, string videoFileName)
+        public static List<Video> ReadAllTracksFromCsv(string csvPath, string videoFileName, string fallbackRun = "", string videoFilePath = null)
         {
             var tracks = new List<Video>();
             if (!File.Exists(csvPath)) return tracks;
@@ -59,19 +59,19 @@ namespace FishLens_App.Services
             {
                 var cols = lines[i].Split(',');
                 if (cols.Length == 0) continue;
-                if (string.Equals(Path.GetFileName(cols[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase))
+                if (RowMatchesVideo(cols, videoFileName, videoFilePath))
                 {
-                    tracks.Add(ParseVideoFromColumns(cols));
+                    tracks.Add(ParseVideoFromColumns(cols, fallbackRun));
                 }
             }
 
-            return tracks.Count > 0 ? tracks : new List<Video> { CreateDefaultVideo(videoFileName) };
+            return tracks.Count > 0 ? tracks : new List<Video> { CreateDefaultVideo(videoFileName, fallbackRun) };
         }
 
         // **************************************************
         // Function: UpdateCsvRow
         // Description: Replaces the CSV row for videoFileName with updatedRow.
-        //              When a video has multiple fish tracks this replaces ALL matching rows —
+        //              When a video has multiple fish tracks this replaces ALL matching rows -
         //              use UpdateCsvRowForTrack to target a specific track.
         // **************************************************
         public static void UpdateCsvRow(string csvPath, string videoFileName, string updatedRow)
@@ -102,11 +102,11 @@ namespace FishLens_App.Services
 
         // **************************************************
         // Function: UpdateCsvRowForTrack
-        // Description: Replaces exactly one CSV row — the row for videoFileName whose
+        // Description: Replaces exactly one CSV row - the row for videoFileName whose
         //              start_time_sec column (col 7) matches startTimeSec.
         //              Returns true if a row was found and replaced, false if not present.
         // **************************************************
-        public static bool UpdateCsvRowForTrack(string csvPath, string videoFileName, string startTimeSec, string updatedRow)
+        public static bool UpdateCsvRowForTrack(string csvPath, string videoFileName, string startTimeSec, string updatedRow, string run = null)
         {
             var lines = File.ReadAllLines(csvPath).ToList();
             if (lines.Count == 0) return false;
@@ -120,8 +120,10 @@ namespace FishLens_App.Services
                     string.Equals(Path.GetFileName(cols[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase);
                 bool timeMatch = cols.Length > 7 &&
                     string.Equals(cols[7].Trim(), startTimeSec, StringComparison.OrdinalIgnoreCase);
+                bool runMatch = string.IsNullOrWhiteSpace(run) ||
+                    (cols.Length > 10 && string.Equals(cols[10].Trim(), run, StringComparison.OrdinalIgnoreCase));
 
-                if (nameMatch && timeMatch && !found)
+                if (nameMatch && timeMatch && runMatch && !found)
                 {
                     updatedLines.Add(updatedRow);
                     found = true;
@@ -160,7 +162,7 @@ namespace FishLens_App.Services
         // Parse row columns according to CSV layout:
         // 0: video_file, 1: location, 2: species, 3: species_confidence, 4: likely_class,
         // 5: confidence, 6: direction, 7: start_time_sec, 8: end_time_sec, 9: video_timestamp
-        public static Video ParseVideoFromColumns(string[] columns)
+        public static Video ParseVideoFromColumns(string[] columns, string fallbackRun = "")
         {
             var video = new Video();
             // col 0: full video file path
@@ -230,10 +232,13 @@ namespace FishLens_App.Services
                     video.DetectionTimestamp = ts;
             }
 
+            // col 10: run attribution
+            video.Run = columns.Length > 10 ? columns[10].Trim() : fallbackRun;
+
             return video;
         }
 
-        private static Video CreateDefaultVideo(string videoFileName)
+        private static Video CreateDefaultVideo(string videoFileName, string fallbackRun = "")
         {
             return new Video
             {
@@ -246,8 +251,21 @@ namespace FishLens_App.Services
                 AvgConfidence = 0.0,
                 Direction = "Unknown",
                 Species = string.Empty,
-                SpeciesConfidence = 0.0
+                SpeciesConfidence = 0.0,
+                Run = fallbackRun
             };
+        }
+
+        private static bool RowMatchesVideo(string[] columns, string videoFileName, string videoFilePath)
+        {
+            if (columns.Length == 0) return false;
+
+            string storedPath = columns[0].Trim();
+            if (!string.IsNullOrWhiteSpace(videoFilePath) &&
+                string.Equals(storedPath, videoFilePath, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            return string.Equals(Path.GetFileName(storedPath), videoFileName, StringComparison.OrdinalIgnoreCase);
         }
 
         // **************************************************

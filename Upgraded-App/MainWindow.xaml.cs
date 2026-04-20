@@ -65,7 +65,7 @@ namespace FishLens_App
         // Stack of deletion batches for undo support
         private readonly Stack<DeletionBatch> _deletionHistory = new Stack<DeletionBatch>();
 
-        // Persistent Python process — models stay loaded between runs
+        // Persistent Python process - models stay loaded between runs
         private Process _yoloProcess;
         private bool _yoloFastModeAtStart;
         private string _yoloLocationAtStart = string.Empty;
@@ -74,7 +74,7 @@ namespace FishLens_App
         private TaskCompletionSource<bool> _yoloReadyTcs;
         // Incremented before every intentional kill-for-restart. ReadYoloOutputLoop snapshots
         // this at start and only fires _processingTcs.TrySetException on exit when the count
-        // hasn't changed — i.e. the process died unexpectedly, not because we restarted it.
+        // hasn't changed - i.e. the process died unexpectedly, not because we restarted it.
         private int _yoloKillCount;
         private int _totalVideos;
         private readonly System.Text.StringBuilder _outputBuilder = new System.Text.StringBuilder();
@@ -89,7 +89,7 @@ namespace FishLens_App
         private string _playbackTempPath = null; // temp MP4 created from ASF for accurate scrubbing
         private bool _processingComplete = false;
 
-        // Multi-track state — all tracks for the currently-displayed video
+        // Multi-track state - all tracks for the currently displayed video
         private List<FishLens_App.Models.Video> _currentTracks = new List<FishLens_App.Models.Video>();
         private int _currentTrackIndex;
 
@@ -379,7 +379,7 @@ namespace FishLens_App
             _logger.LogInformation("Starting YOLO process with videoFolder: {VideoFolder}", videoFolder);
 
             // Only restart Python if it's not running at all (e.g. crashed between runs).
-            // If it's still in the middle of startup, leave it alone — await _yoloReadyTcs.Task
+            // If it's still in the middle of startup, leave it alone - await _yoloReadyTcs.Task
             // will wait for the existing startup to finish without triggering a second launch.
             if (_yoloProcess == null || _yoloProcess.HasExited)
                 EnsureYoloProcessRunning();
@@ -432,7 +432,7 @@ namespace FishLens_App
             }
             catch (OperationCanceledException)
             {
-                // User clicked Cancel — process already killed and restarting
+                // User clicked Cancel - process already killed and restarting
                 Dispatcher.Invoke(HideAnalysisProgress);
             }
             catch (Exception ex)
@@ -445,7 +445,7 @@ namespace FishLens_App
         // **************************************************
         // Function: EnsureYoloProcessRunning
         // Description: Starts the Python process if it is not already running.
-        //              Does NOT restart due to Fast Mode — that goes through OnFastModeChanged.
+        //              Does NOT restart due to Fast Mode - that goes through OnFastModeChanged.
         // **************************************************
         private void EnsureYoloProcessRunning()
         {
@@ -534,7 +534,7 @@ namespace FishLens_App
 
         // **************************************************
         // Function: LoadUpstreamDirectionMap
-        // Description: Returns a dictionary of location name → upstream direction ("left"/"right")
+        // Description: Returns a dictionary of location name -> upstream direction ("left"/"right")
         //              loaded from appsettings.json. Used for direction-flip logic on location change.
         // **************************************************
         private Dictionary<string, string> LoadUpstreamDirectionMap()
@@ -658,8 +658,6 @@ namespace FishLens_App
                 File.WriteAllText(configPath, JsonSerializer.Serialize(dict, options));
             }
             catch { /* non-critical */ }
-
-            RefreshSessionOverview();
         }
 
         // **************************************************
@@ -684,7 +682,7 @@ namespace FishLens_App
         // **************************************************
         // Function: BulkUpdateLocationInCsvs
         // Description: Overwrites the location column (col 1) in all run CSVs with a new value.
-        //              Also flips the direction column (upstream↔downstream) whenever the upstream
+        //              Also flips the direction column (upstream<->downstream) whenever the upstream
         //              direction changed between the row's old location and the new one.
         //              Used when the user corrects a wrong location selection after analysis.
         // **************************************************
@@ -706,7 +704,7 @@ namespace FishLens_App
                         var cols = lines[i].Split(',');
                         if (cols.Length > 1)
                         {
-                            // Flip direction if upstream direction differs (fish CSVs only — col 6 exists)
+                            // Flip direction if upstream direction differs (fish CSVs only - col 6 exists)
                             if (cols.Length > 6 && newUpstreamDir != null)
                             {
                                 string oldLocation = cols[1];
@@ -738,7 +736,7 @@ namespace FishLens_App
         // Function: UpdateLocationForVideosInCsvs
         // Description: Updates the location column only for specific video filenames across
         //              all four run CSVs (session_fish, run_master, all_history, session_no_fish).
-        //              Also flips the direction column (upstream↔downstream) whenever the upstream
+        //              Also flips the direction column (upstream<->downstream) whenever the upstream
         //              direction differs between old and new location.  "indecisive" is left alone.
         // **************************************************
         private void UpdateLocationForVideosInCsvs(IEnumerable<string> filenames, string newLocation, string activeRun)
@@ -760,7 +758,7 @@ namespace FishLens_App
                         var cols = lines[i].Split(',');
                         if (cols.Length > 1 && fileSet.Contains(Path.GetFileName(cols[0])))
                         {
-                            // Flip direction if upstream direction differs (fish CSVs only — col 6 exists)
+                            // Flip direction if upstream direction differs (fish CSVs only - col 6 exists)
                             if (cols.Length > 6 && newUpstreamDir != null)
                             {
                                 string oldLocation = cols[1];
@@ -769,7 +767,7 @@ namespace FishLens_App
                                 {
                                     if (cols[6] == "upstream") cols[6] = "downstream";
                                     else if (cols[6] == "downstream") cols[6] = "upstream";
-                                    // indecisive / unknown → unchanged
+                                    // indecisive / unknown -> unchanged
                                 }
                             }
 
@@ -889,7 +887,7 @@ namespace FishLens_App
                     var parts = fraction.Split('/');
                     if (parts.Length == 2 && int.TryParse(parts[0], out int current))
                     {
-                        _currentVideoStatus = $"Video {fraction} — {filename}";
+                        _currentVideoStatus = $"Video {fraction} - {filename}";
                         int capturedCurrent = current;
                         Dispatcher.Invoke(() =>
                         {
@@ -947,7 +945,7 @@ namespace FishLens_App
                 }
             }
 
-            // Process exited — fail any pending run or startup wait for THIS instance only.
+            // Process exited - fail any pending run or startup wait for THIS instance only.
             // Using the snapshot myReadyTcs prevents a dying old loop from poisoning a freshly
             // created TCS that belongs to the new Python process.
             myReadyTcs?.TrySetException(new Exception("Python process exited unexpectedly."));
@@ -1072,7 +1070,7 @@ namespace FishLens_App
 
                 await ProcessVideos(sourceFolderPath);
 
-                // Show export button if there is any CSV data — even after a cancel,
+                // Show export button if there is any CSV data - even after a cancel,
                 // videos that finished before cancellation are in the CSV and exportable.
                 string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
                 if (File.Exists(_pathResolver.ResolveRunCsvPath(activeRun)))
@@ -1103,7 +1101,7 @@ namespace FishLens_App
                 // Step 1: run YOLO directly on the source folder
                 await RunYolo(inputFolder);
 
-                // Step 2: read CSV — always populate from whatever is in the CSV now.
+                // Step 2: read CSV - always populate from whatever is in the CSV now.
                 // If the user cancelled, videos processed before cancel are still in the
                 // CSV and should appear. If nothing was processed, the list stays as-is.
                 List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList = CreateSortedListOfVideos(inputFolder);
@@ -1149,14 +1147,14 @@ namespace FishLens_App
 
             if (!ConfirmDelete(selected.Count)) return;
 
-            // Build an undo batch (UI state only — no files are touched).
+            // Build an undo batch (UI state only - no files are touched).
             var batch = new DeletionBatch();
             string csvPath = _pathResolver.ResolveCsvScriptPath();
             foreach (var (grid, path) in selected)
             {
                 string fileName = Path.GetFileName(path);
                 var videoData = File.Exists(csvPath)
-                    ? FishLens_App.Services.CsvUtils.ReadVideoFromCsv(csvPath, fileName)
+                    ? FishLens_App.Services.CsvUtils.ReadVideoFromCsv(csvPath, fileName, path)
                     : new FishLens_App.Models.Video();
                 string folder = GetFolderTagForPath(path);
                 batch.Items.Add((path, grid, videoData, folder));
@@ -1461,7 +1459,7 @@ namespace FishLens_App
             {
                 if (IsVideoFile(vid))
                 {
-                    FishLens_App.Models.Video data = GetData(vid.Name);
+                    FishLens_App.Models.Video data = GetData(vid.Name, vid.FullName);
                     videoDataList.Add((vid, data));
                 }
             }
@@ -1483,9 +1481,9 @@ namespace FishLens_App
         // Function: GetData
         // Description: Retrieves video analysis data from CSV file (first track only)
         // **************************************************
-        private FishLens_App.Models.Video GetData(string videoFileName)
+        private FishLens_App.Models.Video GetData(string videoFileName, string videoFilePath = null, string sourceRun = null)
         {
-            var tracks = GetAllTracks(videoFileName);
+            var tracks = GetAllTracks(videoFileName, sourceRun, videoFilePath);
             return tracks.Count > 0 ? tracks[0] : new FishLens_App.Models.Video();
         }
 
@@ -1494,28 +1492,33 @@ namespace FishLens_App
         // Description: Returns all CSV rows (tracks) for a given video filename.
         //              A video with N detected fish will have N tracks.
         // **************************************************
-        private List<FishLens_App.Models.Video> GetAllTracks(string videoFileName)
+        private List<FishLens_App.Models.Video> GetAllTracks(string videoFileName, string sourceRun = null, string videoFilePath = null)
         {
-            string csvPath = _pathResolver.ResolveCsvScriptPath();
+            string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
+            string effectiveRun = string.IsNullOrWhiteSpace(sourceRun) ? activeRun : sourceRun;
+            string csvPath = string.IsNullOrWhiteSpace(effectiveRun)
+                ? _pathResolver.ResolveCsvScriptPath()
+                : (effectiveRun.Equals("debug", StringComparison.OrdinalIgnoreCase)
+                    ? _pathResolver.ResolveCsvScriptPath()
+                    : _pathResolver.ResolveRunCsvPath(effectiveRun));
 
             if (!File.Exists(csvPath))
             {
-                string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
-                bool isDebug = activeRun.Equals("debug", StringComparison.OrdinalIgnoreCase);
+                bool isDebug = effectiveRun.Equals("debug", StringComparison.OrdinalIgnoreCase);
                 if (!isDebug)
                     MessageBox.Show("Analysis data file not found.", "Error",
                         MessageBoxButton.OK, MessageBoxImage.Warning);
-                return new List<FishLens_App.Models.Video> { new FishLens_App.Models.Video { Name = videoFileName } };
+                return new List<FishLens_App.Models.Video> { new FishLens_App.Models.Video { Name = videoFileName, VideoFilePath = videoFilePath, Run = effectiveRun } };
             }
 
             try
             {
-                return FishLens_App.Services.CsvUtils.ReadAllTracksFromCsv(csvPath, videoFileName);
+                return FishLens_App.Services.CsvUtils.ReadAllTracksFromCsv(csvPath, videoFileName, effectiveRun, videoFilePath);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error reading tracks for {VideoFileName}", videoFileName);
-                return new List<FishLens_App.Models.Video> { new FishLens_App.Models.Video { Name = videoFileName } };
+                return new List<FishLens_App.Models.Video> { new FishLens_App.Models.Video { Name = videoFileName, VideoFilePath = videoFilePath, Run = effectiveRun } };
             }
         }
 
@@ -1703,7 +1706,7 @@ namespace FishLens_App
             int chinookUp = 0, chinookDown = 0;
             int omykissUp = 0, omykissDown = 0;
 
-            // fishLines[0] is header — skip it
+            // fishLines[0] is header - skip it
             for (int i = 1; i < fishLines.Length; i++)
             {
                 var cols = fishLines[i].Split(',');
@@ -1791,7 +1794,7 @@ namespace FishLens_App
                     if (double.TryParse(clean, System.Globalization.NumberStyles.Any,
                             System.Globalization.CultureInfo.InvariantCulture, out double val))
                     {
-                        if (val <= 1.0) val *= 100.0;  // decimal → percent
+                        if (val <= 1.0) val *= 100.0;  // decimal -> percent
                         worksheet.Cell(line + 1, column + 1).Value = $"{val:F2}%";
                     }
                     else
@@ -1849,10 +1852,18 @@ namespace FishLens_App
         // **************************************************
         private void RefreshSessionOverview()
         {
-            string location = locationDropdown.SelectedItem as string ?? "--";
+            string sourceRun = _currentTracks.Count > 0
+                ? _currentTracks[_currentTrackIndex].Run
+                : (Application.Current as App)?.ActiveRun ?? string.Empty;
+            string location = _currentTracks.Count > 0
+                ? _currentTracks[_currentTrackIndex].Location
+                : (locationDropdown.SelectedItem as string ?? "--");
+            sessionRunText.Text = $"Run: {(string.IsNullOrWhiteSpace(sourceRun) ? "--" : sourceRun)}";
             sessionLocationText.Text = $"Location: {location}";
 
-            string csvPath = _pathResolver.ResolveCsvScriptPath();
+            string csvPath = string.IsNullOrWhiteSpace(sourceRun)
+                ? _pathResolver.ResolveCsvScriptPath()
+                : _pathResolver.ResolveRunCsvPath(sourceRun);
             if (!File.Exists(csvPath))
             {
                 sessionNetUpstreamText.Text = "Net Upstream: --";
@@ -1898,15 +1909,18 @@ namespace FishLens_App
 
                 // Identify the specific track to save by its start_time_sec.
                 // This ensures edits to Fish 2 don't overwrite Fish 1's row.
-                string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
-                string startTimeSec = (_currentTracks.Count > _currentTrackIndex)
-                    ? _currentTracks[_currentTrackIndex].StartTime
-                    : string.Empty;
+                var currentTrack = (_currentTracks.Count > _currentTrackIndex)
+                    ? _currentTracks[_currentTrackIndex]
+                    : null;
+                string startTimeSec = currentTrack?.StartTime ?? string.Empty;
+                string sourceRun = currentTrack?.Run;
+                if (string.IsNullOrWhiteSpace(sourceRun))
+                    sourceRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
 
                 // run_master.csv and all_history.csv are written together during analysis
-                // and must stay in sync — the save must succeed in both.
-                string runMasterPath = _pathResolver.ResolveRunCsvPath(activeRun);
-                if (!File.Exists(runMasterPath) || !UpdateCsvFile(runMasterPath, currentVideoName, startTimeSec))
+                // and must stay in sync - the save must succeed in both.
+                string runMasterPath = _pathResolver.ResolveRunCsvPath(sourceRun);
+                if (!File.Exists(runMasterPath) || !UpdateCsvFile(runMasterPath, currentTrack, currentVideoName, startTimeSec))
                 {
                     MessageBox.Show(
                         "This track was not found in the run master CSV. No changes were saved.",
@@ -1916,14 +1930,16 @@ namespace FishLens_App
 
                 string allHistoryPath = _pathResolver.ResolveAllTimeMasterFishCsvPath();
                 if (File.Exists(allHistoryPath))
-                    UpdateCsvFile(allHistoryPath, currentVideoName, startTimeSec);
+                    UpdateCsvFile(allHistoryPath, currentTrack, currentVideoName, startTimeSec);
 
-                // session_fish.csv is best-effort — only populated for the current session,
+                // session_fish.csv is best-effort - only populated for the current session,
                 // so prior-session videos won't be present. Silently skip if row is absent.
-                string sessionPath = _pathResolver.ResolveSessionCsvPath(activeRun);
+                string sessionPath = _pathResolver.ResolveSessionCsvPath(sourceRun);
                 if (File.Exists(sessionPath))
-                    UpdateCsvFile(sessionPath, currentVideoName, startTimeSec);
+                    UpdateCsvFile(sessionPath, currentTrack, currentVideoName, startTimeSec);
 
+                if (currentTrack != null)
+                    currentTrack.Run = sourceRun;
                 RefreshSessionOverview();
                 MessageBox.Show("Changes saved successfully!", "Save Successful",
                     MessageBoxButton.OK, MessageBoxImage.Information);
@@ -1941,10 +1957,13 @@ namespace FishLens_App
         // Description: Updates exactly the current track's CSV row (identified by start_time_sec).
         //              Returns true if the row was found and updated, false if not present in this file.
         // **************************************************
-        private bool UpdateCsvFile(string csvPath, string videoFileName, string startTimeSec)
+        private bool UpdateCsvFile(string csvPath, FishLens_App.Models.Video track, string videoFileName, string startTimeSec)
         {
+            EnsureCsvHasRunColumn(csvPath, track?.Run ?? string.Empty);
             string[] lines = File.ReadAllLines(csvPath);
             string[] columns = null;
+            string trackRun = track?.Run ?? string.Empty;
+            string trackPath = track?.VideoFilePath ?? string.Empty;
             for (int i = 1; i < lines.Length; i++)
             {
                 var cols = lines[i].Split(',');
@@ -1953,18 +1972,54 @@ namespace FishLens_App
                         StringComparison.OrdinalIgnoreCase);
                 bool timeMatch = cols.Length > 7 &&
                     string.Equals(cols[7].Trim(), startTimeSec, StringComparison.OrdinalIgnoreCase);
-                if (nameMatch && timeMatch)
+                bool runMatch = string.IsNullOrWhiteSpace(trackRun) ||
+                    (cols.Length > 10 && string.Equals(cols[10].Trim(), trackRun, StringComparison.OrdinalIgnoreCase));
+                bool pathMatch = string.IsNullOrWhiteSpace(trackPath) ||
+                    (cols.Length > 0 && string.Equals(cols[0].Trim(), trackPath, StringComparison.OrdinalIgnoreCase));
+                if (nameMatch && timeMatch && runMatch && pathMatch)
                 {
                     columns = cols;
                     break;
                 }
             }
 
-            // Row not present in this file — skip silently (e.g. session_fish.csv for old-run data)
+            // Row not present in this file - skip silently (e.g. session_fish.csv for old-run data)
             if (columns == null) return false;
 
             string updatedRow = CreateUpdatedCsvRow(columns);
-            return FishLens_App.Services.CsvUtils.UpdateCsvRowForTrack(csvPath, videoFileName, startTimeSec, updatedRow);
+            return FishLens_App.Services.CsvUtils.UpdateCsvRowForTrack(csvPath, videoFileName, startTimeSec, updatedRow, trackRun);
+        }
+
+        // **************************************************
+        // Function: EnsureCsvHasRunColumn
+        // Description: Upgrades older 10-column CSVs in place by appending a run column.
+        //              Existing rows keep blank run values unless a default run is provided.
+        // **************************************************
+        private void EnsureCsvHasRunColumn(string csvPath, string defaultRun)
+        {
+            if (!File.Exists(csvPath)) return;
+
+            var lines = File.ReadAllLines(csvPath).ToList();
+            if (lines.Count == 0) return;
+
+            var headerCols = lines[0].Split(',');
+            if (headerCols.Length > 10 && string.Equals(headerCols[10].Trim(), "run", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (headerCols.Length == 10)
+                lines[0] = $"{lines[0]},run";
+
+            bool backfillRun = !string.Equals(Path.GetFileName(csvPath), "all_history.csv", StringComparison.OrdinalIgnoreCase);
+
+            for (int i = 1; i < lines.Count; i++)
+            {
+                if (string.IsNullOrWhiteSpace(lines[i])) continue;
+                var cols = lines[i].Split(',');
+                if (cols.Length >= 11) continue;
+                lines[i] = $"{lines[i]},{(backfillRun ? defaultRun : string.Empty)}";
+            }
+
+            File.WriteAllLines(csvPath, lines);
         }
 
         // CSV removal moved to CsvUtils for reuse and testability
@@ -1988,6 +2043,7 @@ namespace FishLens_App
             string startTime = originalColumns.Length > 7 ? originalColumns[7].Trim() : string.Empty;
             string endTime = originalColumns.Length > 8 ? originalColumns[8].Trim() : string.Empty;
             string vidTimeStamp = originalColumns.Length > 9 ? originalColumns[9].Trim() : string.Empty;
+            string run = originalColumns.Length > 10 ? originalColumns[10].Trim() : string.Empty;
 
             // Read and validate confidence values from UI TextBoxes
             // fishPresentConfidence is displayed as percentage (e.g., "88.00%")
@@ -2019,7 +2075,7 @@ namespace FishLens_App
             }
 
             // Build the CSV row
-            return $"{videoFile},{location},{species},{species_confidence},{likelyClass},{confidence},{direction},{startTime},{endTime},{vidTimeStamp}";
+            return $"{videoFile},{location},{species},{species_confidence},{likelyClass},{confidence},{direction},{startTime},{endTime},{vidTimeStamp},{run}";
         }
 
         // **************************************************
@@ -2074,7 +2130,7 @@ namespace FishLens_App
             undoLastDelete.Visibility = Visibility.Collapsed;
             sidebarSeperator.Visibility = Visibility.Collapsed;
             videoLibraryTitle.Visibility = Visibility.Collapsed;
-            // Only hide the progress UI — do NOT raise AnalysisStateChanged(false) here
+            // Only hide the progress UI - do NOT raise AnalysisStateChanged(false) here
             // because analysis may still be running in the background.
             analysisProgressArea.Visibility = Visibility.Collapsed;
 
@@ -2139,13 +2195,15 @@ namespace FishLens_App
         {
             Button clickedButton = (Button)sender;
             string videoPath = clickedButton.Tag.ToString();
+            var sourceVideo = clickedButton.DataContext as FishLens_App.Models.Video;
 
             // Load data first so fish markers are set before MediaOpened fires
             string videoFileName = Path.GetFileName(videoPath);
-            var data = GetData(videoFileName);
+            string sourceRun = sourceVideo?.Run;
+            var data = GetData(videoFileName, videoPath, sourceRun);
             if (data != null)
             {
-                DisplayDataInUi(videoFileName);
+                DisplayDataInUi(videoFileName, data.Run, videoPath);
             }
 
             LoadVideoInPlayer(videoPath);
@@ -2182,7 +2240,7 @@ namespace FishLens_App
                 var candidate = System.IO.Path.Combine(dir.Trim(), "ffmpeg.exe");
                 if (File.Exists(candidate)) { ffmpeg = candidate; break; }
             }
-            if (ffmpeg == null) return asfPath; // ffmpeg not found — use original
+            if (ffmpeg == null) return asfPath; // ffmpeg not found - use original
 
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
                 $"fishlens_play_{System.IO.Path.GetFileNameWithoutExtension(asfPath)}_{System.Guid.NewGuid():N}.mp4");
@@ -2201,7 +2259,7 @@ namespace FishLens_App
                     return tempPath;
             }
             catch { }
-            // Conversion failed — clean up and fall back to original
+            // Conversion failed - clean up and fall back to original
             try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
             return asfPath;
         }
@@ -2228,13 +2286,13 @@ namespace FishLens_App
             videoPlayer.Source = new Uri(videoPath);
             videoPlayer.Play();
             _isPlaying = true;
-            playPauseButton.Content = "⏸";
+            playPauseButton.Content = "\u23F8";
 
             // Show controls, hide placeholder
             placeholderPanel.Visibility = Visibility.Collapsed;
             videoControls.Visibility = Visibility.Visible;
 
-            // Reset scrubber and time only — fish markers are redrawn from _currentTracks by UpdateFishMarkers()
+            // Reset scrubber and time only - fish markers are redrawn from _currentTracks by UpdateFishMarkers()
             videoScrubber.Value = 0;
             videoCurrentTimeText.Text = "0:00";
             videoTotalTimeText.Text = "0:00";
@@ -2268,7 +2326,7 @@ namespace FishLens_App
         {
             _videoTimer?.Stop();
             _isPlaying = false;
-            playPauseButton.Content = "▶";
+            playPauseButton.Content = "\u25B6";
             videoPlayer.Stop();
             videoScrubber.Value = 0;
             videoCurrentTimeText.Text = "0:00";
@@ -2303,20 +2361,20 @@ namespace FishLens_App
             {
                 videoPlayer.Pause();
                 _isPlaying = false;
-                playPauseButton.Content = "▶";
+                playPauseButton.Content = "\u25B6";
             }
             else
             {
                 videoPlayer.Play();
                 _isPlaying = true;
-                playPauseButton.Content = "⏸";
+                playPauseButton.Content = "\u23F8";
                 _videoTimer?.Start(); // restart timer if it was stopped by MediaEnded
             }
         }
 
         // **************************************************
         // Function: SkipBackButton_Click / SkipForwardButton_Click
-        // Description: Skip video position by ±1 second
+        // Description: Skip video position by +/-1 second
         // **************************************************
         private void SkipBackButton_Click(object sender, RoutedEventArgs e) => SkipSeconds(-1.0);
         private void SkipForwardButton_Click(object sender, RoutedEventArgs e) => SkipSeconds(1.0);
@@ -2334,7 +2392,7 @@ namespace FishLens_App
 
         // **************************************************
         // Function: Window_PreviewKeyDown
-        // Description: Space = play/pause, Left/Right arrow = skip ±1s.
+        // Description: Space = play/pause, Left/Right arrow = skip +/-1s.
         //              Only active when video controls are visible.
         // **************************************************
         private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -2429,7 +2487,7 @@ namespace FishLens_App
         //              and one directional emoji per track above it.
         //              The active track is full opacity; inactive tracks are 50% opacity.
         //              Colors: upstream=#2AB5B5 teal, downstream=#E05C5C coral, indecisive=#E8A038 amber.
-        //              Emojis: upstream="◀🐟", downstream="🐟▶", indecisive="↔🐟"
+        //              Emojis: upstream="<><fish>", downstream="<fish>>", indecisive="<-><fish>"
         // **************************************************
         private void UpdateFishMarkers()
         {
@@ -2500,9 +2558,9 @@ namespace FishLens_App
                 {
                     string emoji = dir switch
                     {
-                        "upstream"   => "◀🐟",
-                        "downstream" => "🐟▶",
-                        _            => "↔🐟",
+                        "upstream"   => "\u25C0\U0001F41F",
+                        "downstream" => "\U0001F41F\u25B6",
+                        _            => "\u2194\U0001F41F",
                     };
                     double midX      = startX + barW / 2.0;
                     double emojiLeft = Math.Max(thumbHalf, Math.Min(w - thumbHalf - 22, midX - 11));
@@ -2524,9 +2582,9 @@ namespace FishLens_App
         // Function: DisplayDataInUi
         // Description: Loads all tracks for a video and displays the first one
         // **************************************************
-        private void DisplayDataInUi(string videoFileName)
+        private void DisplayDataInUi(string videoFileName, string sourceRun = null, string videoFilePath = null)
         {
-            _currentTracks = GetAllTracks(videoFileName);
+            _currentTracks = GetAllTracks(videoFileName, sourceRun, videoFilePath);
             _currentTrackIndex = 0;
             DisplayTrackInUi(_currentTracks[0]);
             UpdateTrackNavigator();
@@ -2543,8 +2601,10 @@ namespace FishLens_App
             string location = vid.Location;
             if (string.IsNullOrWhiteSpace(location))
             {
-                string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
-                string noFishCsvPath = _pathResolver.ResolveSessionNoFishCsvPath(activeRun);
+                string sourceRun = string.IsNullOrWhiteSpace(vid.Run)
+                    ? (Application.Current as App)?.ActiveRun ?? string.Empty
+                    : vid.Run;
+                string noFishCsvPath = _pathResolver.ResolveSessionNoFishCsvPath(sourceRun);
                 location = FishLens_App.Services.CsvUtils.ReadLocationFromNoFishCsv(noFishCsvPath, vid.Name);
             }
 
@@ -2615,7 +2675,7 @@ namespace FishLens_App
             }
         }
 
-        // Transport-bar fish jump buttons — same logic as track navigator arrows
+        // Transport-bar fish jump buttons - same logic as track navigator arrows
         private void PrevFishButton_Click(object sender, RoutedEventArgs e) => TrackPrevClick(sender, e);
         private void NextFishButton_Click(object sender, RoutedEventArgs e) => TrackNextClick(sender, e);
 
@@ -2785,6 +2845,7 @@ namespace FishLens_App
                     BUTTON_PADDING_HORIZONTAL, BUTTON_PADDING_VERTICAL),
                 Height = BUTTON_HEIGHT,
                 Tag = videoFile.FullName,
+                DataContext = videoData,
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 FontSize = BUTTON_FONT_SIZE,
                 BorderThickness = new Thickness(0),

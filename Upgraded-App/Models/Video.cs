@@ -1,4 +1,4 @@
-﻿// **************************************************
+// **************************************************
 // ***********************************
 // File: Video.cs
 // Description: Video Class
@@ -46,5 +46,7 @@ namespace FishLens_App.Models
         public string VideoFilePath { get; set; }
         // Location where the video was recorded
         public string Location { get; set; }
+        // Monitoring run where this row was created
+        public string Run { get; set; }
     }
 }

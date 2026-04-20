@@ -1,4 +1,4 @@
-﻿// ***************************************************************************************************************************
+// ***************************************************************************************************************************
 // File: SigninPage.xaml.cs
 // Description: This is the C# code for our signin page which handles the logic of logging in and unsuccesful logins
 // Notes: Currently the login functionality is temporary, it does not actually check login information only whether or not it 
@@ -126,6 +126,7 @@ namespace FishLens_App
             Status = Signin(username, password);
             if (Status == true)
             {
+                (Application.Current as App)?.EnsureRunStorageInitialized();
                 MainWindow main = new MainWindow();
                 main.Show();
                 this.Close();
