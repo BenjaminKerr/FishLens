@@ -11,10 +11,11 @@
     <!-- Aliases for older XAML resource names used across the app -->
     <SolidColorBrush x:Key="PageBackgroundBrush" Color="#181A1B"/>
     <SolidColorBrush x:Key="PrimaryColorBrush" Color="#1B4F5C"/>
-    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#B0B3B8"/>
-    <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F5F8FA"/>
+    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#F5F8FA"/>
+    <SolidColorBrush x:Key="PrimaryTextBrush" Color="White"/>
     <SolidColorBrush x:Key="BorderColorBrush" Color="#444950"/>
     <SolidColorBrush x:Key="SecondaryBackgroundBrush" Color="#23272A"/>
     <SolidColorBrush x:Key="HoverBackgroundBrush" Color="#2D7A8F"/>
     <SolidColorBrush x:Key="OnAccentForeground" Color="#F5F8FA"/>
+    <SolidColorBrush x:Key="WhiteBrush" Color="White"/>
 </ResourceDictionary>

@@ -14,6 +14,27 @@ namespace FishLens_App
 {
     public partial class History
     {
+        // **************************************************
+        // Helper: Resolves a brush from the app ResourceDictionary by key,
+        // falling back to a hardcoded fallback color if the key is missing.
+        private static SolidColorBrush Res(string key, string fallbackHex)
+        {
+            if (Application.Current?.Resources[key] is SolidColorBrush brush)
+                return brush;
+            return new SolidColorBrush((Color)ColorConverter.ConvertFromString(fallbackHex));
+        }
+
+        // Semantic aliases — maps intent to resource key + fallback
+        private SolidColorBrush BrushWindowBg() => Res("WindowBackground", "#181A1B");
+        private SolidColorBrush BrushCardBg() => Res("CardBackground", "#23272A");
+        private SolidColorBrush BrushHeader() => Res("HeaderBackground", "#23272A");
+        private SolidColorBrush BrushAccent() => Res("AccentBrush", "#1B4F5C");
+        private SolidColorBrush BrushPrimaryText() => Res("PrimaryText", "#F5F8FA");
+        private SolidColorBrush BrushSecondaryText() => Res("SecondaryText", "#B0B3B8");
+        private SolidColorBrush BrushBorder() => Res("BorderBrush", "#444950");
+        private SolidColorBrush BrushHover() => Res("HoverBackgroundBrush", "#2D7A8F");
+        private SolidColorBrush BrushOnAccent() => Res("OnAccentForeground", "#F5F8FA");
+
         #region Report Entry Point
 
         // **************************************************
@@ -90,7 +111,7 @@ namespace FishLens_App
             AddReportHeader();
 
             AddSectionTitle("Detections");
-            AddStatCard("Total Detections", stats.TotalDetections.ToString(), "#0D3640");
+            AddStatCard("Total Detections", stats.TotalDetections.ToString());
             if (stats.ClassBreakdown.Count > 0)
                 AddPillRow(stats.ClassBreakdown.Select(kvp => (kvp.Key, kvp.Value)));
 
@@ -98,11 +119,11 @@ namespace FishLens_App
 
             // Movement patterns
             AddSectionTitle("Movement Patterns");
-            AddBarChart("Upstream", stats.UpstreamCount, stats.TotalDetections, "#0D3640");
-            AddBarChart("Downstream", stats.DownstreamCount, stats.TotalDetections, "#00ACC1");
+            AddBarChart("Upstream", stats.UpstreamCount, stats.TotalDetections, BrushAccent());
+            AddBarChart("Downstream", stats.DownstreamCount, stats.TotalDetections, BrushHover());
             int unknownDirection = stats.TotalDetections - stats.UpstreamCount - stats.DownstreamCount;
             if (unknownDirection > 0)
-                AddBarChart("Unknown", unknownDirection, stats.TotalDetections, "#9E9E9E");
+                AddBarChart("Unknown", unknownDirection, stats.TotalDetections, BrushSecondaryText());
 
             AddSpacer(20);
 
@@ -112,7 +133,7 @@ namespace FishLens_App
             {
                 int speciesMax = stats.SpeciesBreakdown.Values.Max();
                 foreach (var kvp in stats.SpeciesBreakdown.OrderByDescending(x => x.Value))
-                    AddBarChart(kvp.Key, kvp.Value, speciesMax, "#7E57C2", isCount: true);
+                    AddBarChart(kvp.Key, kvp.Value, speciesMax, BrushHover(), isCount: true);
             }
             else
             {
@@ -127,7 +148,7 @@ namespace FishLens_App
             {
                 int locationMax = stats.DetectionsByLocation.Values.Max();
                 foreach (var kvp in stats.DetectionsByLocation.OrderByDescending(x => x.Value))
-                    AddBarChart(kvp.Key, kvp.Value, locationMax, "#FF6F00", isCount: true);
+                    AddBarChart(kvp.Key, kvp.Value, locationMax, BrushAccent(), isCount: true);
             }
             else
             {
@@ -142,7 +163,7 @@ namespace FishLens_App
                     .OrderBy(x => x.Key)
                     .Select(kvp => (kvp.Key.ToString("MMM d, ''yy"), kvp.Value))
                     .ToList();
-                reportPanel.Children.Add(CreateLineChart(points, "#1E88E5", 180));
+                reportPanel.Children.Add(CreateLineChart(points, BrushHover(), 180));
             }
             else
             {
@@ -159,7 +180,7 @@ namespace FishLens_App
                     .Select(h => (FormatHourLabel(h),
                                   stats.DetectionsByHour.ContainsKey(h) ? stats.DetectionsByHour[h] : 0))
                     .ToList();
-                reportPanel.Children.Add(CreateLineChart(points, "#FF6F00", 180));
+                reportPanel.Children.Add(CreateLineChart(points, BrushAccent(), 180));
             }
             else
             {
@@ -178,20 +199,23 @@ namespace FishLens_App
             {
                 var pill = new Border
                 {
-                    Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F0EDF8")),
-                    BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#C5B8E8")),
+                    Background = BrushCardBg(),
+                    BorderBrush = BrushBorder(),
                     BorderThickness = new Thickness(1),
                     CornerRadius = new CornerRadius(12),
                     Padding = new Thickness(10, 4, 10, 4),
                     Margin = new Thickness(0, 0, 8, 8)
                 };
-
+                
                 pill.Child = new TextBlock
                 {
                     FontSize = 13,
-                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#5E35B1")),
-                    Inlines = { new System.Windows.Documents.Run(label) { FontWeight = FontWeights.SemiBold },
-                           new System.Windows.Documents.Run($"  {count}") }
+                    Foreground = BrushPrimaryText(),
+                    Inlines =
+                    {
+                        new System.Windows.Documents.Run(label)       { FontWeight = FontWeights.SemiBold },
+                        new System.Windows.Documents.Run($"  {count}")
+                    }
                 };
 
                 panel.Children.Add(pill);
@@ -214,17 +238,18 @@ namespace FishLens_App
                 Text = message,
                 FontSize = 13,
                 FontStyle = FontStyles.Italic,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#9E9E9E")),
+                Foreground = BrushSecondaryText(),
                 Margin = new Thickness(0, 0, 0, 12)
             });
         }
 
-        private void AddStatCard(string label, string value, string color)
+        // AddStatCard no longer takes a color — uses accent from resources
+        private void AddStatCard(string label, string value)
         {
             var card = new Border
             {
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F5F8FA")),
-                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E1E8ED")),
+                Background = BrushCardBg(),
+                BorderBrush = BrushBorder(),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(16),
@@ -237,13 +262,13 @@ namespace FishLens_App
                 Text = value,
                 FontSize = 28,
                 FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color))
+                Foreground = BrushPrimaryText()
             });
             panel.Children.Add(new TextBlock
             {
                 Text = label,
                 FontSize = 12,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#657786")),
+                Foreground = BrushSecondaryText(),
                 Margin = new Thickness(0, 4, 0, 0)
             });
 
@@ -259,13 +284,13 @@ namespace FishLens_App
                 Text = "Analysis Dashboard",
                 FontSize = 24,
                 FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0D3640"))
+                Foreground = BrushPrimaryText()
             });
             panel.Children.Add(new TextBlock
             {
                 Text = $"Generated on {DateTime.Now:MMMM dd, yyyy} at {DateTime.Now:h:mm tt}",
                 FontSize = 12,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#657786")),
+                Foreground = BrushSecondaryText(),
                 Margin = new Thickness(0, 4, 0, 0)
             });
             reportPanel.Children.Add(panel);
@@ -284,14 +309,15 @@ namespace FishLens_App
                 Text = title,
                 FontSize = 16,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#14171A")),
+                Foreground = BrushPrimaryText(),
                 Margin = new Thickness(0, 10, 0, 12)
             });
         }
 
         // **************************************************
         // Function: AddBarChart
-        private void AddBarChart(string label, int value, int maxValue, string color, bool isCount = false)
+        // color parameter is now a SolidColorBrush resolved from resources at call site
+        private void AddBarChart(string label, int value, int maxValue, SolidColorBrush color, bool isCount = false)
         {
             var container = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
             container.Children.Add(CreateBarChartLabelGrid(label, value, maxValue, color, isCount));
@@ -308,7 +334,7 @@ namespace FishLens_App
 
         // **************************************************
         // Function: CreateStatCard
-        private Border CreateStatCard(string label, string value, string color, string icon = "")
+        private Border CreateStatCard(string label, string value, string icon = "")
         {
             var card = CreateCardBorder();
             var panel = new StackPanel();
@@ -316,7 +342,7 @@ namespace FishLens_App
             if (!string.IsNullOrEmpty(icon))
                 panel.Children.Add(CreateIconTextBlock(icon));
 
-            panel.Children.Add(CreateValueTextBlock(value, color));
+            panel.Children.Add(CreateValueTextBlock(value));
             panel.Children.Add(CreateLabelTextBlock(label));
 
             card.Child = panel;
@@ -335,30 +361,38 @@ namespace FishLens_App
 
         private Border CreateCardBorder() => new Border
         {
-            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F5F8FA")),
-            BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E1E8ED")),
+            Background = BrushCardBg(),
+            BorderBrush = BrushBorder(),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(15),
             Margin = new Thickness(0, 0, 5, 10)
         };
 
-        private TextBlock CreateIconTextBlock(string icon) => new TextBlock { Text = icon, FontSize = 20, Margin = new Thickness(0, 0, 0, 5) };
-        private TextBlock CreateValueTextBlock(string v, string c) => new TextBlock
+        private TextBlock CreateIconTextBlock(string icon) => new TextBlock
+        {
+            Text = icon,
+            FontSize = 20,
+            Margin = new Thickness(0, 0, 0, 5),
+            Foreground = BrushPrimaryText()
+        };
+
+        private TextBlock CreateValueTextBlock(string v) => new TextBlock
         {
             Text = v,
             FontSize = 28,
             FontWeight = FontWeights.Bold,
-            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(c))
+            Foreground = BrushAccent()
         };
+
         private TextBlock CreateLabelTextBlock(string label) => new TextBlock
         {
             Text = label,
             FontSize = 12,
-            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#657786"))
+            Foreground = BrushSecondaryText()
         };
 
-        private Grid CreateBarChartLabelGrid(string label, int value, int maxValue, string color, bool isCount)
+        private Grid CreateBarChartLabelGrid(string label, int value, int maxValue, SolidColorBrush color, bool isCount)
         {
             var labelGrid = new Grid { Margin = new Thickness(0, 0, 0, 6) };
             labelGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -372,7 +406,7 @@ namespace FishLens_App
                 Text = label,
                 FontSize = 13,
                 FontWeight = FontWeights.Medium,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#14171A")),
+                Foreground = BrushPrimaryText(),
                 TextTrimming = TextTrimming.CharacterEllipsis
             };
             Grid.SetColumn(labelText, 0);
@@ -382,7 +416,7 @@ namespace FishLens_App
                 Text = valueDisplay,
                 FontSize = 13,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color))
+                Foreground = color
             };
             Grid.SetColumn(valueText, 1);
 
@@ -391,20 +425,20 @@ namespace FishLens_App
             return labelGrid;
         }
 
-        private Grid CreateBarChartBars(int value, int maxValue, string color)
+        private Grid CreateBarChartBars(int value, int maxValue, SolidColorBrush color)
         {
             double percentage = maxValue > 0 ? (value * 100.0 / maxValue) : 0;
 
             var grid = new Grid();
             grid.Children.Add(new Border
             {
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E1E8ED")),
+                Background = BrushBorder(),   // track uses border tone
                 Height = 24,
                 CornerRadius = new CornerRadius(4)
             });
             grid.Children.Add(new Border
             {
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)),
+                Background = color,
                 Height = 24,
                 CornerRadius = new CornerRadius(4),
                 HorizontalAlignment = HorizontalAlignment.Left,
@@ -435,7 +469,7 @@ namespace FishLens_App
                 Text = "No Analysis History",
                 FontSize = 20,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#14171A")),
+                Foreground = BrushPrimaryText(),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 0, 0, 10)
             });
@@ -443,7 +477,7 @@ namespace FishLens_App
             {
                 Text = "Run an analysis to see your detection records here",
                 FontSize = 14,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#657786")),
+                Foreground = BrushSecondaryText(),
                 HorizontalAlignment = HorizontalAlignment.Center
             });
 
@@ -453,7 +487,8 @@ namespace FishLens_App
         // **************************************************
         // Function: CreateLineChart
         // Description: Creates a responsive line chart from ordered (label, value) points
-        private FrameworkElement CreateLineChart(List<(string label, int value)> points, string color, double height = 180, double availableWidth = 0)
+        // color is now a SolidColorBrush resolved from resources at call site
+        private FrameworkElement CreateLineChart(List<(string label, int value)> points, SolidColorBrush color, double height = 180, double availableWidth = 0)
         {
             int maxValue = points.Count > 0 ? Math.Max(1, points.Max(p => p.value)) : 1;
             double totalWidth = (availableWidth > 200) ? availableWidth : (reportPanel?.ActualWidth > 200 ? reportPanel.ActualWidth : 720);
@@ -474,6 +509,10 @@ namespace FishLens_App
             };
             var canvas = new Canvas { Width = totalWidth, Height = height, Background = Brushes.Transparent };
 
+            var gridLineColor = BrushBorder();
+            var axisColor = BrushBorder();
+            var tickColor = BrushSecondaryText();
+
             for (int t = 0; t <= 4; t++)
             {
                 double frac = (double)t / 4;
@@ -485,7 +524,7 @@ namespace FishLens_App
                     X2 = leftMargin + chartWidth,
                     Y1 = y,
                     Y2 = y,
-                    Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E6EDF2")),
+                    Stroke = gridLineColor,
                     StrokeThickness = 1
                 });
 
@@ -493,7 +532,7 @@ namespace FishLens_App
                 {
                     Text = ((int)Math.Round((1 - frac) * maxValue)).ToString(),
                     FontSize = 11,
-                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#657786")),
+                    Foreground = tickColor,
                     Width = leftMargin - 8,
                     TextAlignment = TextAlignment.Right
                 };
@@ -509,13 +548,13 @@ namespace FishLens_App
                 X2 = leftMargin + chartWidth,
                 Y1 = baseY,
                 Y2 = baseY,
-                Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#CCDDE6")),
+                Stroke = axisColor,
                 StrokeThickness = 1.5
             });
 
             var poly = new Polyline
             {
-                Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)),
+                Stroke = color,
                 StrokeThickness = 2,
                 Fill = Brushes.Transparent
             };
@@ -534,8 +573,8 @@ namespace FishLens_App
                 {
                     Width = 6,
                     Height = 6,
-                    Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)),
-                    Stroke = Brushes.White,
+                    Fill = color,
+                    Stroke = new SolidColorBrush(Colors.Transparent), // no white outline in dark mode
                     StrokeThickness = 1
                 };
                 Canvas.SetLeft(marker, x - 3);
@@ -548,7 +587,7 @@ namespace FishLens_App
                     X2 = x,
                     Y1 = baseY,
                     Y2 = baseY + 6,
-                    Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#CCDDE6")),
+                    Stroke = axisColor,
                     StrokeThickness = 1
                 });
 
@@ -558,7 +597,7 @@ namespace FishLens_App
                     {
                         Text = points[i].label,
                         FontSize = 10,
-                        Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#657786"))
+                        Foreground = tickColor
                     };
                     Canvas.SetLeft(xl, x - 20);
                     Canvas.SetTop(xl, baseY + 8);
