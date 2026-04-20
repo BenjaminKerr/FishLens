@@ -5,19 +5,31 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:FishLens_App"
         mc:Ignorable="d"
-        Title="FishLens" Height="{x:Static SystemParameters.PrimaryScreenHeight}" Width="{x:Static SystemParameters.PrimaryScreenWidth}"
+        Title="FishLens"
+        Height="{x:Static SystemParameters.PrimaryScreenHeight}"
+        Width="{x:Static SystemParameters.PrimaryScreenWidth}"
         WindowState="Maximized"
         Background="{DynamicResource WindowBackground}">
 
-
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name ="SidebarColumn" Width="Auto"/>
+            <ColumnDefinition x:Name="SidebarColumn" Width="Auto"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
+
         <Frame x:Name="MainFrame" NavigationUIVisibility="Visible" Grid.Column="1" Panel.ZIndex="1"/>
-        <!--Sidebar: Media Selector-->
-        <Border x:Name="SideBar" Width="320" Grid.Column="0" Background="{DynamicResource AccentBrush}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource HeaderBackground}">
+
+        <!-- ═══════════════════════════════════════════════════════════
+             Sidebar
+             AccentBrush is the branded teal in both themes — intentional.
+             Border uses HeaderBackground as a slightly darker teal divider.
+        ════════════════════════════════════════════════════════════════ -->
+        <Border x:Name="SideBar"
+                Width="320"
+                Grid.Column="0"
+                Background="{DynamicResource AccentBrush}"
+                BorderThickness="0,0,1,0"
+                BorderBrush="{DynamicResource HeaderBackground}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -33,69 +45,82 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <Button x:Name="Home" 
-                Background="{x:Null}" 
-                Foreground="{DynamicResource OnAccentForeground}" 
-Grid.Column="0" 
-BorderBrush="Transparent" 
-Click="HomeButtonClick"
-Padding="10"
-Width="70"
-Height="70">
+
+                        <Button x:Name="Home"
+                                Background="{x:Null}"
+                                Foreground="{DynamicResource OnAccentForeground}"
+                                Grid.Column="0"
+                                BorderBrush="Transparent"
+                                Click="HomeButtonClick"
+                                Padding="10"
+                                Width="70"
+                                Height="70">
                             <Viewbox Width="40" Height="40">
-                                <TextBlock Text="🏠" Foreground="{DynamicResource OnAccentForeground}"/>
+                                <TextBlock Text="🏠"/>
                             </Viewbox>
                         </Button>
 
-                        <Button x:Name="History" 
-                Background="{x:Null}" 
-                Foreground="{DynamicResource OnAccentForeground}" 
-Grid.Column="1" 
-BorderBrush="Transparent" 
-Click="HistoryButtonClick"
-Padding="10"
-Width="70"
-Height="70">
+                        <Button x:Name="History"
+                                Background="{x:Null}"
+                                Foreground="{DynamicResource OnAccentForeground}"
+                                Grid.Column="1"
+                                BorderBrush="Transparent"
+                                Click="HistoryButtonClick"
+                                Padding="10"
+                                Width="70"
+                                Height="70">
                             <Viewbox Width="40" Height="40">
-                                <TextBlock Text="📜" Foreground="{DynamicResource OnAccentForeground}"/>
+                                <TextBlock Text="📜"/>
                             </Viewbox>
                         </Button>
 
-                        <Button x:Name="Settings" 
-                Background="{x:Null}" 
-                Foreground="{DynamicResource OnAccentForeground}" 
-Grid.Column="2" 
-BorderBrush="Transparent" 
-Click="SettingsButtonClick"
-Padding="10"
-Width="70"
-Height="70">
+                        <Button x:Name="Settings"
+                                Background="{x:Null}"
+                                Foreground="{DynamicResource OnAccentForeground}"
+                                Grid.Column="2"
+                                BorderBrush="Transparent"
+                                Click="SettingsButtonClick"
+                                Padding="10"
+                                Width="70"
+                                Height="70">
                             <Viewbox Width="40" Height="40">
-                                <TextBlock Text="⚙️" Foreground="{DynamicResource OnAccentForeground}"/>
+                                <TextBlock Text="⚙️"/>
                             </Viewbox>
                         </Button>
                     </Grid>
-                    <Rectangle x:Name="sidebarSeperator" Height="2" Fill="{DynamicResource HoverBackgroundBrush}" Margin="0,10,0,10"/>
-                    <TextBlock Text="Video Library" 
+
+                    <Rectangle x:Name="sidebarSeperator"
+                               Height="2"
+                               Fill="{DynamicResource HoverBackgroundBrush}"
+                               Margin="0,10,0,10"/>
+
+                    <TextBlock Text="Video Library"
                                x:Name="videoLibraryTitle"
-                       FontSize="{DynamicResource HeaderFontSize}"
-                       FontWeight="SemiBold" 
-                       Foreground="{DynamicResource OnAccentForeground}"
-                       HorizontalAlignment="Center"/>
+                               FontSize="{DynamicResource HeaderFontSize}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource OnAccentForeground}"
+                               HorizontalAlignment="Center"/>
                 </StackPanel>
 
                 <!-- Video List -->
-                <ScrollViewer Grid.Row="1" 
-                      VerticalScrollBarVisibility="Auto"
-                      Margin="10,0,10,20">
+                <ScrollViewer Grid.Row="1"
+                              VerticalScrollBarVisibility="Auto"
+                              Margin="10,0,10,20">
                     <StackPanel x:Name="videoList" Margin="10,0"/>
                 </ScrollViewer>
 
-                <!-- Delete + Undo Buttons -->
+                <!-- Delete + Undo Buttons
+                     Both sit on the teal AccentBrush sidebar, so they need
+                     OnAccentForeground text. Delete is the destructive primary
+                     action — HoverBackgroundBrush (brighter teal) gives it weight
+                     without jarring. Undo is ghost-style: transparent bg with a
+                     white/near-white border so it recedes behind Delete. -->
                 <StackPanel Grid.Row="2" Orientation="Vertical" Margin="20,0,20,20">
+
+                    <!-- Delete Selected — filled, slightly brighter than sidebar -->
                     <Button x:Name="deleteSelectedVideos"
                             Click="DeleteSelectedVideosClick"
-                            Background="{DynamicResource HeaderBackground}"
+                            Background="{DynamicResource HoverBackgroundBrush}"
                             Foreground="{DynamicResource OnAccentForeground}"
                             FontSize="{DynamicResource BaseFontSize}"
                             FontWeight="SemiBold"
@@ -103,32 +128,81 @@ Height="70">
                             Margin="0,0,0,8"
                             BorderThickness="0"
                             Cursor="Hand">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="6"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource HeaderBackground}"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
                         Delete Selected Videos
                     </Button>
 
+                    <!-- Undo Last Delete — ghost style on teal sidebar -->
                     <Button x:Name="undoLastDelete"
                             Click="UndoLastDeleteClick"
-                            Background="{DynamicResource CardBackground}"
-                            Foreground="{DynamicResource PrimaryText}"
+                            Background="Transparent"
+                            Foreground="{DynamicResource OnAccentForeground}"
                             FontSize="{DynamicResource BaseFontSize}"
                             FontWeight="SemiBold"
                             Padding="12"
-                            BorderThickness="0"
+                            BorderThickness="1"
                             Cursor="Hand">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    BorderBrush="{DynamicResource OnAccentForeground}"
+                                                    BorderThickness="1"
+                                                    Opacity="0.7"
+                                                    CornerRadius="6"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
                         Undo Last Delete
                     </Button>
+
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!--Main Content: File Upload + Media Viewer-->
+        <!-- ═══════════════════════════════════════════════════════════
+             Main Content
+        ════════════════════════════════════════════════════════════════ -->
         <Grid Grid.Column="1">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Header Section -->
+            <!-- Header -->
             <Grid Grid.Row="0" Margin="40,30,40,20">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -137,22 +211,22 @@ Height="70">
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Name="Title" 
+                    <TextBlock Name="Title"
                                FontSize="{DynamicResource TitleFontSize}"
-                               FontFamily="Georgia" 
+                               FontFamily="Georgia"
                                FontWeight="Bold"
                                Foreground="{DynamicResource PrimaryText}">
                         FishLens
                     </TextBlock>
                 </StackPanel>
 
-                <!-- Export Button (initially hidden) -->
-                <Button Name="exportData" 
+                <!-- Export Button -->
+                <Button Name="exportData"
                         Grid.Column="1"
-                        Click="ExportDataClick" 
+                        Click="ExportDataClick"
                         VerticalAlignment="Center"
-                        Padding="20,12" 
-                        Background="{DynamicResource AccentBrush}" 
+                        Padding="20,12"
+                        Background="{DynamicResource AccentBrush}"
                         Foreground="{DynamicResource OnAccentForeground}"
                         FontSize="{DynamicResource BaseFontSize}"
                         FontWeight="Medium"
@@ -163,113 +237,112 @@ Height="70">
                     <Button.Effect>
                         <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.3"/>
                     </Button.Effect>
-                    <Button.Resources>
+                    <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
-                                        <Border Background="{TemplateBinding Background}" 
-                                    CornerRadius="6"
-                                    Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <Border Background="{TemplateBinding Background}"
+                                                CornerRadius="6"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"/>
                                         </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </Setter.Value>
                             </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                </Trigger>
+                            </Style.Triggers>
                         </Style>
-                    </Button.Resources>
+                    </Button.Style>
                     📊 Export Data to Excel
                 </Button>
 
+                <!-- Open Folder Button -->
                 <Button Name="openFolder"
-                    Grid.Column="2"
-                    Click="OpenFolderClick" 
-                    VerticalAlignment="Center"
-                    Padding="20,12" 
-                    Background="{DynamicResource AccentBrush}" 
-                    Foreground="{DynamicResource OnAccentForeground}"
-                    FontSize="{DynamicResource BaseFontSize}"
-                    FontWeight="Medium"
-                    BorderThickness="0"
-                    Cursor="Hand">
+                        Grid.Column="2"
+                        Click="OpenFolderClick"
+                        VerticalAlignment="Center"
+                        Padding="20,12"
+                        Background="{DynamicResource AccentBrush}"
+                        Foreground="{DynamicResource OnAccentForeground}"
+                        FontSize="{DynamicResource BaseFontSize}"
+                        FontWeight="Medium"
+                        BorderThickness="0"
+                        Cursor="Hand">
                     <Button.Effect>
                         <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.3"/>
                     </Button.Effect>
-                    <Button.Resources>
+                    <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
-                                        <Border Background="{TemplateBinding Background}" 
+                                        <Border Background="{TemplateBinding Background}"
                                                 CornerRadius="6"
                                                 Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            <ContentPresenter HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"/>
                                         </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </Setter.Value>
                             </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                </Trigger>
+                            </Style.Triggers>
                         </Style>
-                    </Button.Resources>
+                    </Button.Style>
                     📁 Choose Video Folder
                 </Button>
             </Grid>
 
-            <!-- Video Player and Analysis Panel Side by Side -->
+            <!-- Video Player + Analysis Panel -->
             <Grid Grid.Row="1" Margin="40,0,40,40">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="2*"/>
                     <ColumnDefinition Width="1*"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Video Player Section -->
-                <Border Grid.Column="0" 
-                        Margin="0,0,10,0" 
-                        Background="{DynamicResource CardBackground}" 
+                <!-- Video Player Card -->
+                <Border Grid.Column="0"
+                        Margin="0,0,10,0"
+                        Background="{DynamicResource CardBackground}"
                         CornerRadius="12"
                         BorderThickness="1"
                         BorderBrush="{DynamicResource BorderBrush}">
                     <Border.Effect>
                         <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.15"/>
                     </Border.Effect>
-
                     <Grid>
-                        <!-- Placeholder when no video selected -->
                         <StackPanel x:Name="placeholderPanel"
-                                    HorizontalAlignment="Center" 
+                                    HorizontalAlignment="Center"
                                     VerticalAlignment="Center">
-                            <TextBlock Text="🎬" 
+                            <TextBlock Text="🎬"
                                        FontSize="{DynamicResource LargeTitleFontSize}"
                                        HorizontalAlignment="Center"
                                        Opacity="0.3"/>
-                            <TextBlock Text="Select a video from the library" 
+                            <TextBlock Text="Select a video from the library"
                                        FontSize="{DynamicResource LargeFontSize}"
                                        Foreground="{DynamicResource SecondaryText}"
                                        HorizontalAlignment="Center"
                                        Margin="0,20,0,0"/>
                         </StackPanel>
-
-                        <!-- Video Player -->
-                        <MediaElement Name="videoPlayer" 
+                        <MediaElement Name="videoPlayer"
                                       LoadedBehavior="Manual"
                                       Stretch="Uniform"
                                       Margin="20"/>
                     </Grid>
                 </Border>
 
-                <!-- Data Display Section -->
-                <Border Grid.Column="1" 
-                        Margin="10,0,0,0" 
-                        Background="{DynamicResource CardBackground}" 
+                <!-- Analysis Panel Card -->
+                <Border Grid.Column="1"
+                        Margin="10,0,0,0"
+                        Background="{DynamicResource CardBackground}"
                         CornerRadius="12"
                         BorderThickness="1"
                         BorderBrush="{DynamicResource BorderBrush}">
@@ -278,43 +351,44 @@ Height="70">
                     </Border.Effect>
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel x:Name="dataPanel" Margin="30">
-                            <TextBlock Text="Analysis" 
+
+                            <TextBlock Text="Analysis"
                                        FontSize="{DynamicResource HeaderFontSize}"
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource PrimaryText}"
                                        Margin="0,0,0,8"/>
 
-                            <!-- Video Info - Small and Gray -->
+                            <!-- Video Info -->
                             <StackPanel Margin="0,0,0,20">
-                                <TextBlock x:Name="videoName" 
-                                           Text="--" 
+                                <TextBlock x:Name="videoName"
+                                           Text="--"
                                            FontSize="{DynamicResource BaseFontSize}"
                                            Foreground="{DynamicResource SecondaryText}"
                                            Margin="0,0,0,5"
                                            TextWrapping="Wrap"/>
-                                <TextBlock x:Name="videoDateTime" 
-                                           Text="--" 
+                                <TextBlock x:Name="videoDateTime"
+                                           Text="--"
                                            FontSize="{DynamicResource BaseFontSize}"
                                            Foreground="{DynamicResource SecondaryText}"/>
                             </StackPanel>
 
                             <!-- Fish Present -->
                             <StackPanel Margin="0,0,0,20">
-                                <TextBlock Text="Fish Present" 
+                                <TextBlock Text="Fish Present"
                                            FontSize="{DynamicResource LargeFontSize}"
                                            FontWeight="SemiBold"
                                            Foreground="{DynamicResource PrimaryText}"
                                            Margin="0,0,0,8"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                    <TextBlock Text="Status: " 
+                                    <TextBlock Text="Status: "
                                                FontSize="{DynamicResource BaseFontSize}"
                                                Foreground="{DynamicResource SecondaryText}"
                                                VerticalAlignment="Center"
                                                Margin="0,0,8,0"/>
-                                    <ComboBox x:Name="fishPresentStatus" 
+                                    <ComboBox x:Name="fishPresentStatus"
                                               FontSize="{DynamicResource BaseFontSize}"
                                               FontWeight="Medium"
-                                              Foreground="{DynamicResource PrimaryText}"
+                                              Foreground="Black"
                                               BorderBrush="{DynamicResource BorderBrush}"
                                               BorderThickness="1"
                                               Padding="8,4"
@@ -324,11 +398,11 @@ Height="70">
                                     </ComboBox>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Confidence: " 
+                                    <TextBlock Text="Confidence: "
                                                FontSize="{DynamicResource BaseFontSize}"
                                                Foreground="{DynamicResource SecondaryText}"/>
-                                    <TextBlock x:Name="fishPresentConfidence" 
-                                               Text="--" 
+                                    <TextBlock x:Name="fishPresentConfidence"
+                                               Text="--"
                                                FontSize="{DynamicResource BaseFontSize}"
                                                FontWeight="Medium"
                                                Foreground="{DynamicResource PrimaryText}"/>
@@ -337,22 +411,21 @@ Height="70">
 
                             <!-- Direction of Travel -->
                             <StackPanel Margin="0,0,0,20">
-                                <TextBlock Text="Direction of Travel" 
+                                <TextBlock Text="Direction of Travel"
                                            FontSize="{DynamicResource LargeFontSize}"
                                            FontWeight="SemiBold"
                                            Foreground="{DynamicResource PrimaryText}"
                                            Margin="0,0,0,8"/>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Direction: " 
+                                    <TextBlock Text="Direction: "
                                                FontSize="{DynamicResource BaseFontSize}"
                                                Foreground="{DynamicResource SecondaryText}"
                                                VerticalAlignment="Center"
                                                Margin="0,0,8,0"/>
-                                    <ComboBox x:Name="travelDirection" 
+                                    <ComboBox x:Name="travelDirection"
                                               FontSize="{DynamicResource BaseFontSize}"
                                               FontWeight="Medium"
-                                              Foreground="{DynamicResource PrimaryText}"
-                                              BorderBrush="{DynamicResource BorderBrush}"
+                                              Foreground="Black"
                                               BorderThickness="1"
                                               Padding="8,4"
                                               MinWidth="120">
@@ -364,42 +437,45 @@ Height="70">
 
                             <!-- Fish Species -->
                             <StackPanel Margin="0,0,0,20">
-                                <TextBlock Text="Fish Species" 
+                                <TextBlock Text="Fish Species"
                                            FontSize="{DynamicResource LargeFontSize}"
                                            FontWeight="SemiBold"
                                            Foreground="{DynamicResource PrimaryText}"
                                            Margin="0,0,0,8"/>
                                 <StackPanel Margin="0,0,0,8">
-                                    <TextBlock Text="Species: " 
+                                    <TextBlock Text="Species: "
                                                FontSize="{DynamicResource BaseFontSize}"
                                                Foreground="{DynamicResource SecondaryText}"
                                                Margin="0,0,0,4"/>
-                                    <TextBox x:Name="fishSpecies" 
+                                    <TextBox x:Name="fishSpecies"
                                              FontSize="{DynamicResource BaseFontSize}"
                                              FontWeight="Medium"
                                              Foreground="{DynamicResource PrimaryText}"
+                                             Background="{DynamicResource CardBackground}"
                                              BorderBrush="{DynamicResource BorderBrush}"
                                              BorderThickness="1"
                                              Padding="8,4"
                                              TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Confidence: " 
+                                    <TextBlock Text="Confidence: "
                                                FontSize="{DynamicResource BaseFontSize}"
                                                Foreground="{DynamicResource SecondaryText}"/>
-                                    <TextBlock x:Name="fishSpeciesConfidence" 
-                                               Text="--" 
+                                    <TextBlock x:Name="fishSpeciesConfidence"
+                                               Text="--"
                                                FontSize="{DynamicResource BaseFontSize}"
                                                FontWeight="Medium"
                                                Foreground="{DynamicResource PrimaryText}"/>
                                 </StackPanel>
                             </StackPanel>
 
-                            <!-- Save Button -->
-                            <Button x:Name="saveButton" 
-                                    Content="Save Changes" 
+                            <!-- Save Changes — AccentBrush so it reads clearly on
+                                 CardBackground in both themes, consistent with other
+                                 primary action buttons across the app. -->
+                            <Button x:Name="saveButton"
+                                    Content="Save Changes"
                                     Click="SaveButtonClick"
-                                    Background="{DynamicResource HeaderBackground}"
+                                    Background="{DynamicResource AccentBrush}"
                                     Foreground="{DynamicResource OnAccentForeground}"
                                     FontSize="{DynamicResource BaseFontSize}"
                                     FontWeight="SemiBold"
@@ -430,6 +506,7 @@ Height="70">
                                     </Style>
                                 </Button.Style>
                             </Button>
+
                         </StackPanel>
                     </ScrollViewer>
                 </Border>
