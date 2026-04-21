@@ -110,10 +110,11 @@ CSV_KEYS = [
 TESSERACT_AVAILABLE = check_tesseract()
 
 # Constants--YOLO
-MODEL = _load_yolo_model("models/fish_detector3.pt")
-STRICT_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_YOLO_CONFIDENCE_THRESHOLD", "0.25"))
-LOOSE_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_LOOSE_YOLO_CONFIDENCE_THRESHOLD", "0.20"))
+MODEL = _load_yolo_model("models/fish_detector4.pt")
+STRICT_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_YOLO_CONFIDENCE_THRESHOLD", "0.32"))
+LOOSE_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_LOOSE_YOLO_CONFIDENCE_THRESHOLD", "0.28"))
 YOLO_CONFIDENCE_THRESHOLD = STRICT_YOLO_CONFIDENCE_THRESHOLD  # Adjustable: lower = detects more fish (but more false positives), higher = more selective
+MIN_DETECTION_BOX_AREA = max(50, int(os.getenv("FISHLENS_MIN_DETECTION_BOX_AREA", "225")))
 NO_FISH = os.path.join(PROJECT_ROOT, "no_fish")
 
 # Constants--DeepSort
@@ -131,7 +132,7 @@ TIMESTAMP_MAX_ATTEMPTS = max(1, int(os.getenv("FISHLENS_TIMESTAMP_MAX_ATTEMPTS",
 SUPPRESS_CODEC_WARNINGS = os.getenv("FISHLENS_SUPPRESS_CODEC_WARNINGS", "1") == "1"
 VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRAMES", "6" if FAST_MODE else "12")))
 STRICT_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DURATION_SEC", "0.60")))
-LOOSE_MIN_TRACK_DURATION_SEC = max(0.0, float(os.getenv("FISHLENS_LOOSE_MIN_TRACK_DURATION_SEC", "0.05")))
+LOOSE_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_LOOSE_MIN_TRACK_DURATION_SEC", "0.35")))
 MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
 
 # Constants--Classifier
@@ -618,7 +619,7 @@ def run_video_tracker(video_path, source_video_path=None):
     vidData.v_finished_tracks = vidData.v_finished_tracks[:MAX_EXPORT_PER_VIDEO]
 
     # Save the best image from each video for analysis.
-    save_best_image(vidData.v_finished_tracks, vidData.v_filename)
+    save_best_image(vidData.v_finished_tracks, os.path.basename(source_video_path))
     
     # Save frames for uncertain timestamps
     save_uncertain_timestamp_frames(vidData.v_finished_tracks, source_video_path)
@@ -653,7 +654,7 @@ def analyze_yolo_detections(frame, model, frameData, vidData):
             cls_id = int(cls_arr[0]) if cls_arr.size > 0 and cls_arr[0] is not None else -1
             box_area = (x2 - x1) * (y2 - y1)
             
-            if box_area < 100 or conf < YOLO_CONFIDENCE_THRESHOLD:
+            if box_area < MIN_DETECTION_BOX_AREA or conf < YOLO_CONFIDENCE_THRESHOLD:
                 continue
 
             # Mark if YOLO detected a fish in frame.
