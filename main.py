@@ -104,7 +104,8 @@ CSV_KEYS = [
     "direction",
     "species",
     "species_confidence",
-    "video_timestamp"
+    "video_timestamp",
+    "duration"
 ]
 TESSERACT_AVAILABLE = check_tesseract()
 
@@ -204,6 +205,84 @@ def _video_capture_read(cap):
         return cap.read()
 
 
+def _resolve_ffprobe_path():
+    env_path = os.getenv("FISHLENS_FFPROBE_PATH", "").strip()
+    if env_path and os.path.isfile(env_path):
+        return env_path
+
+    ffprobe_path = shutil.which("ffprobe")
+    if ffprobe_path:
+        return ffprobe_path
+
+    ffmpeg_path = shutil.which("ffmpeg")
+    if ffmpeg_path:
+        sibling = os.path.join(os.path.dirname(ffmpeg_path), "ffprobe.exe")
+        if os.path.isfile(sibling):
+            return sibling
+
+    return None
+
+
+def _probe_video_duration_sec(video_path):
+    ffprobe_path = _resolve_ffprobe_path()
+    if not ffprobe_path or not os.path.isfile(video_path):
+        return None
+
+    cmd = [
+        ffprobe_path,
+        "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        video_path
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            return None
+
+        value = (result.stdout or "").strip()
+        duration = float(value)
+        return duration if duration > 0 else None
+    except Exception:
+        return None
+
+
+def _format_mmss(seconds):
+    seconds = max(0.0, float(seconds or 0.0))
+    total = int(round(seconds))
+    minutes = total // 60
+    secs = total % 60
+    return f"{minutes}:{secs:02d}"
+
+
+def _enrich_tracks_with_duration(video_tracks, processed_video_path, source_video_path):
+    """Second pass: use ffprobe durations to compute export-only duration labels.
+    Does not alter detection/tracking logic or existing exported fields.
+    """
+    if not video_tracks:
+        return
+
+    processed_duration = _probe_video_duration_sec(processed_video_path)
+    source_duration = _probe_video_duration_sec(source_video_path) if source_video_path else None
+
+    duration_scale = 1.0
+    if processed_duration and source_duration and processed_duration > 0:
+        duration_scale = source_duration / processed_duration
+
+    for track in video_tracks:
+        try:
+            start_sec = float(track.get("start_time_sec", 0.0))
+            end_sec = float(track.get("end_time_sec", start_sec))
+        except Exception:
+            start_sec = 0.0
+            end_sec = 0.0
+
+        scaled_start = start_sec * duration_scale
+        scaled_end = max(scaled_start, end_sec * duration_scale)
+        track["duration"] = f"{_format_mmss(scaled_start)}-{_format_mmss(scaled_end)}"
+
+
 # ****************************************************************
 # Function: main
 # Description: Process all videos and export data as a CSV.
@@ -233,6 +312,10 @@ def _process_video_with_retry(video_path, source_video_path):
             YOLO_CONFIDENCE_THRESHOLD = LOOSE_YOLO_CONFIDENCE_THRESHOLD
             MIN_TRACK_DURATION_SEC = LOOSE_MIN_TRACK_DURATION_SEC
             video_tracks = run_video_tracker(video_path, source_video_path)
+
+        # Second pass (ffmpeg/ffprobe): enrich export with display duration only.
+        # No changes to track creation, filtering, dedupe, or existing fields.
+        _enrich_tracks_with_duration(video_tracks, video_path, source_video_path)
 
         return video_tracks
     finally:
