@@ -17,7 +17,7 @@ from torchvision.ops import nms
 
 class DeepSortTracker:
     MIN_BOX_AREA = 100
-    MIN_CONFIDENCE = 0.6
+    MIN_CONFIDENCE = 0.62
     MIN_MOVE_THRESHOLD = 5
     MAX_TRACK_HISTORY = 50
     MIN_FRAMES_FOR_SUMMARY = 3
