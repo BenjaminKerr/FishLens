@@ -119,7 +119,7 @@ NO_FISH = os.path.join(PROJECT_ROOT, "no_fish")
 
 # Constants--DeepSort
 FPS_DEFAULT = 30 
-MAX_EXPORT_PER_VIDEO = 5  
+MAX_EXPORT_PER_VIDEO = 3  
 OUTPUT_CSV = os.path.join(PROJECT_ROOT, "fish_summary.csv")
 FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
 
@@ -134,6 +134,7 @@ VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRA
 STRICT_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DURATION_SEC", "0.60")))
 LOOSE_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_LOOSE_MIN_TRACK_DURATION_SEC", "0.35")))
 MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
+MIN_TRACK_TRAVEL_PX = max(0.0, float(os.getenv("FISHLENS_MIN_TRACK_TRAVEL_PX", "25")))
 
 # Constants--Classifier
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
@@ -618,6 +619,8 @@ def run_video_tracker(video_path, source_video_path=None):
     # Save finalized tracks 
     vidData.v_finished_tracks = vidData.v_finished_tracks[:MAX_EXPORT_PER_VIDEO]
 
+    print(f"[INFO] After dedupe/cap: {len(vidData.v_finished_tracks)} fish tracks")
+
     # Save the best image from each video for analysis.
     save_best_image(vidData.v_finished_tracks, os.path.basename(source_video_path))
     
@@ -715,10 +718,13 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
 
         if is_new_track:
             initial_conf = "LOW" if (vidData.v_video_timestamp and vidData.v_video_timestamp != "Not detected") else None
+            initial_x = float(obj.get("centroid", (0, 0))[0])
             vidData.v_active_tracks[trackId] = {
                 "start_frame": frameData.f_index,
                 "confidences": [],
                 "directions": [],
+                "entry_x": initial_x,
+                "last_x": initial_x,
                 "best_conf": -1.0,
                 "best_crop": None,
                 "video_timestamp": vidData.v_video_timestamp or "Not detected",
@@ -851,6 +857,11 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
                 overall_direction = "downstream"
             else:
                 overall_direction = directions[-1]
+
+    # Reject low-motion indecisive tracks (common glare/debris false positives).
+    travel_px = abs(float(exit_x) - float(entry_x))
+    if overall_direction == "indecisive" and travel_px < MIN_TRACK_TRAVEL_PX:
+        return None
     
     species_data = classify_image(image_path) if image_path else ("No image", 0.0)
     
@@ -909,7 +920,7 @@ def dedupe_fragmented_tracks(finished_tracks):
     def _same_or_unknown_direction(a, b):
         da = str(a.get("direction", "unknown")).lower()
         db = str(b.get("direction", "unknown")).lower()
-        if da == "unknown" or db == "unknown" or da == "stationary" or db == "stationary":
+        if da in {"unknown", "stationary", "indecisive"} or db in {"unknown", "stationary", "indecisive"}:
             return True
         return da == db
 
@@ -931,17 +942,12 @@ def dedupe_fragmented_tracks(finished_tracks):
         gap = min(abs(a_start - b_end), abs(b_start - a_end))
 
         # Temporal relationship expected for split IDs.
-        temporal_match = (overlap_ratio >= 0.75) or (gap <= 0.35)
+        temporal_match = (overlap_ratio >= 0.75) or (gap <= 1.5)
         if not temporal_match:
             return False
 
-        # Prefer merging only when one track is clearly weaker/shorter.
-        pa = _pct(a)
-        pb = _pct(b)
-        conf_gap = abs(pa - pb)
-        dur_ratio = min(_duration(a), _duration(b)) / max(0.001, max(_duration(a), _duration(b)))
-
-        return conf_gap >= 8.0 or dur_ratio <= 0.45
+        # Same class + same direction + temporally adjacent = same fish
+        return True
 
     ordered = sorted(finished_tracks, key=lambda t: float(t.get("start_time_sec", 0.0)))
     kept = []

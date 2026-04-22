@@ -17,7 +17,7 @@ from torchvision.ops import nms
 
 class DeepSortTracker:
     MIN_BOX_AREA = 100
-    MIN_CONFIDENCE = 0.5
+    MIN_CONFIDENCE = 0.6
     MIN_MOVE_THRESHOLD = 5
     MAX_TRACK_HISTORY = 50
     MIN_FRAMES_FOR_SUMMARY = 3
@@ -30,7 +30,7 @@ class DeepSortTracker:
     #              and tracking state containers.
 
     def __init__(self) -> None:
-        n_init = max(1, int(os.getenv("FISHLENS_DEEPSORT_N_INIT", "1")))
+        n_init = max(1, int(os.getenv("FISHLENS_DEEPSORT_N_INIT", "3")))
         self.tracker = DeepSort(
             max_age=60,
             n_init=n_init,
