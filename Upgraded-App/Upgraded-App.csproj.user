@@ -4,19 +4,19 @@
     <_LastSelectedProfileId>C:\Users\benja\FishLens\Upgraded-App\Properties\PublishProfiles\FolderProfile.pubxml</_LastSelectedProfileId>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Update="AccountSettings.xaml.cs">
+    <Compile Update="Pages\AccountSettings.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Update="AuthWindow.xaml.cs">
+    <Compile Update="Pages\AuthWindow.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Update="History.xaml.cs">
+    <Compile Update="Pages\History.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Update="ProgressDialog.xaml.cs">
+    <Compile Update="Pages\ProgressDialog.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Update="Settings.xaml.cs">
+    <Compile Update="Pages\Settings.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
   </ItemGroup>

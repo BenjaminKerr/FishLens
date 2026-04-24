@@ -1,5 +1,9 @@
-﻿// AuthWindow.ForgotPassword.cs
-// Handles the two-step forgot-password flow (send code → reset password).
+﻿// ***************************************************************************************************************************
+// File: ForgotPasswordPage.cs
+// Description: This is the code behind for the forgot password page, this will allow users to reset their password if they have forgotten it. It will send a reset code to their email and then allow them to enter a new password.
+// Notes: N/A
+// ***************************************************************************************************************************
+
 
 using System;
 using System.Data.SqlClient;

@@ -1,5 +1,9 @@
-﻿// AuthWindow.SignIn.cs
-// Handles credential validation and navigation from the sign-in panel.
+﻿// ***************************************************************************************************************************
+// File: SigninPage.cs
+// Description: This is the code behind for the sign in page, this will allow users to sign in to their account and access the main window. It will also load their saved settings from the database and apply them to the application.
+// Notes: N/A
+// ***************************************************************************************************************************
+
 
 using System;
 using System.Data.SqlClient;

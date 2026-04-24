@@ -1,4 +1,10 @@
-﻿using System;
+﻿// ***************************************************************************************************************************
+// File: EmailService.cs
+// Description: Creates an email to send to the user either confirming email or sending a reset code for password reset. This is used in the forgot password and email verification processes.
+// Notes: N/A
+// ***************************************************************************************************************************
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -18,6 +24,10 @@ namespace FishLens_App
         private string fromPassword = "zpfl myjb lbhi cece";
 
 
+        // ****************************************************************
+        // Function: SendResetCode
+        // Description: Composes and sends a plaintext password reset email containing the provided reset code.
+        // Notes: Uses MailKit to connect to the SMTP server; returns true on success and false on exception.
         public bool SendResetCode(string toEmail, string resetCode)
         {
             try
@@ -51,6 +61,10 @@ namespace FishLens_App
             }
         }
 
+        // ****************************************************************
+        // Function: SendVerificationCode
+        // Description: Composes and sends an account verification email containing the provided verification code.
+        // Notes: Uses MailKit to connect to the SMTP server; returns true on success and false on exception.
         public bool SendVerificationCode(string toEmail, string resetCode)
         {
             try

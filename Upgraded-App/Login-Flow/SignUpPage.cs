@@ -1,5 +1,9 @@
-﻿// AuthWindow.SignUp.cs
-// Handles the two-step sign-up flow (register → verify email).
+﻿// ***************************************************************************************************************************
+// File: SignUpPage.cs
+// Description: This is the code behind for the sign up page, this will allow users to create an account and access the main window. It will also send a verification code to their email to verify their account before creating it in the database.
+// Notes: N/A
+// ***************************************************************************************************************************
+
 
 using System;
 using System.Data.SqlClient;

@@ -1,4 +1,10 @@
-﻿using FishLens_App.Interfaces;
+﻿// ***************************************************************************************************************************
+// File: History.xaml.cs
+// Description: This is the code behind for the History page, this will allow users to view their detection history, generate reports, and export data. It includes enhanced filtering options and a more comprehensive report layout with additional statistics and charts.
+// Notes: N/A
+// ***************************************************************************************************************************
+
+using FishLens_App.Interfaces;
 using Microsoft.Extensions.Logging;
 using System;
 using System.IO;

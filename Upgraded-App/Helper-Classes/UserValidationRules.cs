@@ -1,15 +1,17 @@
-﻿using System;
+﻿// ***************************************************************************************************************************
+// File: UserValidationRules.cs
+// Description: This is a helper class to ensure all places of account creation follow the same rules and checks. This includes both field validation (e.g. email format, password length) and database checks (e.g. username already exists).
+// By centralizing this logic, we can maintain consistency across the app and easily update requirements in one place.
+// Notes: N/A
+// ***************************************************************************************************************************
+
+using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Data.SqlClient;
 
 namespace FishLens_App
 {
-    // ****************************************************************
-    // Class: UserValidationRules
-    // Description: Single source of truth for all user input validation.
-    //              Update requirements here and they apply everywhere.
-    // ****************************************************************
     public static class UserValidationRules
     {
         //  Requirements — change these to update rules app-wide 
@@ -22,18 +24,38 @@ namespace FishLens_App
         public const string EmailHint = "• Must be a valid address (e.g. name@gmail.com)";
         
 
+        // ****************************************************************
+        // Function: IsValidEmail
+        // Description: Validates an email address using a regular expression.
+        // Notes: Uses a conservative regex that allows common characters and TLD lengths (2-10).
         public static bool IsValidEmail(string email)
         {
             string pattern = @"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,10}$";
             return Regex.IsMatch(email, pattern);
         }
 
+        // ****************************************************************
+        // Function: IsValidUsername
+        // Description: Verifies username is non-empty and meets the minimum length requirement.
+        // Notes: Uses the MinUsernameLength constant.
         public static bool IsValidUsername(string username) => !string.IsNullOrWhiteSpace(username) && username.Length >= MinUsernameLength;
 
+        // ****************************************************************
+        // Function: IsValidPassword
+        // Description: Verifies password is non-empty and meets the minimum length requirement.
+        // Notes: Uses the MinPasswordLength constant.
         public static bool IsValidPassword(string password) => !string.IsNullOrWhiteSpace(password) && password.Length >= MinPasswordLength;
 
+        // ****************************************************************
+        // Function: PasswordsMatch
+        // Description: Compares password and confirmation for exact equality.
+        // Notes: Simple equality check.
         public static bool PasswordsMatch(string password, string confirm) => password == confirm;
 
+        // ****************************************************************
+        // Function: OrgNameExists
+        // Description: Checks whether an organization with the given name exists in the database.
+        // Notes: Executes a COUNT(*) query and returns true when count > 0.
         public static bool OrgNameExists(SqlConnection conn, string orgName)
         {
             using (SqlCommand cmd = new SqlCommand(
@@ -44,6 +66,10 @@ namespace FishLens_App
             }
         }
 
+        // ****************************************************************
+        // Function: UsernameExists
+        // Description: Checks whether a username already exists in the users table.
+        // Notes: Optionally excludes a specific user id (useful when editing an existing user).
         public static bool UsernameExists(SqlConnection conn, string username, int excludeUserId = -1)
         {
             string sql = excludeUserId == -1
@@ -59,6 +85,10 @@ namespace FishLens_App
             }
         }
 
+        // ****************************************************************
+        // Function: EmailExists
+        // Description: Checks whether an email address is already in use by another user.
+        // Notes: Optionally excludes a specific user id (useful when editing an existing user).
         public static bool EmailExists(SqlConnection conn, string email, int excludeUserId = -1)
         {
             string sql = excludeUserId == -1
@@ -76,7 +106,10 @@ namespace FishLens_App
 
         // ── Full validation bundles ─────────────────────────────────
 
-        // Used by SignUpPage — validates fields only, no DB connection needed
+        // ****************************************************************
+        // Function: ValidateSignUpFields
+        // Description: Validates sign-up form fields (organization, email, username, password, confirm password) without DB access.
+        // Notes: Returns a ValidationResult containing field-specific errors.
         public static ValidationResult ValidateSignUpFields(
             string orgName, string email, string username,
             string password, string confirmPassword)
@@ -107,7 +140,10 @@ namespace FishLens_App
             return result;
         }
 
-        // Used by SignUpPage — DB duplicate checks after field validation passes
+        // ****************************************************************
+        // Function: ValidateSignUpDb
+        // Description: Performs database duplicate checks for sign-up (org name, username, email).
+        // Notes: Intended to be called after field validation succeeds.
         public static ValidationResult ValidateSignUpDb(
             SqlConnection conn, string orgName, string email, string username)
         {
@@ -125,7 +161,10 @@ namespace FishLens_App
             return result;
         }
 
-        // Used by Settings create user — fields + DB
+        // ****************************************************************
+        // Function: ValidateCreateUser
+        // Description: Validates create-user fields and performs DB duplicate checks when appropriate.
+        // Notes: Used by account settings UI; returns field-specific errors.
         public static ValidationResult ValidateCreateUser(
             SqlConnection conn, string username, string email, string password)
         {
@@ -156,7 +195,10 @@ namespace FishLens_App
             return result;
         }
 
-        // Used by Settings save user — validates a single user being edited
+        // ****************************************************************
+        // Function: ValidateEditUser
+        // Description: Validates a single user's editable fields (email) and checks for duplicates.
+        // Notes: Excludes the current user from the duplicate check.
         public static ValidationResult ValidateEditUser(SqlConnection conn, int userId, string username, string email)
         {
             var result = new ValidationResult();
@@ -172,7 +214,10 @@ namespace FishLens_App
             return result;
         }
 
-        // Used by ForgotPasswordWindow reset step
+        // ****************************************************************
+        // Function: ValidatePasswordReset
+        // Description: Validates password and confirmation during a reset flow.
+        // Notes: Ensures minimum length and that passwords match.
         public static ValidationResult ValidatePasswordReset(string password, string confirmPassword)
         {
             var result = new ValidationResult();
@@ -198,8 +243,16 @@ namespace FishLens_App
     {
         private readonly Dictionary<string, string> _errors = new();
 
+        // ****************************************************************
+        // Function: IsValid
+        // Description: Indicates whether any field errors have been recorded.
+        // Notes: True when no errors exist.
         public bool IsValid => _errors.Count == 0;
 
+        // ****************************************************************
+        // Function: AddError
+        // Description: Adds a field-specific error message if one is not already present.
+        // Notes: First error for a field takes precedence.
         public void AddError(string field, string message)
         {
             // First error per field wins 
@@ -207,8 +260,16 @@ namespace FishLens_App
                 _errors[field] = message;
         }
 
+        // ****************************************************************
+        // Function: HasErrorFor
+        // Description: Returns whether an error exists for the specified field.
+        // Notes: Simple dictionary lookup.
         public bool HasErrorFor(string field) => _errors.ContainsKey(field);
 
+        // ****************************************************************
+        // Function: GetError
+        // Description: Retrieves the error message for the specified field, or null if none.
+        // Notes: Uses TryGetValue to avoid exceptions.
         public string GetError(string field)
             => _errors.TryGetValue(field, out var msg) ? msg : null;
     }

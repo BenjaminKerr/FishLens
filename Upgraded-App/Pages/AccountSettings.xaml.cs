@@ -1,4 +1,10 @@
-﻿using FishLens_App.Interfaces;
+﻿// ***************************************************************************************************************************
+// File: AccountSettings.xaml.cs
+// Description: This is the code behind for the account settings page, this will allow users to create new accounts and edit existing accounts. It will also allow admins to manage user roles and permissions.
+// Notes: N/A
+// ***************************************************************************************************************************
+
+using FishLens_App.Interfaces;
 using FishLens_App.Models;
 using Microsoft.Extensions.Logging;
 using System;
@@ -22,8 +28,11 @@ namespace FishLens_App
         private int CurrentOrgId => (Application.Current as App).CurrentOrganizationId;
 
 
-    
 
+        // ****************************************************************
+        // Function: AccountSettings
+        // Description: Initializes the page, sets data context and loads roles and users.
+        // Notes: Called by WPF during construction.
         public AccountSettings()
         {
             InitializeComponent();
@@ -35,6 +44,10 @@ namespace FishLens_App
 
 
 
+        // ****************************************************************
+        // Function: ScrollViewer_PreviewMouseWheel
+        // Description: Slows and smooths scroll speed for the scroll viewer.
+        // Notes: Reduces mouse wheel delta before applying vertical offset.
         private void ScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
             var scrollViewer = sender as ScrollViewer;
@@ -45,6 +58,10 @@ namespace FishLens_App
             }
         }
 
+        // ****************************************************************
+        // Function: CreateUserClick
+        // Description: Handles the Create User button — validates input, attempts signup and updates UI.
+        // Notes: Validates via `UserValidationRules`, shows inline errors or success and reloads users on success.
         public void CreateUserClick(object sender, RoutedEventArgs e)
         {
             ClearCreateUserErrors();
@@ -95,6 +112,10 @@ namespace FishLens_App
             }
         }
 
+        // ****************************************************************
+        // Function: SaveUserChanges_Click
+        // Description: Persists edited users to the database after validation.
+        // Notes: Detects changed rows, validates them, updates DB and reports success or errors inline.
         private void SaveUserChanges_Click(object sender, RoutedEventArgs e)
         {
             SaveUsersError.Visibility = Visibility.Collapsed;
@@ -178,11 +199,23 @@ namespace FishLens_App
             }
         }
 
+        // ****************************************************************
+        // Function: RefreshUsers_Click
+        // Description: Reloads the users list.
+        // Notes: Simple wrapper that calls `LoadUsers`.
         private void RefreshUsers_Click(object sender, RoutedEventArgs e) => LoadUsers();
 
+        // ****************************************************************
+        // Function: UsersGrid_SelectionChanged
+        // Description: Handles selection changes in the users grid.
+        // Notes: Currently a placeholder for potential future behavior.
         private void UsersGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
 
 
+        // ****************************************************************
+        // Function: ClearCreateUserErrors
+        // Description: Clears all inline create-user and save-user error/success messages.
+        // Notes: Resets visibility of related TextBlocks.
         private void ClearCreateUserErrors()
         {
             CreateUserRoleError.Visibility = Visibility.Collapsed;
@@ -194,12 +227,20 @@ namespace FishLens_App
             SaveUsersSuccess.Visibility = Visibility.Collapsed;
         }
 
+        // ****************************************************************
+        // Function: ShowCreateUserError
+        // Description: Displays a message in the provided TextBlock.
+        // Notes: Sets text and visibility.
         private void ShowCreateUserError(TextBlock block, string message)
         {
             block.Text = message;
             block.Visibility = Visibility.Visible;
         }
 
+        // ****************************************************************
+        // Function: ApplyCreateUserErrors
+        // Description: Routes field-specific validation errors to their corresponding UI elements.
+        // Notes: Uses `ValidationResult` to determine which messages to show.
         private void ApplyCreateUserErrors(ValidationResult result)
         {
             if (result.HasErrorFor("username"))
@@ -210,6 +251,10 @@ namespace FishLens_App
                 ShowCreateUserError(CreateUserPasswordError, result.GetError("password"));
         }
 
+        // ****************************************************************
+        // Function: SignUp
+        // Description: Inserts a new user into the database using a stored procedure.
+        // Notes: Returns true on success, false on exceptions.
         private bool SignUp(string username, string email, string password, int roleId)
         {
             try
@@ -237,6 +282,10 @@ namespace FishLens_App
             }
         }
 
+        // ****************************************************************
+        // Function: LoadUsers
+        // Description: Reads users for the current organization from the database and binds them to the grid.
+        // Notes: Populates `_users`, `_originalUserData` and `UsersGrid.ItemsSource`.
         private void LoadUsers()
         {
             try
@@ -246,11 +295,11 @@ namespace FishLens_App
                     conn.Open();
 
                     string sql = @"
-                        SELECT Id, Username, Email, RoleId
-                        FROM [kaharra].[kaharra].[FishLensUsers]
-                        WHERE OrganizationId = @orgId
-                        ORDER BY Username";
-
+                            SELECT Id, Username, Email, RoleId
+                            FROM [kaharra].[kaharra].[FishLensUsers]
+                            WHERE OrganizationId = @orgId
+                            ORDER BY Username";
+                        
                     using (SqlCommand cmd = new SqlCommand(sql, conn))
                     {
                         cmd.Parameters.AddWithValue("@orgId", CurrentOrgId);
@@ -281,11 +330,15 @@ namespace FishLens_App
             }
             catch (Exception ex)
             {
-                
+
                 MessageBox.Show("Failed to load users.");
             }
         }
 
+        // ****************************************************************
+        // Function: LoadRoles
+        // Description: Loads role records from the database and populates the role selector.
+        // Notes: Sets `Roles`, `RoleComboBox.ItemsSource` and updates DataContext.
         private void LoadRoles()
         {
             try
@@ -314,6 +367,10 @@ namespace FishLens_App
             }
         }
 
+        // ****************************************************************
+        // Function: UpdateUser
+        // Description: Updates an existing user's username, role and email in the database.
+        // Notes: Returns true on success, false on exceptions.
         private bool UpdateUser(int userId, string newUsername, int newRoleId, string email)
         {
             try
@@ -322,9 +379,9 @@ namespace FishLens_App
                 {
                     conn.Open();
                     string sql = @"
-                        UPDATE [kaharra].[kaharra].[FishLensUsers]
-                        SET Username = @user, RoleId = @roleid, Email = @email
-                        WHERE Id = @userid";
+                            UPDATE [kaharra].[kaharra].[FishLensUsers]
+                            SET Username = @user, RoleId = @roleid, Email = @email
+                            WHERE Id = @userid";
 
                     using (SqlCommand cmd = new SqlCommand(sql, conn))
                     {

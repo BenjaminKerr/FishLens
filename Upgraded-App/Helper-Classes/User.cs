@@ -1,8 +1,7 @@
 ﻿// ***************************************************************************************************************************
 // File: User.cs
-// Description: This is the class for users temporalily it only has a few properties but will be adjusted after usage when we 
-// determine what is needed per user.
-// Notes: Currently it is not set up to have an impact on our code
+// Description: This is the class for users; it contains a few properties and constructors used by the app.
+// Notes: N/A
 // ***************************************************************************************************************************
 
 using System;
@@ -22,6 +21,10 @@ namespace FishLens_App
         public Role role { get; set; }
         public string Email { get; set; }
 
+        // ****************************************************************
+        // Function: User(string username, string pass, Role Role, string email)
+        // Description: Constructs a new user instance for creation flows (username, password, role, email).
+        // Notes: N/A
         public User(string username, string pass, Role Role, string email)
         {
             Username = username;
@@ -30,7 +33,10 @@ namespace FishLens_App
             Role = role;
         }
 
-        //Pulling for edit users not sign in so password not needed
+        // ****************************************************************
+        // Function: User(int id, string username, Role userRole, string email)
+        // Description: Constructs a user instance representing an existing user (includes Id, username, role, email).
+        // Notes: Used when loading users from storage; password is not required.
         public User(int id, string username, Role userRole, string email)
         {
             Id = id;
@@ -38,7 +44,5 @@ namespace FishLens_App
             role = userRole;
             Email = email;
         }
-
-
     }
 }

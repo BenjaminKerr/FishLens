@@ -1,5 +1,8 @@
-﻿// AuthWindow.xaml.cs
-// Shared state and panel navigation for the unified auth window.
+﻿// ***************************************************************************************************************************
+// File: AuthWindow.xaml.cs
+// Description: Code-behind for the authentication window: sign-in, sign-up, password reset and email verification flows.
+// Notes: N/A
+// ***************************************************************************************************************************
 
 using System.Windows;
 
@@ -7,46 +10,42 @@ namespace FishLens_App
 {
     public partial class AuthWindow : Window
     {
-        // ── Shared state accessible by all partial files ──────────────
         private EmailService emailService = new EmailService();
 
-        // ForgotPassword flow
         private int _resetUserId;
 
-        // SignUp flow
         private string _pendingOrgName;
         private string _pendingEmail;
         private string _pendingUsername;
         private string _pendingPassword;
         private const int AdminRoleId = 1;
 
-        // ── Panel names (mirrors XAML x:Name values) ──────────────────
-        // SignInPanel, SignUpPanel, VerifyEmailPanel,
-        // ForgotPanel, ResetPanel
-
+        // ****************************************************************
+        // Function: AuthWindow
+        // Description: Initializes UI components and shows the default panel.
+        // Notes: Displays the "SignInPanel" on startup.
         public AuthWindow()
         {
             InitializeComponent();
-            ShowPanel("SignInPanel");   // always start at sign-in
+            ShowPanel("SignInPanel");
         }
 
-        // ── Central panel switcher ─────────────────────────────────────
-        // Call this from any partial file to navigate between steps.
+        // ****************************************************************
+        // Function: ShowPanel
+        // Description: Sets visibility for content panels and corresponding footers based on the requested panel name.
+        // Notes: Valid panel names: "SignInPanel", "SignUpPanel", "VerifyEmailPanel", "ForgotPanel", "ResetPanel".
         internal void ShowPanel(string panelName)
         {
-            // ── Hide all content panels ──────────────────────────────
             SignInPanel.Visibility = Visibility.Collapsed;
             SignUpPanel.Visibility = Visibility.Collapsed;
             VerifyEmailPanel.Visibility = Visibility.Collapsed;
             ForgotPanel.Visibility = Visibility.Collapsed;
             ResetPanel.Visibility = Visibility.Collapsed;
 
-            // ── Hide all footer states ───────────────────────────────
             SignInFooter.Visibility = Visibility.Collapsed;
             SignUpFooter.Visibility = Visibility.Collapsed;
             ForgotFooter.Visibility = Visibility.Collapsed;
 
-            // ── Show the right pair ──────────────────────────────────
             switch (panelName)
             {
                 case "SignInPanel":
@@ -61,7 +60,7 @@ namespace FishLens_App
 
                 case "VerifyEmailPanel":
                     VerifyEmailPanel.Visibility = Visibility.Visible;
-                    SignUpFooter.Visibility = Visibility.Visible;  // same footer as sign-up
+                    SignUpFooter.Visibility = Visibility.Visible;
                     break;
 
                 case "ForgotPanel":
@@ -71,12 +70,10 @@ namespace FishLens_App
 
                 case "ResetPanel":
                     ResetPanel.Visibility = Visibility.Visible;
-                    ForgotFooter.Visibility = Visibility.Visible;  // same footer as forgot
+                    ForgotFooter.Visibility = Visibility.Visible;
                     break;
             }
         }
-
-
     }
 }
 

@@ -1,4 +1,11 @@
-﻿using DocumentFormat.OpenXml.Spreadsheet;
+﻿// ***************************************************************************************************************************
+// File: Settings.xaml.cs
+// Description: This is the code behind for the settings page, this will allow users to adjust their settings such as hiding output and error messages, adjusting confidence thresholds, and toggling high contrast mode.
+// Admin users will have access to additional settings that affect the entire organization.
+// Notes: N/A
+// ***************************************************************************************************************************
+
+using DocumentFormat.OpenXml.Spreadsheet;
 using FishLens_App;
 using FishLens_App.Interfaces;
 using FishLens_App.Models;
@@ -69,13 +76,11 @@ namespace FishLens_App
             }
         }
 
-       
 
-
-
-
-
-
+        // ****************************************************************
+        // Function: ConfidenceThreshold_ValueChanged
+        // Description: Updates the displayed percentage when the confidence slider value changes.
+        // Notes: Rounds the new slider value to the nearest integer and updates the UI label `confidenceValue`.
         private void ConfidenceThreshold_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
         {
             if (confidenceValue == null) return;
@@ -83,6 +88,10 @@ namespace FishLens_App
             confidenceValue.Text = $"{percent}%";
         }
 
+        // ****************************************************************
+        // Function: Cancel_Click
+        // Description: Handles Cancel button click — navigates back if possible or hides main frame.
+        // Notes: Uses NavigationService if available; otherwise collapses `MainFrame`. Exceptions are logged.
         private void Cancel_Click(object sender, RoutedEventArgs e)
         {
             // Try to navigate back if possible, otherwise hide the main frame (return to home)
@@ -105,7 +114,10 @@ namespace FishLens_App
                 _logger.LogError(ex, "Cancel navigation failed");
             }
         }
-
+        // ****************************************************************
+        // Function: SaveSettings_Click
+        // Description: Persists user and (if admin) organization settings to the database and applies them.
+        // Notes: Updates in-memory `_checkBoxes` and `_config`, calls stored procedures, shows status and logs actions.
         private void SaveSettings_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -173,6 +185,10 @@ namespace FishLens_App
 
 
 
+        // ****************************************************************
+        // Function: LoadPageVisibility
+        // Description: Adjusts UI visibility for admin-only sections based on current user's role.
+        // Notes: Collapses analysis UI for non-admin users.
         private void LoadPageVisibility()
         {
             var app = Application.Current as App;
@@ -183,22 +199,29 @@ namespace FishLens_App
             }
         }
 
-
-
+        // ****************************************************************
+        // Function: ToggleErrorMessages
+        // Description: Event handler to update internal ErrorBox flag when the hideErrors checkbox is toggled.
+        // Notes: Reads current checkbox state into the `_checkBoxes` DTO.
         private void ToggleErrorMessages(object sender, RoutedEventArgs e)
         {
             _checkBoxes.ErrorBox = hideErrors.IsChecked ?? false;
         }
 
+        // ****************************************************************
+        // Function: ToggleOutputMessages
+        // Description: Event handler to update internal OutputBox flag when the hideOutput checkbox is toggled.
+        // Notes: Reads current checkbox state into the `_checkBoxes` DTO.
         private void ToggleOutputMessages(object sender, RoutedEventArgs e)
         {
             _checkBoxes.OutputBox = hideOutput.IsChecked ?? false;
         }
+
         #endregion
 
         #region Private Methods
 
-       
+
 
         // ****************************************************************
         // Function: LoadAll
@@ -223,7 +246,10 @@ namespace FishLens_App
 
 
 
-
+        // ****************************************************************
+        // Function: LoadSettings
+        // Description: Loads user and organization settings from database and applies them to UI and in-memory configuration.
+        // Notes: Applies runtime defaults first, attempts DB reads and falls back to defaults on failure.
         private void LoadSettings()
         {
             var app = Application.Current as App;
@@ -294,17 +320,6 @@ namespace FishLens_App
                 _logger.LogWarning(ex, "Could not load settings from database; using defaults");
             }
         }
-
-
-
-
-
-
-
-
-
-
-
 
 
         #endregion
