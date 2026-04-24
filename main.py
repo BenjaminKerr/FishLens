@@ -175,6 +175,7 @@ class VideoData:
         self.v_confidence_sum = 0.0
         self.v_confidence_count = 0 
         self.v_video_timestamp = None
+        self.frame_width = 640
 
 
 @contextmanager
@@ -566,6 +567,12 @@ def run_video_tracker(video_path, source_video_path=None):
     vidData.v_fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
     ret, frame = _video_capture_read(cap)
 
+    if ret and frame is not None:
+        try:
+            vidData.frame_width = int(frame.shape[1])
+        except Exception:
+            pass
+
     # Pre-compute a video-level timestamp fallback from early frames.
     if ret and frame is not None:
         vidData.v_video_timestamp = probe_video_timestamp(
@@ -579,6 +586,12 @@ def run_video_tracker(video_path, source_video_path=None):
     # Cycle through video frames until end of video
     while ret:
         vidData.v_current_track_ids = set()
+
+        if frame is not None:
+            try:
+                vidData.frame_width = int(frame.shape[1])
+            except Exception:
+                pass
 
         # Speed mode: process every Nth frame
         if FRAME_STRIDE > 1 and (vidData.v_frame_index % FRAME_STRIDE) != 0:
@@ -889,22 +902,34 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     exit_side = "left" if exit_x < frame_width / 2 else "right"
     
     # Determine direction
-    if entry_side == exit_side:
-        # Fish entered and exited from same side - indecisive
-        overall_direction = "indecisive"
+    directions = track_data["directions"]
+    upstream_count = directions.count("upstream") if directions else 0
+    downstream_count = directions.count("downstream") if directions else 0
+    directional_votes = upstream_count + downstream_count
+    net_dx = float(exit_x) - float(entry_x)
+    min_net_dx = max(6.0, float(frame_width) * 0.02)
+
+    overall_direction = "indecisive"
+    if entry_side != exit_side:
+        # Fish crossed frame halves: use tracker vote first.
+        if upstream_count > downstream_count:
+            overall_direction = "upstream"
+        elif downstream_count > upstream_count:
+            overall_direction = "downstream"
+        elif net_dx <= -min_net_dx:
+            overall_direction = "upstream"
+        elif net_dx >= min_net_dx:
+            overall_direction = "downstream"
     else:
-        # Fish crossed from one side to other - use direction counts
-        directions = track_data["directions"]
-        overall_direction = "unknown"
-        if directions:
-            upstream_count = directions.count("upstream")
-            downstream_count = directions.count("downstream")
-            if upstream_count > downstream_count:
-                overall_direction = "upstream"
-            elif downstream_count > upstream_count:
-                overall_direction = "downstream"
-            else:
-                overall_direction = directions[-1]
+        # Same-side tracks can still have clear direction from net movement.
+        if travel_px >= MIN_TRACK_TRAVEL_PX and net_dx <= -min_net_dx:
+            overall_direction = "upstream"
+        elif travel_px >= MIN_TRACK_TRAVEL_PX and net_dx >= min_net_dx:
+            overall_direction = "downstream"
+        elif directional_votes >= 3:
+            vote_ratio = max(upstream_count, downstream_count) / max(1, directional_votes)
+            if vote_ratio >= 0.70:
+                overall_direction = "upstream" if upstream_count > downstream_count else "downstream"
 
     # Reject low-motion indecisive tracks (common glare/debris false positives).
     if overall_direction == "indecisive" and travel_px < MIN_TRACK_TRAVEL_PX:
