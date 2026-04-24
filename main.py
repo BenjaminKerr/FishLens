@@ -111,7 +111,7 @@ TESSERACT_AVAILABLE = check_tesseract()
 
 # Constants--YOLO
 MODEL = _load_yolo_model("models/fish_detector4.pt")
-STRICT_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_YOLO_CONFIDENCE_THRESHOLD", "0.40"))
+STRICT_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_YOLO_CONFIDENCE_THRESHOLD", "0.42"))
 LOOSE_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_LOOSE_YOLO_CONFIDENCE_THRESHOLD", "0.34"))
 ENABLE_LOOSE_RETRY = os.getenv("FISHLENS_ENABLE_LOOSE_RETRY", "1") == "1"
 YOLO_CONFIDENCE_THRESHOLD = STRICT_YOLO_CONFIDENCE_THRESHOLD  # Adjustable: lower = detects more fish (but more false positives), higher = more selective
@@ -126,14 +126,14 @@ FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
 
 # Performance tuning (set via env vars when needed)
 FAST_MODE = os.getenv("FISHLENS_FAST_MODE", "1") == "1"
-STRICT_FRAME_STRIDE = max(1, int(os.getenv("FISHLENS_STRICT_FRAME_STRIDE", "2")))
+STRICT_FRAME_STRIDE = max(1, int(os.getenv("FISHLENS_STRICT_FRAME_STRIDE", "3")))
 FRAME_STRIDE = STRICT_FRAME_STRIDE
 YOLO_IMGSZ = max(320, int(os.getenv("FISHLENS_YOLO_IMGSZ", "448" if FAST_MODE else "512")))
 SAVE_TIMESTAMP_DEBUG_FRAMES = os.getenv("FISHLENS_SAVE_TIMESTAMP_DEBUG", "0") == "1"
 TIMESTAMP_MAX_ATTEMPTS = max(1, int(os.getenv("FISHLENS_TIMESTAMP_MAX_ATTEMPTS", "4" if FAST_MODE else "8")))
 SUPPRESS_CODEC_WARNINGS = os.getenv("FISHLENS_SUPPRESS_CODEC_WARNINGS", "1") == "1"
 VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRAMES", "6" if FAST_MODE else "12")))
-STRICT_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DURATION_SEC", "0.60")))
+STRICT_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DURATION_SEC", "0.65")))
 LOOSE_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_LOOSE_MIN_TRACK_DURATION_SEC", "0.45")))
 MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
 MIN_TRACK_TRAVEL_PX = max(0.0, float(os.getenv("FISHLENS_MIN_TRACK_TRAVEL_PX", "8")))
@@ -299,15 +299,29 @@ def _process_video_with_retry(video_path, source_video_path):
     original_yolo_conf = YOLO_CONFIDENCE_THRESHOLD
     original_min_duration = MIN_TRACK_DURATION_SEC
 
+    def _run_pass(label):
+        print(
+            f"[INFO] Starting {label} pass: "
+            f"FRAME_STRIDE={FRAME_STRIDE}, "
+            f"YOLO_CONF={YOLO_CONFIDENCE_THRESHOLD:.2f}, "
+            f"MIN_TRACK_DURATION_SEC={MIN_TRACK_DURATION_SEC:.2f}"
+        )
+        try:
+            tracks = run_video_tracker(video_path, source_video_path)
+            return tracks if tracks else []
+        except Exception as e:
+            print(f"[WARN] {label} pass failed: {e}")
+            return []
+
     try:
         # Pass 1: strict settings
         FRAME_STRIDE = STRICT_FRAME_STRIDE
         YOLO_CONFIDENCE_THRESHOLD = STRICT_YOLO_CONFIDENCE_THRESHOLD
         MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
-        video_tracks = run_video_tracker(video_path, source_video_path)
+        video_tracks = _run_pass("strict")
 
-        # Pass 2: loose settings with FRAME_STRIDE=1 (only if pass 1 found no fish)
-        if ENABLE_LOOSE_RETRY and not video_tracks:
+        # Pass 2: loose settings with FRAME_STRIDE=1 whenever pass 1 found no fish.
+        if not video_tracks:
             print(
                 f"[INFO] No fish found with strict settings (FRAME_STRIDE={STRICT_FRAME_STRIDE}); "
                 "retrying once with FRAME_STRIDE=1 and loose thresholds"
@@ -315,7 +329,11 @@ def _process_video_with_retry(video_path, source_video_path):
             FRAME_STRIDE = 1
             YOLO_CONFIDENCE_THRESHOLD = LOOSE_YOLO_CONFIDENCE_THRESHOLD
             MIN_TRACK_DURATION_SEC = LOOSE_MIN_TRACK_DURATION_SEC
-            video_tracks = run_video_tracker(video_path, source_video_path)
+            video_tracks = _run_pass("loose")
+
+        # Only mark/copy as no-fish after all passes are exhausted.
+        if not video_tracks:
+            no_fish_found(source_video_path or video_path, os.path.basename(source_video_path or video_path))
 
         # Second pass (ffmpeg/ffprobe): enrich export with display duration only.
         # No changes to track creation, filtering, dedupe, or existing fields.
@@ -598,10 +616,10 @@ def run_video_tracker(video_path, source_video_path=None):
 
     print(f"[INFO] Processed {vidData.v_total_frames} frames, found {len(vidData.v_finished_tracks)} fish tracks")
 
-    # Skip export if fish was not detected in video
+    # Skip export if fish was not detected in this pass.
+    # Do not copy to no_fish here; caller may still run a retry pass.
     if not vidData.v_found_fish:
-        print(f"[INFO] No fish detected in {vidData.v_filename}")
-        no_fish_found(video_path, vidData.v_filename)
+        print(f"[INFO] No fish detected in {vidData.v_filename} (current pass)")
         return []
 
     # Timestamp dedupe can collapse distinct fish that share the same OCR second.
@@ -610,6 +628,9 @@ def run_video_tracker(video_path, source_video_path=None):
 
     # Merge likely fragmented/split tracks of the same fish.
     vidData.v_finished_tracks = dedupe_fragmented_tracks(vidData.v_finished_tracks)
+
+    # Guardrail: the same DeepSort trackId should not be exported multiple times per video.
+    vidData.v_finished_tracks = dedupe_duplicate_track_ids(vidData.v_finished_tracks)
 
     # Save the best detection per video for analysis. TODO: Refactor based on edge cases (multiple fish?) and confidence threshold adjustments.
     if MAX_EXPORT_PER_VIDEO and len(vidData.v_finished_tracks) > MAX_EXPORT_PER_VIDEO:
@@ -949,9 +970,10 @@ def dedupe_fragmented_tracks(finished_tracks):
         db = str(b.get("direction", "unknown")).lower()
         if da in {"unknown", "stationary"} or db in {"unknown", "stationary"}:
             return True
-        # "indecisive" is noisy; only treat as compatible with itself.
+        # "indecisive" is noisy and often appears on short fragments.
+        # Treat it as compatible to improve split-track merging.
         if da == "indecisive" or db == "indecisive":
-            return da == db
+            return True
         return da == db
 
     def _is_likely_duplicate(a, b):
@@ -960,6 +982,10 @@ def dedupe_fragmented_tracks(finished_tracks):
             return False
         if not _same_or_unknown_direction(a, b):
             return False
+
+        # If OCR timestamp resolves to the same second, treat close tracks as likely split IDs.
+        a_ts = str(a.get("video_timestamp", "")).replace("*", "").strip()
+        b_ts = str(b.get("video_timestamp", "")).replace("*", "").strip()
 
         a_start = float(a.get("start_time_sec", 0.0))
         a_end = float(a.get("end_time_sec", 0.0))
@@ -974,15 +1000,23 @@ def dedupe_fragmented_tracks(finished_tracks):
         gap = min(abs(a_start - b_end), abs(b_start - a_end))
 
         # Strong overlap is a clear split-ID signal.
-        if overlap_ratio >= 0.75:
+        if overlap_ratio >= 0.50:
             return True
 
         # Near-immediate handoff is also a strong split-ID signal.
-        if gap <= 0.35:
+        if gap <= 0.55:
+            return True
+
+        # Same OCR second + close in time is also a strong split-ID signal.
+        if a_ts and b_ts and a_ts == b_ts and gap <= 2.00:
             return True
 
         # For looser gaps, only merge when one side is clearly a very short fragment.
-        if gap <= 0.60 and min(dur_a, dur_b) <= 0.35:
+        if gap <= 0.90 and min(dur_a, dur_b) <= 0.50:
+            return True
+
+        # Extra strict mode for one-fish videos: short fragment next to a longer track.
+        if gap <= 1.50 and min(dur_a, dur_b) <= 0.80 and max(dur_a, dur_b) >= 1.20:
             return True
 
         return False
@@ -1002,6 +1036,83 @@ def dedupe_fragmented_tracks(finished_tracks):
             kept.append(track)
 
     return kept
+
+
+# ****************************************************************
+# Function: dedupe_duplicate_track_ids
+# Description: Keep a single best export row when the same trackId was finalized more than once.
+# Notes: This addresses occasional duplicate counting/export for one fish in a single video.
+def dedupe_duplicate_track_ids(finished_tracks):
+    if not finished_tracks:
+        return finished_tracks
+
+    def _parse_pct(value):
+        try:
+            return float(str(value).replace("%", "").strip())
+        except Exception:
+            return 0.0
+
+    def _duration(track):
+        try:
+            start = float(track.get("start_time_sec", 0.0))
+            end = float(track.get("end_time_sec", 0.0))
+            return max(0.0, end - start)
+        except Exception:
+            return 0.0
+
+    def _score(track):
+        # Prefer higher confidence, then slightly prefer longer duration.
+        conf = _parse_pct(track.get("avg_confidence") or track.get("confidence") or "0%")
+        return conf + min(10.0, _duration(track))
+
+    def _start(track):
+        try:
+            return float(track.get("start_time_sec", 0.0))
+        except Exception:
+            return 0.0
+
+    def _end(track):
+        try:
+            return float(track.get("end_time_sec", _start(track)))
+        except Exception:
+            return _start(track)
+
+    def _is_near_duplicate(a, b):
+        # Same trackId can be legitimately reused later in a video.
+        # Only merge rows that overlap or hand off almost immediately.
+        a_start, a_end = _start(a), _end(a)
+        b_start, b_end = _start(b), _end(b)
+        overlap = max(0.0, min(a_end, b_end) - max(a_start, b_start))
+        gap = max(0.0, max(a_start, b_start) - min(a_end, b_end))
+
+        if overlap > 0.0:
+            return True
+        if gap <= 0.50:
+            return True
+        return False
+
+    by_track = {}
+    for track in sorted(finished_tracks, key=lambda t: _start(t)):
+        tid = str(track.get("trackId", ""))
+        by_track.setdefault(tid, []).append(track)
+
+    kept = []
+    for _, tracks in by_track.items():
+        if not tracks:
+            continue
+
+        selected = [tracks[0]]
+        for track in tracks[1:]:
+            last = selected[-1]
+            if _is_near_duplicate(last, track):
+                if _score(track) > _score(last):
+                    selected[-1] = track
+            else:
+                selected.append(track)
+
+        kept.extend(selected)
+
+    return sorted(kept, key=lambda t: _start(t))
 
 
 # ***************************************************************
