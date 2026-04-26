@@ -284,10 +284,13 @@ Height="70">
                         <StackPanel x:Name="placeholderPanel"
                                     HorizontalAlignment="Center" 
                                     VerticalAlignment="Center">
-                            <TextBlock Text="🎬" 
-                                       FontSize="{DynamicResource LargeTitleFontSize}"
-                                       HorizontalAlignment="Center"
-                                       Opacity="0.3"/>
+                            
+                            <TextBlock Text="🎬" FontSize="{DynamicResource LargeTitleFontSize}" 
+                                       Foreground="{DynamicResource PrimaryText}" 
+                                       HorizontalAlignment="Center" 
+                                       Opacity="0.5"/>
+
+
                             <TextBlock Text="Select a video from the library" 
                                        FontSize="{DynamicResource LargeFontSize}"
                                        Foreground="{DynamicResource SecondaryText}"
