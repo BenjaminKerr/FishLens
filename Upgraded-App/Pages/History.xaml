@@ -2,7 +2,7 @@
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Title="History"
-      Background="{DynamicResource PageBackgroundBrush}">
+      Background="{DynamicResource WindowBackground}">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -12,18 +12,14 @@
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0" 
-                Background="{DynamicResource PrimaryColorBrush}" 
-                Padding="30,25">
+                Background="{DynamicResource HeaderBackground}" 
+                Padding="30,20">
             <StackPanel>
                 <TextBlock Text="Reports &amp; Analytics" 
                            FontSize="{DynamicResource LargeHeaderFontSize}"
                            FontWeight="SemiBold"
-                           Foreground="{DynamicResource SecondaryTextBrush}"
-                           Margin="0,0,0,5"/>
-                <TextBlock Text="Filter, analyze, and export your detection data" 
-                           FontSize="{DynamicResource BaseFontSize}"
-                           Foreground="{DynamicResource SecondaryTextBrush}"
-                           FontWeight="Normal"/>
+                           Foreground="{DynamicResource OnAccentForeground}"/>
+              
             </StackPanel>
         </Border>
 
@@ -34,8 +30,8 @@
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0"
-                    Background="{DynamicResource SecondaryBackgroundBrush}"
-                    BorderBrush="{DynamicResource BorderColorBrush}"
+                    Background="{DynamicResource CardBackground}"
+                    BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="0,0,1,0"
                     Padding="30,20">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -43,22 +39,22 @@
                         <TextBlock Text="Filters" 
                                    FontSize="{DynamicResource LargeFontSize}"
                                    FontWeight="SemiBold"
-                                   Foreground="{DynamicResource PrimaryColorBrush}"
+                                   Foreground="{DynamicResource PrimaryText}"
                                    Margin="0,0,0,15"/>
 
                         <Grid Margin="0,0,0,8">
                             <TextBlock Text="Date Range" 
                                        FontSize="{DynamicResource BaseFontSize}"
                                        FontWeight="SemiBold"
-                                       Foreground="{DynamicResource PrimaryTextBrush}"
+                                       Foreground="{DynamicResource PrimaryText}"
                                        HorizontalAlignment="Left"
                                        VerticalAlignment="Center"/>
 
                             <Button Content="Select Entire Date Range" 
                                     Click="AllDatesClick"
-                                    Background="{DynamicResource SecondaryBackgroundBrush}"
-                                    Foreground="{DynamicResource PrimaryColorBrush}"
-                                    BorderBrush="{DynamicResource BorderColorBrush}"
+                                    Background="{DynamicResource CardBackground}"
+                                    Foreground="{DynamicResource PrimaryText}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
                                     FontSize="{DynamicResource BaseFontSize}"
                                     FontWeight="SemiBold"
                                     Padding="10,6"
@@ -100,8 +96,8 @@
 
                             <DatePicker x:Name="startDatePicker"
                                         Grid.Column="0"
-                                        Background="{DynamicResource PageBackgroundBrush}"
-                                        BorderBrush="{DynamicResource BorderColorBrush}"
+                                        Background="{DynamicResource WindowBackground}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
                                         Padding="10,8"
                                         FontSize="{DynamicResource BaseFontSize}"/>
 
@@ -109,12 +105,12 @@
                                        Text="—" 
                                        VerticalAlignment="Center" 
                                        HorizontalAlignment="Center"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                       Foreground="{DynamicResource SecondaryText}"/>
 
                             <DatePicker x:Name="endDatePicker"
                                         Grid.Column="2"
-                                        Background="{DynamicResource PageBackgroundBrush}"
-                                        BorderBrush="{DynamicResource BorderColorBrush}"
+                                        Background="{DynamicResource WindowBackground}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
                                         Padding="10,8"
                                         FontSize="{DynamicResource BaseFontSize}"/>
                         </Grid>
@@ -122,12 +118,12 @@
                         <TextBlock Text="Species" 
                                    FontSize="13" 
                                    FontWeight="SemiBold"
-                                   Foreground="{DynamicResource PrimaryTextBrush}"
+                                   Foreground="{DynamicResource PrimaryText}"
                                    Margin="0,0,0,8"/>
 
                         <ComboBox x:Name="speciesFilter"
-                                  Background="{DynamicResource PageBackgroundBrush}"
-                                  BorderBrush="{DynamicResource BorderColorBrush}"
+                                  Background="{DynamicResource WindowBackground}"
+                                  BorderBrush="{DynamicResource BorderBrush}"
                                   Padding="12,8"
                                   FontSize="{DynamicResource BaseFontSize}"
                                   Margin="0,0,0,15"
@@ -141,12 +137,12 @@
                         <TextBlock Text="Direction" 
                                    FontSize="{DynamicResource BaseFontSize}"
                                    FontWeight="SemiBold"
-                                   Foreground="{DynamicResource PrimaryTextBrush}"
+                                   Foreground="{DynamicResource PrimaryText}"
                                    Margin="0,0,0,8"/>
 
                         <ComboBox x:Name="directionFilter"
-                                  Background="{DynamicResource PageBackgroundBrush}"
-                                  BorderBrush="{DynamicResource BorderColorBrush}"
+                                  Background="{DynamicResource WindowBackground}"
+                                  BorderBrush="{DynamicResource BorderBrush}"
                                   Padding="12,8"
                                   FontSize="{DynamicResource BaseFontSize}"
                                   Margin="0,0,0,15"
@@ -159,12 +155,12 @@
                         <TextBlock Text="Location" 
                                    FontSize="{DynamicResource BaseFontSize}"
                                    FontWeight="SemiBold"
-                                   Foreground="{DynamicResource PrimaryTextBrush}"
+                                   Foreground="{DynamicResource PrimaryText}"
                                    Margin="0,0,0,8"/>
 
                         <ComboBox x:Name="cameraFilter"
-                                  Background="{DynamicResource PageBackgroundBrush}"
-                                  BorderBrush="{DynamicResource BorderColorBrush}"
+                                  Background="{DynamicResource WindowBackground}"
+                                  BorderBrush="{DynamicResource BorderBrush}"
                                   Padding="12,8"
                                   FontSize="{DynamicResource BaseFontSize}"
                                   Margin="0,0,0,20"
@@ -175,12 +171,10 @@
                             <ComboBoxItem Content="Spencer Creek"/>
                         </ComboBox>
 
-                        <!-- Group By removed per user request -->
-
                         <TextBlock Text="Minimum Confidence" 
                                    FontSize="{DynamicResource BaseFontSize}"
                                    FontWeight="SemiBold"
-                                   Foreground="{DynamicResource PrimaryTextBrush}"
+                                   Foreground="{DynamicResource PrimaryText}"
                                    Margin="0,0,0,8"/>
 
                         <Grid Margin="0,0,0,5">
@@ -202,20 +196,20 @@
                                        Text="0%"
                                        FontSize="{DynamicResource BaseFontSize}"
                                        FontWeight="SemiBold"
-                                       Foreground="{DynamicResource PrimaryColorBrush}"
+                                       Foreground="{DynamicResource PrimaryText}"
                                        Margin="10,0,0,0"
                                        VerticalAlignment="Center"/>
                         </Grid>
 
                         <TextBlock Text="Filter detections below this confidence level" 
                                    FontSize="{DynamicResource BaseFontSize}"
-                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Foreground="{DynamicResource SecondaryText}"
                                    Margin="0,0,0,20"/>
 
                         <Button Content="Apply Filters" 
                                 Click="ApplyFiltersClick"
-                                Background="{DynamicResource PrimaryColorBrush}"
-                                Foreground="{DynamicResource SecondaryTextBrush}"
+                                Background="{DynamicResource HeaderBackground}"
+                                Foreground="{DynamicResource OnAccentForeground}"
                                 FontSize="{DynamicResource BaseFontSize}"
                                 FontWeight="SemiBold"
                                 Padding="0,10"
@@ -247,9 +241,9 @@
 
                         <Button Content="Clear Filters" 
                                 Click="ClearFiltersClick"
-                                Background="{DynamicResource SecondaryBackgroundBrush}"
-                                Foreground="{DynamicResource PrimaryColorBrush}"
-                                BorderBrush="{DynamicResource BorderColorBrush}"
+                                Background="{DynamicResource CardBackground}"
+                                Foreground="{DynamicResource PrimaryText}"
+                                BorderBrush="{DynamicResource BorderBrush}"
                                 BorderThickness="1"
                                 FontSize="{DynamicResource BaseFontSize}"
                                 FontWeight="SemiBold"
@@ -286,10 +280,10 @@
 
             <Border Grid.Column="1" 
                     Margin="30,20,30,30" 
-                    Background="{DynamicResource SecondaryBackgroundBrush}" 
+                    Background="{DynamicResource CardBackground}" 
                     CornerRadius="12"
                     BorderThickness="1"
-                    BorderBrush="{DynamicResource BorderColorBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
                     VerticalAlignment="Stretch">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.15"/>
@@ -303,7 +297,7 @@
                     </Grid.RowDefinitions>
 
                     <Border Grid.Row="0" 
-                            Background="{DynamicResource PageBackgroundBrush}" 
+                            Background="{DynamicResource WindowBackground}" 
                             Padding="20,15"
                             CornerRadius="12,12,0,0">
                         <Grid>
@@ -311,23 +305,139 @@
                                        Text="Analysis Report" 
                                        FontSize="{DynamicResource LargeFontSize}"
                                        FontWeight="SemiBold"
-                                       Foreground="{DynamicResource PrimaryColorBrush}"
+                                       Foreground="{DynamicResource PrimaryText}"
                                        VerticalAlignment="Center"/>
 
                             <StackPanel Orientation="Horizontal" 
                                         HorizontalAlignment="Right">
                                 <ComboBox x:Name="reportTypeCombo"
-                                          FontSize="{DynamicResource BaseFontSize}"
-                                          Padding="10,5"
-                                          Background="{DynamicResource SecondaryBackgroundBrush}"
-                                          BorderBrush="{DynamicResource BorderColorBrush}"
-                                          SelectedIndex="0"
-                                          SelectionChanged="ReportType_SelectionChanged">
+          FontSize="{DynamicResource BaseFontSize}"
+          Padding="10,5"
+          Width="180"
+          SelectedIndex="0"
+          SelectionChanged="ReportType_SelectionChanged">
+                                    <ComboBox.Style>
+                                        <Style TargetType="ComboBox">
+                                            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+                                            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                                            <Setter Property="BorderThickness" Value="1"/>
+                                            <Setter Property="Padding" Value="10,6"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="ComboBox">
+                                                        <Grid>
+                                                            <Border x:Name="Border"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="6">
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="32"/>
+                                                                    </Grid.ColumnDefinitions>
+
+                                                                    <ContentPresenter Grid.Column="0"
+                                                      Content="{TemplateBinding SelectionBoxItem}"
+                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                      Margin="{TemplateBinding Padding}"
+                                                      VerticalAlignment="Center"
+                                                      HorizontalAlignment="Left"
+                                                      TextElement.Foreground="{TemplateBinding Foreground}"/>
+
+                                                                    <Path Grid.Column="1"
+                                          Data="M0,0 L4,4 L8,0"
+                                          Stroke="{DynamicResource PrimaryText}"
+                                          StrokeThickness="1.5"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+
+                                                                    <ToggleButton Grid.ColumnSpan="2"
+                                                  IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                                  Background="Transparent"
+                                                  BorderThickness="0"
+                                                  Focusable="False"
+                                                  ClickMode="Press">
+                                                                        <ToggleButton.Template>
+                                                                            <ControlTemplate TargetType="ToggleButton">
+                                                                                <Border Background="Transparent"/>
+                                                                            </ControlTemplate>
+                                                                        </ToggleButton.Template>
+                                                                    </ToggleButton>
+                                                                </Grid>
+                                                            </Border>
+
+                                                            <Popup IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   Placement="Bottom"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PopupAnimation="Slide">
+                                                                <Border Background="{DynamicResource CardBackground}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Margin="0,4,0,0"
+                                        Padding="4"
+                                        MinWidth="{TemplateBinding ActualWidth}"
+                                        MaxHeight="200">
+                                                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                                        <StackPanel IsItemsHost="True"/>
+                                                                    </ScrollViewer>
+                                                                </Border>
+                                                            </Popup>
+                                                        </Grid>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource HeaderBackground}"/>
+                                                            </Trigger>
+                                                            <Trigger Property="IsDropDownOpen" Value="True">
+                                                                <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource HeaderBackground}"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </ComboBox.Style>
+
+                                    <ComboBox.ItemContainerStyle>
+                                        <Style TargetType="ComboBoxItem">
+                                            <Setter Property="Padding" Value="10,8"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+                                            <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="ComboBoxItem">
+                                                        <Border x:Name="ItemBorder"
+                                Background="Transparent"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}"/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsHighlighted" Value="True">
+                                                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource WindowBackground}"/>
+                                                            </Trigger>
+                                                            <Trigger Property="IsSelected" Value="True">
+                                                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource HeaderBackground}"/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource OnAccentForeground}"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </ComboBox.ItemContainerStyle>
+
                                     <ComboBoxItem Content="Standard Report"/>
                                     <ComboBoxItem Content="Detailed Analysis"/>
                                     <ComboBoxItem Content="Summary Only"/>
                                     <ComboBoxItem Content="Data Table View"/>
                                 </ComboBox>
+
+
+
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -339,16 +449,16 @@
                         <TextBlock Text="📊" 
                                    FontSize="{DynamicResource LargeTitleFontSize}"
                                    HorizontalAlignment="Center"
-                                   Opacity="0.3"
-                                   Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                   Opacity="0.5"
+                                   Foreground="{DynamicResource PrimaryText}"/>
                         <TextBlock Text="Generate a report" 
                                    FontSize="{DynamicResource LargeFontSize}"
-                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Foreground="{DynamicResource SecondaryText}"
                                    HorizontalAlignment="Center"
                                    Margin="0,20,0,0"/>
                         <TextBlock Text="Configure your filters and click the button below" 
                                    FontSize="{DynamicResource BaseFontSize}"
-                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Foreground="{DynamicResource SecondaryText}"
                                    HorizontalAlignment="Center"
                                    Margin="0,5,0,0"/>
                     </StackPanel>
@@ -371,7 +481,7 @@
 
                     <Border x:Name="reportControls"
                             Grid.Row="2" 
-                            Background="{DynamicResource PageBackgroundBrush}" 
+                            Background="{DynamicResource WindowBackground}" 
                             Padding="20,15"
                             CornerRadius="0,0,12,12"
                             Visibility="Collapsed">
@@ -379,8 +489,8 @@
                                     HorizontalAlignment="Center">
                             <Button Content="Export Report" 
                                     Click="ExportReportClick"
-                                    Background="{DynamicResource PrimaryColorBrush}"
-                                    Foreground="{DynamicResource SecondaryTextBrush}"
+                                    Background="{DynamicResource HeaderBackground}"
+                                    Foreground="{DynamicResource OnAccentForeground}"
                                     FontSize="{DynamicResource BaseFontSize}"
                                     FontWeight="SemiBold"
                                     Padding="20,10"
@@ -412,9 +522,9 @@
 
                             <Button Content="Print Report" 
                                     Click="PrintReportClick"
-                                    Background="{DynamicResource SecondaryBackgroundBrush}"
-                                    Foreground="{DynamicResource PrimaryColorBrush}"
-                                    BorderBrush="{DynamicResource BorderColorBrush}"
+                                    Background="{DynamicResource CardBackground}"
+                                    Foreground="{DynamicResource PrimaryText}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
                                     BorderThickness="1"
                                     FontSize="{DynamicResource BaseFontSize}"
                                     FontWeight="SemiBold"
@@ -451,8 +561,8 @@
         </Grid>
 
         <Border Grid.Row="2" 
-                Background="{DynamicResource SecondaryBackgroundBrush}" 
-                BorderBrush="{DynamicResource BorderColorBrush}" 
+                Background="{DynamicResource CardBackground}" 
+                BorderBrush="{DynamicResource BorderBrush}" 
                 BorderThickness="0,1,0,0"
                 Padding="30,20">
             <Grid>
@@ -460,8 +570,8 @@
                             HorizontalAlignment="Right">
                     <Button Content="Generate Report" 
                             Click="GenerateReportClick"
-                            Background="{DynamicResource PrimaryColorBrush}"
-                            Foreground="{DynamicResource SecondaryTextBrush}"
+                            Background="{DynamicResource HeaderBackground}"
+                            Foreground="{DynamicResource OnAccentForeground}"
                             FontSize="{DynamicResource BaseFontSize}"
                             FontWeight="SemiBold"
                             Padding="25,12"
@@ -494,3 +604,5 @@
         </Border>
     </Grid>
 </Page>
+
+

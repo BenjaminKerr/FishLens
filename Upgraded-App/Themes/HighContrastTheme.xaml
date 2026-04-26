@@ -17,13 +17,6 @@
     <!-- Hover state — invert to make it obvious -->
     <SolidColorBrush x:Key="HoverBackgroundBrush" Color="#FFFF00"/>
 
-    <!-- Aliases for older XAML resource names -->
-    <SolidColorBrush x:Key="PageBackgroundBrush" Color="Black"/>
-    <SolidColorBrush x:Key="PrimaryColorBrush" Color="#FFFF00"/>
-    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#FFFF00"/>
-    <SolidColorBrush x:Key="PrimaryTextBrush" Color="White"/>
-    <SolidColorBrush x:Key="BorderColorBrush" Color="White"/>
-    <SolidColorBrush x:Key="SecondaryBackgroundBrush" Color="Black"/>
 </ResourceDictionary>
 
 
