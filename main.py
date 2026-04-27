@@ -82,12 +82,31 @@ def _load_keras_image_utils():
     return None, None
 
 
+def _get_classifier_input_size(model, default=(150, 150)):
+    try:
+        shape = getattr(model, "input_shape", None)
+        if shape and len(shape) >= 3 and shape[1] and shape[2]:
+            return int(shape[1]), int(shape[2])
+    except Exception:
+        pass
+    return default
+
+
+def _classifier_uses_mobilenet_preprocessing(model):
+    try:
+        for layer in getattr(model, "layers", []):
+            name = str(getattr(layer, "name", "")).lower()
+            if "mobilenet" in name:
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def _resolve_classifier_model_path():
     candidates = [
         os.path.join(PROJECT_ROOT, "models", "fish_classifier_model.keras"),
         os.path.join(PROJECT_ROOT, "models", "fish_classifier_model.h5"),
-        os.path.join(PROJECT_ROOT, "fish_classifier_model.keras"),
-        os.path.join(PROJECT_ROOT, "fish_classifier_model.h5")
     ]
     for path in candidates:
         if os.path.exists(path):
@@ -186,7 +205,8 @@ CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
 CLASSIFIER_MODEL = _load_classifier_model(CLASSIFIER_MODEL_PATH)
 LOAD_IMG, IMG_TO_ARRAY = _load_keras_image_utils()
 CLASS_NAMES = ["Chinook", "Omykiss"]
-IMAGE_SIZE = (150, 150)
+IMAGE_SIZE = _get_classifier_input_size(CLASSIFIER_MODEL, default=(150, 150))
+USE_MOBILENET_PREPROCESS = _classifier_uses_mobilenet_preprocessing(CLASSIFIER_MODEL)
 
 # Create and initialize folders
 os.makedirs(NO_FISH, exist_ok=True)
@@ -366,7 +386,7 @@ def _enrich_tracks_with_duration(video_tracks, processed_video_path, source_vide
 # Description: Process all videos and export data as a CSV.
 # Notes: N/A
 def _process_video_with_retry(video_path, source_video_path):
-    """Two-pass processing: strict pass, then loose pass at FRAME_STRIDE=1 if needed."""
+    """Two-pass processing: strict pass, then optional loose retry if fast mode may have skipped fish."""
     global FRAME_STRIDE, YOLO_CONFIDENCE_THRESHOLD, MIN_TRACK_DURATION_SEC
 
     original_stride = FRAME_STRIDE
@@ -378,10 +398,16 @@ def _process_video_with_retry(video_path, source_video_path):
         FRAME_STRIDE = original_stride
         YOLO_CONFIDENCE_THRESHOLD = STRICT_YOLO_CONFIDENCE_THRESHOLD
         MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
-        video_tracks = run_video_tracker(video_path, source_video_path, emit_no_fish=False)
+        video_tracks = run_video_tracker(
+            video_path,
+            source_video_path,
+            emit_no_fish=(original_stride == 1)
+        )
 
-        # Pass 2: loose settings with FRAME_STRIDE=1 (only if pass 1 found no fish)
-        if not video_tracks:
+        # Pass 2: only retry when fast mode skipped frames in pass 1.
+        # In normal mode FRAME_STRIDE is already 1, so a second full decode would be redundant.
+        should_retry = (original_stride > 1)
+        if not video_tracks and should_retry:
             print(
                 f"[INFO] No fish found with strict settings (FRAME_STRIDE={original_stride}); "
                 "retrying once with FRAME_STRIDE=1 and loose thresholds"
@@ -390,6 +416,11 @@ def _process_video_with_retry(video_path, source_video_path):
             YOLO_CONFIDENCE_THRESHOLD = LOOSE_YOLO_CONFIDENCE_THRESHOLD
             MIN_TRACK_DURATION_SEC = LOOSE_MIN_TRACK_DURATION_SEC
             video_tracks = run_video_tracker(video_path, source_video_path, emit_no_fish=True)
+        elif not video_tracks:
+            print(
+                f"[INFO] No fish found with strict settings at FRAME_STRIDE=1; "
+                "skipping retry because normal mode already checked every frame"
+            )
 
         # Second pass (ffmpeg/ffprobe): enrich export with display duration only.
         # No changes to track creation, filtering, dedupe, or existing fields.
@@ -1465,7 +1496,10 @@ def classify_image(image_path):
         # Load and preprocess image
         img = LOAD_IMG(image_path, target_size=IMAGE_SIZE)
         img_array = IMG_TO_ARRAY(img)
-        img_array = img_array / 255.0 
+        if USE_MOBILENET_PREPROCESS:
+            img_array = (img_array / 127.5) - 1.0
+        else:
+            img_array = img_array / 255.0
         img_array = np.expand_dims(img_array, axis=0)
 
       
