@@ -227,34 +227,36 @@ def probe_video_timestamp(cap, first_frame, probe_frames=12, read_frame_fn=None)
 
     # Prefer a stable date first, then choose the earliest parsed timestamp on that date.
     # This mitigates persistent OCR 5/6 minute drift near the start of a video.
-    date_counts = Counter(ts.split(' ')[0] for ts in parsed if ' ' in ts)
+    date_counts = Counter(ts.split(' ')[0] for ts, _ in parsed if ' ' in ts)
     best_date = date_counts.most_common(1)[0][0] if date_counts else None
 
-    filtered = [ts for ts in parsed if (best_date is None or ts.startswith(best_date + ' '))]
+    filtered = [(ts, conf) for ts, conf in parsed if (best_date is None or ts.startswith(best_date + ' '))]
     if not filtered:
         filtered = parsed
 
     parsed_datetimes = []
-    for ts in filtered:
+    for ts, _ in filtered:
         try:
             parsed_datetimes.append(datetime.strptime(ts, "%Y/%m/%d %H:%M:%S"))
         except Exception:
             continue
 
     if parsed_datetimes:
-        return min(parsed_datetimes).strftime("%Y/%m/%d %H:%M:%S")
+        best_ts = min(parsed_datetimes).strftime("%Y/%m/%d %H:%M:%S")
+        best_conf = "HIGH" if any(conf == "HIGH" for ts, conf in filtered if ts == best_ts) else "MEDIUM"
+        return best_ts, best_conf
 
     # Fallback to previous behavior when datetime parsing fails.
-    full_counts = Counter(filtered)
+    full_counts = Counter(ts for ts, _ in filtered)
     most_common_full, full_count = full_counts.most_common(1)[0]
 
     # If there is no clear full-timestamp winner, stabilize by date part and then choose
     # the most common timestamp within that date.
     if full_count == 1 and len(filtered) > 1:
-        date_counts = Counter(ts.split(' ')[0] for ts in filtered if ' ' in ts)
+        date_counts = Counter(ts.split(' ')[0] for ts, _ in filtered if ' ' in ts)
         if date_counts:
             best_date = date_counts.most_common(1)[0][0]
-            same_date = [ts for ts in filtered if ts.startswith(best_date + ' ')]
+            same_date = [(ts, conf) for ts, conf in filtered if ts.startswith(best_date + ' ')]
             if same_date:
                 winner_ts = Counter(ts for ts, _ in same_date).most_common(1)[0][0]
                 # HIGH if any read of this timestamp was HIGH.

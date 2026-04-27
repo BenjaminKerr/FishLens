@@ -84,7 +84,9 @@ def _load_keras_image_utils():
 
 def _resolve_classifier_model_path():
     candidates = [
+        os.path.join(PROJECT_ROOT, "models", "fish_classifier_model.keras"),
         os.path.join(PROJECT_ROOT, "models", "fish_classifier_model.h5"),
+        os.path.join(PROJECT_ROOT, "fish_classifier_model.keras"),
         os.path.join(PROJECT_ROOT, "fish_classifier_model.h5")
     ]
     for path in candidates:
@@ -376,7 +378,7 @@ def _process_video_with_retry(video_path, source_video_path):
         FRAME_STRIDE = original_stride
         YOLO_CONFIDENCE_THRESHOLD = STRICT_YOLO_CONFIDENCE_THRESHOLD
         MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
-        video_tracks = run_video_tracker(video_path, source_video_path)
+        video_tracks = run_video_tracker(video_path, source_video_path, emit_no_fish=False)
 
         # Pass 2: loose settings with FRAME_STRIDE=1 (only if pass 1 found no fish)
         if not video_tracks:
@@ -387,7 +389,7 @@ def _process_video_with_retry(video_path, source_video_path):
             FRAME_STRIDE = 1
             YOLO_CONFIDENCE_THRESHOLD = LOOSE_YOLO_CONFIDENCE_THRESHOLD
             MIN_TRACK_DURATION_SEC = LOOSE_MIN_TRACK_DURATION_SEC
-            video_tracks = run_video_tracker(video_path, source_video_path)
+            video_tracks = run_video_tracker(video_path, source_video_path, emit_no_fish=True)
 
         # Second pass (ffmpeg/ffprobe): enrich export with display duration only.
         # No changes to track creation, filtering, dedupe, or existing fields.
@@ -727,7 +729,7 @@ def _cleanup_temp(path):
 # Description: Process a single video through both YOLO and DeepSort;
 # return tracked fish data.
 # Notes: N/A
-def run_video_tracker(video_path, source_video_path=None):
+def run_video_tracker(video_path, source_video_path=None, emit_no_fish=True):
 
     # Initialize new VideoData and DeepSort tracker for each video
     vidData = VideoData()
@@ -824,8 +826,9 @@ def run_video_tracker(video_path, source_video_path=None):
     # Skip export if fish was not detected in video
     if not vidData.v_found_fish:
         print(f"[INFO] No fish detected in {vidData.v_filename}")
-        no_fish_found(source_video_path, vidData.v_filename)
-        _append_no_fish_row(source_video_path, vidData.v_video_timestamp)
+        if emit_no_fish:
+            no_fish_found(source_video_path, vidData.v_filename)
+            _append_no_fish_row(source_video_path, vidData.v_video_timestamp)
         return []
 
     # Timestamp dedupe can collapse distinct fish that share the same OCR second.

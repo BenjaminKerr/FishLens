@@ -23,7 +23,7 @@ namespace FishLens_App.Services
 
             for (int i = 1; i < lines.Count; i++)
             {
-                var columns = lines[i].Split(',');
+                var columns = ParseCsvLine(lines[i]);
                 if (columns.Length == 0) continue;
                 if (!string.Equals(Path.GetFileName(columns[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase))
                 {
@@ -57,7 +57,7 @@ namespace FishLens_App.Services
             var lines = File.ReadAllLines(csvPath);
             for (int i = 1; i < lines.Length; i++)
             {
-                var cols = lines[i].Split(',');
+                var cols = ParseCsvLine(lines[i]);
                 if (cols.Length == 0) continue;
                 if (RowMatchesVideo(cols, videoFileName, videoFilePath))
                 {
@@ -83,7 +83,7 @@ namespace FishLens_App.Services
             bool found = false;
             for (int i = 1; i < lines.Count; i++)
             {
-                var cols = lines[i].Split(',');
+                var cols = ParseCsvLine(lines[i]);
                 if (cols.Length > 0 && string.Equals(Path.GetFileName(cols[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase))
                 {
                     updatedLines.Add(updatedRow);
@@ -115,7 +115,7 @@ namespace FishLens_App.Services
             bool found = false;
             for (int i = 1; i < lines.Count; i++)
             {
-                var cols = lines[i].Split(',');
+                var cols = ParseCsvLine(lines[i]);
                 bool nameMatch = cols.Length > 0 &&
                     string.Equals(Path.GetFileName(cols[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase);
                 bool timeMatch = cols.Length > 7 &&
@@ -223,7 +223,7 @@ namespace FishLens_App.Services
             video.EndTime = columns.Length > 8 ? columns[8].Trim() : "00.00";
 
             // col 9: video_timestamp (full datetime string e.g. "2025/10/01 19:07:44")
-            string videoTimestamp = columns.Length > 9 ? columns[9].Trim() : string.Empty;
+            string videoTimestamp = columns.Length > 9 ? NormalizeTimestampField(columns[9]) : string.Empty;
             video.Date = videoTimestamp;
             video.Time = string.Empty;
             if (!string.IsNullOrEmpty(videoTimestamp))
@@ -280,12 +280,72 @@ namespace FishLens_App.Services
             // Header: video_file,location,video_timestamp
             for (int i = 1; i < lines.Length; i++)
             {
-                var cols = lines[i].Split(',');
+                var cols = ParseCsvLine(lines[i]);
                 if (cols.Length < 2) continue;
                 if (string.Equals(Path.GetFileName(cols[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase))
                     return cols[1].Trim();
             }
             return null;
+        }
+
+        public static string[] ParseCsvLine(string line)
+        {
+            if (string.IsNullOrEmpty(line))
+                return Array.Empty<string>();
+
+            var values = new List<string>();
+            var current = new System.Text.StringBuilder();
+            bool inQuotes = false;
+
+            for (int i = 0; i < line.Length; i++)
+            {
+                char ch = line[i];
+
+                if (ch == '"')
+                {
+                    if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
+                    {
+                        current.Append('"');
+                        i++;
+                    }
+                    else
+                    {
+                        inQuotes = !inQuotes;
+                    }
+                }
+                else if (ch == ',' && !inQuotes)
+                {
+                    values.Add(current.ToString());
+                    current.Clear();
+                }
+                else
+                {
+                    current.Append(ch);
+                }
+            }
+
+            values.Add(current.ToString());
+            return values.ToArray();
+        }
+
+        private static string NormalizeTimestampField(string raw)
+        {
+            string value = (raw ?? string.Empty).Trim().Trim('"');
+            if (string.IsNullOrWhiteSpace(value))
+                return value;
+
+            if (value.StartsWith("(") && value.EndsWith(")") && value.Contains("',"))
+            {
+                int firstQuote = value.IndexOf('\'');
+                int secondQuote = value.IndexOf('\'', firstQuote + 1);
+                if (firstQuote >= 0 && secondQuote > firstQuote)
+                    return value.Substring(firstQuote + 1, secondQuote - firstQuote - 1);
+            }
+
+            if (value.EndsWith("*", StringComparison.Ordinal))
+                value = value.TrimEnd('*').Trim();
+
+            return value;
         }
     }
 }
