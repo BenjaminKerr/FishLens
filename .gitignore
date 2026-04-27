@@ -231,3 +231,4 @@ Upgraded-App/.vs/
 dist/
 build/
 fish_classifier_model.h5
+fish_classifier_model.keras
