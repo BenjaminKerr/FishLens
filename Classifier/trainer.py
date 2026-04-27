@@ -14,6 +14,7 @@ import tensorflow as tf
 from keras import layers, Sequential, callbacks
 from keras.optimizers import Adam
 import os
+import numpy as np
 
 # ========================================================================
 # CONFIGURATION AND CONSTANTS
@@ -24,19 +25,18 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(BASE_DIR)
 EXPORT_PATH = os.path.join(PARENT_DIR, "models", "fish_classifier_model.h5")
 TRAIN_DIR = os.path.join(BASE_DIR, 'data', 'train')
+VAL_DIR = os.path.join(BASE_DIR, 'data', 'val')
 
 # Data Constants
-SHEAR = 0.2 # % of total width to randomly shear the image
-ZOOM = 0.2 # % of total size to randomly zoom the image
-WIDTH_SHIFT = 0.12 # % of total width to randomly shift the image left and right
-HEIGHT_SHIFT = 0.12 # % of total height to randomly shift the image up and down
-RANDOM_BRIGHTNESS = 0.4 # Maximum brightness adjustment factor (40% darker to 40% brighter)
-RANDOM_CONTRAST = 0.1 # Maximum contrast adjustment factor (10% less to 10% more contrast)
-VALIDATION_SPLIT = 0.15 # % of data to use for validation
+SHEAR = 0.10 # Middle ground between too weak and too distorted
+ZOOM = 0.10 # Moderate zoom variation
+WIDTH_SHIFT = 0.08 # Moderate horizontal translation
+HEIGHT_SHIFT = 0.08 # Moderate vertical translation
+RANDOM_BRIGHTNESS = 0.18 # Stronger brightness variation without going back to extremes
+RANDOM_CONTRAST = 0.08 # Moderate contrast adjustment
 IMAGE_SIZE = 150 # in pixels
 BATCH_SIZE = 8 # Number of images to process in a batch
 EPOCHS = 40 # Number of times to iterate over the entire dataset
-RANDOM_SEED = 42 # Random seed for reproducibility of shuffling and train/validation split
 
 # Model Constants
 # Dropout: regularization technique that randomly sets a fraction of input units to 0 during training to prevent overfitting.
@@ -47,7 +47,7 @@ RANDOM_SEED = 42 # Random seed for reproducibility of shuffling and train/valida
 #   **Keep between 10 and 20
 DROPOUT_RATE = 0.6
 LEARNING_RATE = 5e-5
-PATIENCE = 15
+PATIENCE = 20
 
 # ========================================================================
 # DATA AUGMENTATION
@@ -96,18 +96,14 @@ def augment_data(image, label):
 #   TRAIN_DIR         - Directory where training images are stored in class subfolders
 #   image_size        - Resizes all images to the specified dimensions (e.g., 150x150 pixels)
 #   batch_size        - Number of images to process in a batch
-#   validation_split  - Reserves a portion of training data for validation
-#   subset            - Specifies this is the training subset
-#   seed              - Random seed for reproducible shuffling
+#   shuffle           - Shuffles the training images between epochs
 train_dataset = tf.keras.utils.image_dataset_from_directory(
     TRAIN_DIR,
     labels='inferred',
     label_mode='categorical',
     image_size=(IMAGE_SIZE, IMAGE_SIZE),
     batch_size=BATCH_SIZE,
-    validation_split=VALIDATION_SPLIT,
-    subset='training',
-    seed=RANDOM_SEED
+    shuffle=True
 )
 
 # ******************************
@@ -116,21 +112,16 @@ train_dataset = tf.keras.utils.image_dataset_from_directory(
 #   This is the modern approach replacing legacy ImageDataGenerator.
 # Returns a tf.data.Dataset for efficient pipeline processing
 # Input:
-#   TRAIN_DIR         - Directory where training images are stored in class subfolders
+#   VAL_DIR           - Directory where validation images are stored in class subfolders
 #   image_size        - Resizes all images to the specified dimensions (e.g., 150x150 pixels)
 #   batch_size        - Number of images to process in a batch
-#   validation_split  - Reserves a portion of training data for validation
-#   subset            - Specifies this is the validation subset
-#   seed              - Random seed for reproducible shuffling
 validation_dataset = tf.keras.utils.image_dataset_from_directory(
-    TRAIN_DIR,
+    VAL_DIR,
     labels='inferred',
     label_mode='categorical',
     image_size=(IMAGE_SIZE, IMAGE_SIZE),
     batch_size=BATCH_SIZE,
-    validation_split=VALIDATION_SPLIT,
-    subset='validation',
-    seed=RANDOM_SEED
+    shuffle=False
 )
 
 # ========================================================================
@@ -161,6 +152,40 @@ validation_dataset = validation_dataset.map(lambda x, y: (normalization_layer(x)
 # Prefetch datasets for optimal performance
 train_dataset = train_dataset.prefetch(tf.data.AUTOTUNE)
 validation_dataset = validation_dataset.prefetch(tf.data.AUTOTUNE)
+
+# ******************************
+# Function: print_confusion_matrix
+# Description: Runs the trained model against the validation dataset and prints
+#   a simple confusion matrix so we can see how often each fish type is predicted.
+def print_confusion_matrix(model, validation_dataset, class_names):
+    x_batches = []
+    y_batches = []
+
+    for images, labels in validation_dataset:
+        x_batches.append(images.numpy())
+        y_batches.append(labels.numpy())
+
+    if not x_batches or not y_batches:
+        print("Validation confusion matrix unavailable: validation dataset is empty.")
+        return
+
+    x_val = np.concatenate(x_batches, axis=0)
+    y_val = np.concatenate(y_batches, axis=0)
+
+    predictions = model.predict(x_val, verbose=0)
+    y_true = np.argmax(y_val, axis=1)
+    y_pred = np.argmax(predictions, axis=1)
+
+    matrix = np.zeros((len(class_names), len(class_names)), dtype=int)
+    for truth, pred in zip(y_true, y_pred):
+        matrix[truth, pred] += 1
+
+    print("\nValidation confusion matrix")
+    print("rows=true, cols=pred")
+    print(" " * 14 + " ".join(f"{name:>10s}" for name in class_names))
+    for row_index, class_name in enumerate(class_names):
+        row_values = " ".join(f"{value:10d}" for value in matrix[row_index])
+        print(f"{class_name:>12s}  {row_values}")
 
 # ========================================================================
 # MODEL DEFINITION
@@ -251,3 +276,4 @@ history = model.fit(
 # Description: Saves the trained model to disk in HDF5 format for later use.
 model.save(EXPORT_PATH)
 print("Model saved successfully as fish_classifier_model.h5")
+print_confusion_matrix(model, validation_dataset, class_names)
