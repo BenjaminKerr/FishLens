@@ -159,32 +159,51 @@
         </ScrollViewer>
 
         <Border Grid.Row="2" 
-                Background="{DynamicResource CardBackground}" 
-                BorderBrush="{DynamicResource BorderBrush}" 
-                BorderThickness="0,1,0,0"
-                Padding="30,20">
-            <StackPanel Orientation="Horizontal" 
-                        HorizontalAlignment="Right">
+        Background="{DynamicResource CardBackground}" 
+        BorderBrush="{DynamicResource BorderBrush}" 
+        BorderThickness="0,1,0,0"
+        Padding="30,20">
 
-                        <Button Content="Save Settings" 
-                        Click="SaveSettings_Click"
-                        Background="{DynamicResource HeaderBackground}"
-                        Foreground="{DynamicResource OnAccentForeground}"
-                        FontSize="{DynamicResource BaseFontSize}"
-                        FontWeight="SemiBold"
-                        Padding="20,10"
-                        BorderThickness="0"
-                        Cursor="Hand">
+            <StackPanel Orientation="Horizontal" 
+                HorizontalAlignment="Right">
+
+                <!-- Inline status messages, shown to the left of the Save button -->
+                <TextBlock x:Name="SaveSettingsSuccess"
+                       FontSize="{DynamicResource BaseFontSize}"
+                       Foreground="#4CAF50"
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center"
+                       Margin="0,0,15,0"
+                       Visibility="Collapsed"/>
+
+                <TextBlock x:Name="SaveSettingsError"
+                       FontSize="{DynamicResource BaseFontSize}"
+                       Foreground="#F44336"
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center"
+                       Margin="0,0,15,0"
+                       TextWrapping="Wrap"
+                       Visibility="Collapsed"/>
+
+                <Button Content="Save Settings" 
+                    Click="SaveSettings_Click"
+                    Background="{DynamicResource HeaderBackground}"
+                    Foreground="{DynamicResource OnAccentForeground}"
+                    FontSize="{DynamicResource BaseFontSize}"
+                    FontWeight="SemiBold"
+                    Padding="20,10"
+                    BorderThickness="0"
+                    Cursor="Hand">
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
                                         <Border Background="{TemplateBinding Background}"
-                                                CornerRadius="6"
-                                                Padding="{TemplateBinding Padding}">
+                                            CornerRadius="6"
+                                            Padding="{TemplateBinding Padding}">
                                             <ContentPresenter HorizontalAlignment="Center"
-                                                            VerticalAlignment="Center"/>
+                                                        VerticalAlignment="Center"/>
                                         </Border>
                                     </ControlTemplate>
                                 </Setter.Value>
@@ -197,6 +216,7 @@
                         </Style>
                     </Button.Style>
                 </Button>
+
             </StackPanel>
         </Border>
     </Grid>

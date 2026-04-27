@@ -933,6 +933,27 @@ namespace FishLens_App
 
         #region Helper Methods - UI Element Creation
 
+
+        // **************************************************
+        // Function: DatePickerOverlay_Click
+        // Description: Handles click on the date picker overlay to open the calendar popup
+        private void DatePickerOverlay_Click(object sender, RoutedEventArgs e)
+        {
+            // Walk up to find the parent DatePicker, then open its calendar
+            var btn = sender as System.Windows.Controls.Button;
+            var current = (DependencyObject)btn;
+            while (current != null && !(current is DatePicker))
+            {
+                current = System.Windows.Media.VisualTreeHelper.GetParent(current);
+            }
+            if (current is DatePicker dp)
+            {
+                dp.IsDropDownOpen = true;
+            }
+        }
+
+
+
         // **************************************************
         // Function: CreateTitleTextBlock
         // Description: Creates the main title text block for the report header

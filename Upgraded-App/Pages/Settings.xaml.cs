@@ -42,6 +42,13 @@ namespace FishLens_App
         private readonly ILogger<MainWindow> _logger;
         private CheckBoxToggle _checkBoxes;
         private AppConfiguration _config;
+        private double _originalConfidenceThreshold;
+        private bool _originalOutputBox;
+        private bool _originalErrorBox;
+        private bool _originalHighContrastMode;
+        private bool _originalLargeText;
+
+
 
 
 
@@ -120,6 +127,9 @@ namespace FishLens_App
         // Notes: Updates in-memory `_checkBoxes` and `_config`, calls stored procedures, shows status and logs actions.
         private void SaveSettings_Click(object sender, RoutedEventArgs e)
         {
+            SaveSettingsSuccess.Visibility = Visibility.Collapsed;
+            SaveSettingsError.Visibility = Visibility.Collapsed;
+
             try
             {
                 var app = Application.Current as App;
@@ -136,6 +146,20 @@ namespace FishLens_App
                 if (app.IsAdmin)
                 {
                     _config.ConfidenceThreshold = (confidenceThreshold?.Value ?? 0) / 100.0;
+                }
+
+                // Detect whether anything actually changed since the page was loaded
+                bool changed =
+                    _checkBoxes.OutputBox != _originalOutputBox ||
+                    _checkBoxes.ErrorBox != _originalErrorBox ||
+                    _config.HighContrastMode != _originalHighContrastMode ||
+                    _config.LargeText != _originalLargeText ||
+                    (app.IsAdmin && _config.ConfidenceThreshold != _originalConfidenceThreshold);
+
+                if (!changed)
+                {
+                    // Nothing to save — silent no-op
+                    return;
                 }
 
                 using (SqlConnection conn = new SqlConnection(app.connectionString))
@@ -168,17 +192,42 @@ namespace FishLens_App
                     }
                 }
 
-                MessageBox.Show("Settings saved.", "Saved", MessageBoxButton.OK, MessageBoxImage.Information);
                 _logger.LogInformation("Settings saved for user {userId}", userId);
                 app.ApplyCurrentSettings();
 
+                _originalConfidenceThreshold = _config.ConfidenceThreshold;
+                _originalOutputBox = _checkBoxes.OutputBox;
+                _originalErrorBox = _checkBoxes.ErrorBox;
+                _originalHighContrastMode = _config.HighContrastMode;
+                _originalLargeText = _config.LargeText;
+
+                SaveSettingsSuccess.Text = "✓ Settings saved";
+                SaveSettingsSuccess.Visibility = Visibility.Visible;
+
+                var timer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(3)
+                };
+                timer.Tick += (s, args) =>
+                {
+                    SaveSettingsSuccess.Visibility = Visibility.Collapsed;
+                    timer.Stop();
+                };
+                timer.Start();
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to save settings to database");
-                MessageBox.Show($"Failed to save settings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                SaveSettingsError.Text = $"Failed to save: {ex.Message}";
+                SaveSettingsError.Visibility = Visibility.Visible;
             }
         }
+
+
+
+
+
+
 
 
 
@@ -319,6 +368,14 @@ namespace FishLens_App
             {
                 _logger.LogWarning(ex, "Could not load settings from database; using defaults");
             }
+            _originalConfidenceThreshold = _config.ConfidenceThreshold;
+            _originalOutputBox = _checkBoxes.OutputBox;
+            _originalErrorBox = _checkBoxes.ErrorBox;
+            _originalHighContrastMode = _config.HighContrastMode;
+            _originalLargeText = _config.LargeText;
+
+
+
         }
 
 
