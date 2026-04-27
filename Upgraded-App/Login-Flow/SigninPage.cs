@@ -67,8 +67,8 @@ namespace FishLens_App
                             {
                                 if (reader.Read())
                                 {
-                                    app.CheckBoxes.OutputBox = reader.GetBoolean(0);
-                                    app.CheckBoxes.ErrorBox = reader.GetBoolean(1);
+                                    // Legacy output/error columns remain in the procedure result,
+                                    // but the current UI only keeps Fast Mode locally.
                                     app.Configuration.HighContrastMode = reader.GetBoolean(2);
                                     app.Configuration.LargeText = reader.GetBoolean(3);
                                 }

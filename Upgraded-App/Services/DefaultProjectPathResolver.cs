@@ -51,12 +51,79 @@ namespace FishLens_App.Services
         }
 
         // **************************************************
+        // Function: ResolveAllHistoryFolder
+        // Description: Resolves the All History root folder
+        // **************************************************
+        public string ResolveAllHistoryFolder()
+        {
+            return Path.Combine(ResolveProjectRoot(), "All History");
+        }
+
+        // **************************************************
+        // Function: ResolveRunFolder
+        // Description: Resolves the folder for a named seasonal run inside All History
+        // **************************************************
+        public string ResolveRunFolder(string runName)
+        {
+            return Path.Combine(ResolveAllHistoryFolder(), runName);
+        }
+
+        // **************************************************
+        // Function: ResolveRunCsvPath
+        // Description: Resolves the run-master fish CSV for a given run
+        // **************************************************
+        public string ResolveRunCsvPath(string runName)
+        {
+            return Path.Combine(ResolveRunFolder(runName), "run_master.csv");
+        }
+
+        // **************************************************
+        // Function: ResolveRunNoFishCsvPath
+        // Description: Resolves the run-master no-fish CSV for a given run
+        // **************************************************
+        public string ResolveRunNoFishCsvPath(string runName)
+        {
+            return Path.Combine(ResolveRunFolder(runName), "no_fish_summary.csv");
+        }
+
+        // **************************************************
+        // Function: ResolveSessionCsvPath
+        // Description: Resolves the session fish CSV (wiped on startup, appended this session)
+        // **************************************************
+        public string ResolveSessionCsvPath(string runName)
+        {
+            return Path.Combine(ResolveRunFolder(runName), "session_fish.csv");
+        }
+
+        // **************************************************
+        // Function: ResolveSessionNoFishCsvPath
+        // Description: Resolves the session no-fish CSV
+        // **************************************************
+        public string ResolveSessionNoFishCsvPath(string runName)
+        {
+            return Path.Combine(ResolveRunFolder(runName), "session_no_fish.csv");
+        }
+
+        // **************************************************
+        // Function: ResolveAllTimeMasterFishCsvPath
+        // Description: Resolves the all-time master fish CSV at the All History root
+        // **************************************************
+        public string ResolveAllTimeMasterFishCsvPath()
+        {
+            return Path.Combine(ResolveAllHistoryFolder(), "all_history.csv");
+        }
+
+        // **************************************************
         // Function: ResolveCsvScriptPath
-        // Description: Resolves the CSV Script Path
+        // Description: Resolves the active run's primary fish CSV.
+        //              Debug runs write to debug.csv instead of run_master.csv.
         // **************************************************
         public string ResolveCsvScriptPath()
         {
-            return Path.Combine(ResolveProjectRoot(), "fish_summary.csv");
+            string activeRun = (System.Windows.Application.Current as FishLens_App.App)?.ActiveRun ?? string.Empty;
+            if (activeRun.Equals("debug", StringComparison.OrdinalIgnoreCase))
+                return Path.Combine(ResolveRunFolder(activeRun), "debug.csv");
+            return ResolveRunCsvPath(activeRun);
         }
 
         // **************************************************

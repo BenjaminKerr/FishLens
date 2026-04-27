@@ -1,4 +1,4 @@
-﻿<Page x:Class="FishLens_App.AccountSettings"
+<Page x:Class="FishLens_App.AccountSettings"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Title="AccountSettings"
@@ -27,8 +27,23 @@
                       PreviewMouseWheel="ScrollViewer_PreviewMouseWheel">
             <StackPanel MaxWidth="800" HorizontalAlignment="Center">
 
-                <!-- ============ CREATE USER SECTION ============ -->
-                <TextBlock x:Name="CreateUserText" Text="Create User"
+                <!-- Analysis-in-progress warning banner -->
+                <Border x:Name="analysisWarningBanner"
+                        Background="#FFF3E0"
+                        BorderBrush="#FF9800"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16,12"
+                        Margin="0,0,0,20"
+                        Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x26A0;" FontSize="16" Foreground="#E65100" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Analysis is currently running. Run, location, and settings changes are locked until the analysis completes or is cancelled."
+                                   FontSize="13" Foreground="#E65100" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Analysis" 
                            FontSize="{DynamicResource LargeHeaderFontSize}"
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource PrimaryText}"
@@ -635,8 +650,54 @@
 
             </StackPanel>
         </ScrollViewer>
+
+        <Border Grid.Row="2" 
+                Background="{DynamicResource CardBackground}" 
+                BorderBrush="{DynamicResource BorderBrush}" 
+                BorderThickness="0,1,0,0"
+                Padding="30,20">
+            <StackPanel Orientation="Horizontal" 
+                        HorizontalAlignment="Right">
+                <TextBlock x:Name="saveStatusText"
+                           Visibility="Collapsed"
+                           FontSize="{DynamicResource BaseFontSize}"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           Margin="0,0,16,0"/>
+
+                <Button x:Name="saveSettingsButton"
+                        Content="Save Settings" 
+                        Click="SaveSettings_Click"
+                        Background="{DynamicResource HeaderBackground}"
+                        Foreground="{DynamicResource OnAccentForeground}"
+                        FontSize="{DynamicResource BaseFontSize}"
+                        FontWeight="SemiBold"
+                        Padding="20,10"
+                        BorderThickness="0"
+                        Cursor="Hand">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}"
+                                                CornerRadius="6"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Opacity" Value="0.8"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+        </Border>
     </Grid>
 </Page>
-
-
-

@@ -15,7 +15,7 @@
 	</ItemGroup>
 	<ItemGroup>
 		<PackageReference Include="ClosedXML" Version="0.105.0" />
-		<PackageReference Include="MailKit" Version="4.15.0" />
+		<PackageReference Include="MailKit" Version="4.16.0" />
 		<PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
 		<PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.4" />
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.1" />
@@ -28,7 +28,8 @@
 		<PackageReference Include="xunit.extensibility.core" Version="2.9.3" />
 	</ItemGroup>
 	<ItemGroup>
-	  <None Update="appsettings.json">
+	  <None Remove="appsettings.json" />
+	  <None Include="..\appsettings.json" Link="appsettings.json">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
 	</ItemGroup>

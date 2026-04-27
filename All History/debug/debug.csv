@@ -1,0 +1,5 @@
+video_file,location,species,species_confidence,likely_class,confidence,direction,start_time_sec,end_time_sec,video_timestamp
+C:\Users\reidh\Videos\only1fish\indecisiveFish.mp4,Spencer Creek,Chinook,91.20%,fish,93.14%,indecisive,3.37,9.90,2025/10/08 23:12:12
+C:\Users\reidh\Videos\fish\ChinookUp.mp4,Spencer Creek,Chinook,97.65%,fish,93.75%,upstream,10.23,17.50,2025/10/01 19:07:34
+C:\Users\reidh\Videos\fish\NoFishVid.mp4,Spencer Creek,,,no_fish,,,,,2025/10/01 18:11:06
+C:\Users\reidh\Videos\fish\OmykissDown.mp4,Spencer Creek,Omykiss,99.93%,fish,83.86%,downstream,9.47,10.87,2025/10/01 18:58:39

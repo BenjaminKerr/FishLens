@@ -29,7 +29,7 @@ namespace FishLens.Tests
         {
             var resolver = new DefaultProjectPathResolver();
             var path = resolver.ResolveCsvScriptPath();
-            Assert.EndsWith("fish_summary.csv", path, StringComparison.OrdinalIgnoreCase);
+            Assert.EndsWith("run_master.csv", path, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

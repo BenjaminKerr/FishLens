@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -25,7 +25,7 @@ namespace FishLens_App.Services
             {
                 var columns = lines[i].Split(',');
                 if (columns.Length == 0) continue;
-                if (!string.Equals(columns[0].Trim(), videoFileName, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(Path.GetFileName(columns[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase))
                 {
                     remaining.Add(lines[i]);
                 }
@@ -38,32 +38,41 @@ namespace FishLens_App.Services
         // Function: ReadVideoFromCsv
         // Description: Reads a video's row from CSV and returns a Video object
         // **************************************************
-        public static Video ReadVideoFromCsv(string csvPath, string videoFileName)
+        public static Video ReadVideoFromCsv(string csvPath, string videoFileName, string videoFilePath = null, string fallbackRun = "")
         {
-            var vid = new Video();
-            if (!File.Exists(csvPath)) return vid;
+            var tracks = ReadAllTracksFromCsv(csvPath, videoFileName, fallbackRun, videoFilePath);
+            return tracks.Count > 0 ? tracks[0] : CreateDefaultVideo(videoFileName, fallbackRun);
+        }
 
-            // REMOVE THESE IF WORKING
-            // THIS NEEDS TO RUN MAIN YOLO BEFORE READING FROM CSV - currently it just reads the already
-            // filled out csv which makes it not provide the data for the correct videos
-            
+        // **************************************************
+        // Function: ReadAllTracksFromCsv
+        // Description: Returns ALL rows for a given video filename as a list of Video objects.
+        //              A single video can have multiple tracks (one row per fish detected).
+        // **************************************************
+        public static List<Video> ReadAllTracksFromCsv(string csvPath, string videoFileName, string fallbackRun = "", string videoFilePath = null)
+        {
+            var tracks = new List<Video>();
+            if (!File.Exists(csvPath)) return tracks;
+
             var lines = File.ReadAllLines(csvPath);
             for (int i = 1; i < lines.Length; i++)
             {
                 var cols = lines[i].Split(',');
                 if (cols.Length == 0) continue;
-                if (string.Equals(cols[0].Trim(), videoFileName, StringComparison.OrdinalIgnoreCase))
+                if (RowMatchesVideo(cols, videoFileName, videoFilePath))
                 {
-                    return ParseVideoFromColumns(cols);
+                    tracks.Add(ParseVideoFromColumns(cols, fallbackRun));
                 }
             }
 
-            return CreateDefaultVideo(videoFileName);
+            return tracks.Count > 0 ? tracks : new List<Video> { CreateDefaultVideo(videoFileName, fallbackRun) };
         }
 
         // **************************************************
         // Function: UpdateCsvRow
-        // Description: Replaces the CSV row for videoFileName with updatedRow
+        // Description: Replaces the CSV row for videoFileName with updatedRow.
+        //              When a video has multiple fish tracks this replaces ALL matching rows -
+        //              use UpdateCsvRowForTrack to target a specific track.
         // **************************************************
         public static void UpdateCsvRow(string csvPath, string videoFileName, string updatedRow)
         {
@@ -75,7 +84,7 @@ namespace FishLens_App.Services
             for (int i = 1; i < lines.Count; i++)
             {
                 var cols = lines[i].Split(',');
-                if (cols.Length > 0 && string.Equals(cols[0].Trim(), videoFileName, StringComparison.OrdinalIgnoreCase))
+                if (cols.Length > 0 && string.Equals(Path.GetFileName(cols[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase))
                 {
                     updatedLines.Add(updatedRow);
                     found = true;
@@ -89,6 +98,46 @@ namespace FishLens_App.Services
             if (!found) throw new InvalidOperationException($"Video {videoFileName} not found in CSV file.");
 
             File.WriteAllLines(csvPath, updatedLines);
+        }
+
+        // **************************************************
+        // Function: UpdateCsvRowForTrack
+        // Description: Replaces exactly one CSV row - the row for videoFileName whose
+        //              start_time_sec column (col 7) matches startTimeSec.
+        //              Returns true if a row was found and replaced, false if not present.
+        // **************************************************
+        public static bool UpdateCsvRowForTrack(string csvPath, string videoFileName, string startTimeSec, string updatedRow, string run = null)
+        {
+            var lines = File.ReadAllLines(csvPath).ToList();
+            if (lines.Count == 0) return false;
+
+            var updatedLines = new List<string> { lines[0] };
+            bool found = false;
+            for (int i = 1; i < lines.Count; i++)
+            {
+                var cols = lines[i].Split(',');
+                bool nameMatch = cols.Length > 0 &&
+                    string.Equals(Path.GetFileName(cols[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase);
+                bool timeMatch = cols.Length > 7 &&
+                    string.Equals(cols[7].Trim(), startTimeSec, StringComparison.OrdinalIgnoreCase);
+                bool runMatch = string.IsNullOrWhiteSpace(run) ||
+                    (cols.Length > 10 && string.Equals(cols[10].Trim(), run, StringComparison.OrdinalIgnoreCase));
+
+                if (nameMatch && timeMatch && runMatch && !found)
+                {
+                    updatedLines.Add(updatedRow);
+                    found = true;
+                }
+                else
+                {
+                    updatedLines.Add(lines[i]);
+                }
+            }
+
+            if (found)
+                File.WriteAllLines(csvPath, updatedLines);
+
+            return found;
         }
 
         // **************************************************
@@ -111,47 +160,30 @@ namespace FishLens_App.Services
         }
 
         // Parse row columns according to CSV layout:
-        // 0: video_file, 1: track_id, 2: image_path, 3: likely_class, 4: confidence,
-        // 5: start_time_sec, 6: end_time_sec, 7: avg_confidence, 8: direction,
-        // 9: species, 10: species_confidence
-        public static Video ParseVideoFromColumns(string[] columns)
+        // 0: video_file, 1: location, 2: species, 3: species_confidence, 4: likely_class,
+        // 5: confidence, 6: direction, 7: start_time_sec, 8: end_time_sec, 9: video_timestamp
+        public static Video ParseVideoFromColumns(string[] columns, string fallbackRun = "")
         {
             var video = new Video();
-            video.Name = columns.Length > 0 ? columns[0].Trim() : string.Empty;
-            video.TrackId = columns.Length > 1 ? columns[1].Trim() : "-1";
-            video.LikelyClass = columns.Length > 3 ? columns[3].Trim() : "N/A";
-            video.Confidence = columns.Length > 4 ? columns[4].Trim() : "00.00%";
-            video.StartTime = columns.Length > 5 ? columns[5].Trim() : "00.00";
-            video.EndTime = columns.Length > 6 ? columns[6].Trim() : "00.00";
+            // col 0: full video file path
+            video.VideoFilePath = columns.Length > 0 ? columns[0].Trim() : string.Empty;
+            video.Name = !string.IsNullOrEmpty(video.VideoFilePath)
+                ? Path.GetFileName(video.VideoFilePath)
+                : string.Empty;
+            video.TrackId = "-1";
 
-            // avg_confidence may include a '%' suffix or be a decimal; try to parse robustly
-            video.AvgConfidence = 0.0;
-            if (columns.Length > 7)
-            {
-                var raw = columns[7].Trim().TrimEnd('%');
-                if (double.TryParse(raw, out var d))
-                {
-                    // If value looks like a percent (e.g., 81 or 81.0), normalize to 0-1 if >1
-                    if (d > 1) d = d / 100.0;
-                    video.AvgConfidence = d;
-                }
-            }
-            else            
-            {
-                video.AvgConfidence = 0.0;
-            }
+            // col 1: location
+            video.Location = columns.Length > 1 ? columns[1].Trim() : string.Empty;
 
-            video.Direction = columns.Length > 8 ? columns[8].Trim() : "Unknown";
-            video.Species = columns.Length > 9 ? columns[9].Trim() : string.Empty;
-            
-            // Parse species confidence as double, removing % sign if present
-            // Normalize to decimal range (0-1) if stored as percentage (0-100)
-            if (columns.Length > 10)
+            // col 2: species
+            video.Species = columns.Length > 2 ? columns[2].Trim() : string.Empty;
+
+            // col 3: species_confidence
+            if (columns.Length > 3)
             {
-                var speciesConfStr = columns[10].Trim().TrimEnd('%');
+                var speciesConfStr = columns[3].Trim().TrimEnd('%');
                 if (double.TryParse(speciesConfStr, out var speciesConfValue))
                 {
-                    // If value is > 1, it's already a percentage, normalize to decimal
                     if (speciesConfValue > 1) speciesConfValue = speciesConfValue / 100.0;
                     video.SpeciesConfidence = speciesConfValue;
                 }
@@ -164,20 +196,49 @@ namespace FishLens_App.Services
             {
                 video.SpeciesConfidence = 0.0;
             }
-            
-            video.Date = columns.Length > 11 ? columns[11].Trim() : string.Empty;
-            video.Time = columns.Length > 12 ? columns[12].Trim() : string.Empty;
 
-            // Try to parse combined date/time if available
-            if (!string.IsNullOrEmpty(video.Date) && !string.IsNullOrEmpty(video.Time))
+            // col 4: likely_class
+            video.LikelyClass = columns.Length > 4 ? columns[4].Trim() : "N/A";
+
+            // col 5: confidence (also used as display confidence)
+            video.Confidence = columns.Length > 5 ? columns[5].Trim() : "00.00%";
+            video.AvgConfidence = 0.0;
+            if (columns.Length > 5)
             {
-                if (DateTime.TryParse($"{video.Date} {video.Time}", out var ts))
+                var raw = columns[5].Trim().TrimEnd('%');
+                if (double.TryParse(raw, out var d))
+                {
+                    if (d > 1) d = d / 100.0;
+                    video.AvgConfidence = d;
+                }
+            }
+
+            // col 6: direction
+            video.Direction = columns.Length > 6 ? columns[6].Trim() : "Unknown";
+
+            // col 7: start_time_sec
+            video.StartTime = columns.Length > 7 ? columns[7].Trim() : "00.00";
+
+            // col 8: end_time_sec
+            video.EndTime = columns.Length > 8 ? columns[8].Trim() : "00.00";
+
+            // col 9: video_timestamp (full datetime string e.g. "2025/10/01 19:07:44")
+            string videoTimestamp = columns.Length > 9 ? columns[9].Trim() : string.Empty;
+            video.Date = videoTimestamp;
+            video.Time = string.Empty;
+            if (!string.IsNullOrEmpty(videoTimestamp))
+            {
+                if (DateTime.TryParse(videoTimestamp, out var ts))
                     video.DetectionTimestamp = ts;
             }
+
+            // col 10: run attribution
+            video.Run = columns.Length > 10 ? columns[10].Trim() : fallbackRun;
+
             return video;
         }
 
-        private static Video CreateDefaultVideo(string videoFileName)
+        private static Video CreateDefaultVideo(string videoFileName, string fallbackRun = "")
         {
             return new Video
             {
@@ -190,8 +251,41 @@ namespace FishLens_App.Services
                 AvgConfidence = 0.0,
                 Direction = "Unknown",
                 Species = string.Empty,
-                SpeciesConfidence = 0.0
+                SpeciesConfidence = 0.0,
+                Run = fallbackRun
             };
+        }
+
+        private static bool RowMatchesVideo(string[] columns, string videoFileName, string videoFilePath)
+        {
+            if (columns.Length == 0) return false;
+
+            string storedPath = columns[0].Trim();
+            if (!string.IsNullOrWhiteSpace(videoFilePath) &&
+                string.Equals(storedPath, videoFilePath, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            return string.Equals(Path.GetFileName(storedPath), videoFileName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // **************************************************
+        // Function: ReadLocationFromNoFishCsv
+        // Description: Returns the location string for a video from no_fish_summary.csv,
+        //              or null if the video is not present in that file.
+        // **************************************************
+        public static string ReadLocationFromNoFishCsv(string noFishCsvPath, string videoFileName)
+        {
+            if (!File.Exists(noFishCsvPath)) return null;
+            var lines = File.ReadAllLines(noFishCsvPath);
+            // Header: video_file,location,video_timestamp
+            for (int i = 1; i < lines.Length; i++)
+            {
+                var cols = lines[i].Split(',');
+                if (cols.Length < 2) continue;
+                if (string.Equals(Path.GetFileName(cols[0].Trim()), videoFileName, StringComparison.OrdinalIgnoreCase))
+                    return cols[1].Trim();
+            }
+            return null;
         }
     }
 }

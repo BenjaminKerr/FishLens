@@ -1,4 +1,4 @@
-﻿// **************************************************
+// **************************************************
 // ***********************************
 // File: Video.cs
 // Description: Video Class
@@ -42,5 +42,11 @@ namespace FishLens_App.Models
         public string Time { get; set; }
         // Combined detection timestamp (nullable)
         public DateTime? DetectionTimestamp { get; set; }
+        // Full video file path as stored in CSV
+        public string VideoFilePath { get; set; }
+        // Location where the video was recorded
+        public string Location { get; set; }
+        // Monitoring run where this row was created
+        public string Run { get; set; }
     }
 }

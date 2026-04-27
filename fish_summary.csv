@@ -1,2 +1,0 @@
-video_file,trackId,image_path,likely_class,confidence,start_time_sec,end_time_sec,avg_confidence,direction,species,species_confidence,video_timestamp,duration
-00000018.ASF,1,C:\Users\aleks\source\repos\FishLens\fish_images\Omykiss\00000018_track_1.jpg,fish,74.26%,127.75,128.12,74.26%,upstream,Omykiss,100.00%,2025/09/29 19:12:02*,2:08-2:08

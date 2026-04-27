@@ -3,144 +3,55 @@
 # Authors: Aden Ratliff; Neil
 # Last Edited: 11.20.2025
 # Summary and Notes:
-# This script analyses videos to detect the probability of their
-# containing a fish using YOLOv8.
-#
-# Script currently uses a sample stock video for testing purposes.
-# Sample video is incorrectly identified as multiple objects, but
-# most often as a bird.
+# This legacy helper analyzes a single video with YOLOv8 and appends
+# a simple summary row to yolo_output.csv.
 #------------------------------------------------------------------
 
-# Import any nessecary libraries
-import sys
 import csv
-from ultralytics import YOLO
 from collections import Counter
 
-<<<<<<< HEAD
-def run_yolo(filename, filepath):
-    INPUT = filepath
-    OUTPUT = "yolo_output.csv"
+from ultralytics import YOLO
 
-    # Standard YOLOv8 model
+
+def run_yolo(filename, filepath):
+    output_path = "yolo_output.csv"
+
     model = YOLO("yolov8n.pt")
 
-    # Filepath can be set as a command line argument (from front page)
-    #if len(sys.argv) > 1:  
-    #    filepath = sys.argv[1]
-    #else:
-    #    filepath = INPUT
-
-
-# Input folder: sample_data
-# Output folder: results/trial1, where trial1 is auto-incremented
-# each time the program is run.
-# Warning: Setting save_txt to true will create a .txt file for each
-# vid_stride: Changes how many frames to skip before analyzing video
-#       Changing the value will also affect the overall confidence of the object being detected
-# frame of video.
     results = model.predict(
-        source="sample_data/BirdTest.mp4",
+        source=filepath,
         stream=True,
-        show=True, 
-        save=True, 
+        show=True,
+        save=True,
         save_txt=False,
         vid_stride=10,
-        project="results", 
-        name="trial"
-    ) 
+        project="results",
+        name="trial",
+    )
 
-    # Frames with detections are added to an array and printed
     detections = []
-    for frame_index, r in enumerate(results):
-        for box in r.boxes:
-            cls_id = int(box.cls)
-            conf = float(box.conf)
-            detections.append((frame_index, cls_id, conf))
-    # Frames with detections are added to an array and printed
-    detections = []
-    for frame_index, r in enumerate(results):
-        for box in r.boxes:
+    for frame_index, result in enumerate(results):
+        for box in result.boxes:
             cls_id = int(box.cls)
             conf = float(box.conf)
             detections.append((frame_index, cls_id, conf))
 
-    # Frames with detections are analyzed to determine what 
-    # object the video most likely contains.
-    # Note: This assumes the video contains only one type of object.
-    ids = [d[1] for d in detections]
-    id_counter = Counter(ids)
-    most_common_id = id_counter.most_common(1)[0][0]
+    if not detections:
+        return None
+
+    ids = [detection[1] for detection in detections]
+    most_common_id = Counter(ids).most_common(1)[0][0]
     most_common_class = model.names[most_common_id]
-    if detections:
-=======
-def analyze_videos():
-    # Standard YOLOv8 model
-    model = YOLO("yolov8n.pt") 
 
-    for filename in os.listdir("sample_data/"):
-        results = model.predict(
-            source=os.path.join("sample_data", filename),
-            show=False,      # Set to true to show analysis in realtime
-            save=False,     # Set to true to save images/videos with detections drawn
-            iou=0.5,      
-            save_txt=False,
-            stream=True, # Set to true to save detection results as .txt files (One file per frame)
-        project="results", 
-        name="trial"        # Each video will have it's own folder (trial, trial2, etc) if save=True
-        ) 
+    confidences = [detection[2] for detection in detections if detection[1] == most_common_id]
+    avg_confidence = (sum(confidences) / len(confidences)) * 100
 
-        # Frames with detections are added to an array and printed
-        detections = []
-        for frame_index, r in enumerate(results):
-            for box in r.boxes:
-                cls_id = int(box.cls)
-                conf = float(box.conf)
-                detections.append((frame_index, cls_id, conf))
+    print("--------------------------------------------------------------")
+    print(f"Video most likely contains a {most_common_class} (Confidence: {avg_confidence:.2f}%).")
+    print("--------------------------------------------------------------")
 
->>>>>>> b8eb73b (yolo function now properly wrapped as a function; YOLO now feeds videos directly into Deepsort.)
-        # Frames with detections are analyzed to determine what 
-        # object the video most likely contains.
-        # Note: This assumes the video contains only one type of object.
-        ids = [d[1] for d in detections]
-        id_counter = Counter(ids)
-        most_common_id = id_counter.most_common(1)[0][0]
-        most_common_class = model.names[most_common_id]
+    with open(output_path, mode="a", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow([filename, most_common_class, f"{avg_confidence:.2f}%"])
 
-<<<<<<< HEAD
-=======
-        if most_common_id == 14:
-            folder = "has_fish"
-        else:
-            folder = "no_fish"
-
-        category_dir = os.path.join("results", folder)
-        os.makedirs(category_dir, exist_ok=True)
-
-        shutil.copy(r.path, category_dir)
-
->>>>>>> b8eb73b (yolo function now properly wrapped as a function; YOLO now feeds videos directly into Deepsort.)
-        # Average confidence is determined based on how often the most
-        # common object is detected.
-        confidence = [d[2] for d in detections if d[1] == most_common_id]
-        avg_confidence = (sum(confidence) / len(confidence)) * 100
-<<<<<<< HEAD
-=======
-
-        # Results printed for analysis. 
-        print("--------------------------------------------------------------")
-        print(f"Video most likely contains a {most_common_class} (Confidence: {avg_confidence:.2f}%).")
-        print("--------------------------------------------------------------")
->>>>>>> b8eb73b (yolo function now properly wrapped as a function; YOLO now feeds videos directly into Deepsort.)
-
-
-        # Results printed for analysis. 
-        print("--------------------------------------------------------------")
-        print(f"Video most likely contains a {most_common_class} (Confidence: {avg_confidence:.2f}%).")
-        print("--------------------------------------------------------------")
-
-        # Results appended to CSV file.
-        if results:
-            with open(OUTPUT, mode='a', newline='') as file:
-                writer = csv.writer(file)
-                writer.writerow([filename, most_common_class, f"{avg_confidence:.2f}%"])
+    return most_common_class, avg_confidence

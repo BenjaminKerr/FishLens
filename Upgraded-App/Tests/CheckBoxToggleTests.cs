@@ -10,8 +10,7 @@ namespace FishLens.Tests
         public void Defaults_AreFalse()
         {
             var t = new CheckBoxToggle();
-            Assert.False(t.OutputBox);
-            Assert.False(t.ErrorBox);
+            Assert.False(t.FastMode);
         }
     }
 }

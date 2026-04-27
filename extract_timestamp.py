@@ -216,14 +216,14 @@ def probe_video_timestamp(cap, first_frame, probe_frames=12, read_frame_fn=None)
     # Rewind so normal processing still starts from frame 0.
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-    parsed = []
-    for probe_frame in candidates:
+    parsed = []  # list of (timestamp_str, confidence_str)
+    for i, probe_frame in enumerate(candidates):
         result = extractTimestamFromFrame(probe_frame, False)
         if result and result[0]:  # result is (timestamp, confidence) tuple
-            parsed.append(result[0])
+            parsed.append(result)
 
     if not parsed:
-        return None
+        return None, None
 
     # Prefer a stable date first, then choose the earliest parsed timestamp on that date.
     # This mitigates persistent OCR 5/6 minute drift near the start of a video.
@@ -256,9 +256,14 @@ def probe_video_timestamp(cap, first_frame, probe_frames=12, read_frame_fn=None)
             best_date = date_counts.most_common(1)[0][0]
             same_date = [ts for ts in filtered if ts.startswith(best_date + ' ')]
             if same_date:
-                return Counter(same_date).most_common(1)[0][0]
+                winner_ts = Counter(ts for ts, _ in same_date).most_common(1)[0][0]
+                # HIGH if any read of this timestamp was HIGH.
+                winner_conf = "HIGH" if any(c == "HIGH" for ts, c in same_date if ts == winner_ts) else "MEDIUM"
+                return winner_ts, winner_conf
 
-    return most_common_full
+    # Aggregate confidence for the winning timestamp string.
+    winner_conf = "HIGH" if any(c == "HIGH" for ts, c in parsed if ts == most_common_full) else "MEDIUM"
+    return most_common_full, winner_conf
 
 
 # ****************************************************************
@@ -285,9 +290,20 @@ def dedupe_tracks_by_timestamp(finished_tracks):
             passthrough.append(track)
             continue
 
-        existing = best_by_timestamp.get(ts)
+        # Bucket by (wall-clock timestamp, start-time bin).
+        # Using 2-second bins so that a tracker ID-split on the same fish (which starts
+        # within a second or two of the original track) is still deduplicated, while
+        # two real fish that appear at different points in the video are not collapsed.
+        try:
+            start_sec = float(str(track.get("start_time_sec", "0")).replace("%", "").strip())
+        except (ValueError, TypeError):
+            start_sec = 0.0
+        start_bin = int(start_sec // 2)  # 2-second buckets
+
+        key = (ts, start_bin)
+        existing = best_by_timestamp.get(key)
         if existing is None or _pct_value(track) > _pct_value(existing):
-            best_by_timestamp[ts] = track
+            best_by_timestamp[key] = track
 
     # Keep original relative ordering of selected tracks where possible.
     selected_ids = {id(t) for t in best_by_timestamp.values()}
@@ -346,10 +362,11 @@ def parseTimestamp(text):
     compact_text = text.replace(' ', '')
 
     # Match full string only (prevents partial matches like ...:07:60 becoming ...:07)
+    # Seconds allow 2-3 digits to tolerate a trailing OCR noise character (e.g. 390 -> 39).
     patterns = [
-        r'^(20\d{2})[/\-](\d{1,2})[/\-](\d{1,2})(\d{1,2}):(\d{2,3}):(\d{2})$',
+        r'^(20\d{2})[/\-](\d{1,2})[/\-](\d{1,2})(\d{1,2}):(\d{2,3}):(\d{2,3})$',
         r'^(20\d{2})[/\-](\d{1,2})[/\-](\d{1,2})(\d{1,2}):(\d{2,3})$',
-        r'^(20\d{2})[/\-](\d{1,2})[/\-](\d{1,2})\s*(\d{1,2}):(\d{2,3}):(\d{2})$',
+        r'^(20\d{2})[/\-](\d{1,2})[/\-](\d{1,2})\s*(\d{1,2}):(\d{2,3}):(\d{2,3})$',
         r'^(20\d{2})[/\-](\d{1,2})[/\-](\d{1,2})\s*(\d{1,2}):(\d{2,3})$',
     ]
     
@@ -387,7 +404,13 @@ def parseTimestamp(text):
                 # Common OCR mistake: 4 read as 9  
                 elif 90 <= minute <= 99:
                     minute = minute - 50
-            
+
+            # Fix 3-digit seconds: trailing noise character appended by OCR (e.g. 390 -> 39).
+            if second >= 100:
+                second_str = str(second)
+                if len(second_str) == 3:
+                    second = int(second_str[0:2])
+
             # Fix occasional OCR seconds errors like 60-69 -> 00-09.
             if second >= 60 and 60 <= second <= 69:
                 second = second - 60
@@ -434,16 +457,22 @@ def extractTimestamFromFrame(frame, debug=False):
     try:
         h, w = frame.shape[:2]
         
-        # Focus on bottom-left corner where timestamp appears
-        # Taking bottom 25% of height and left 65% of width
-        regionHeight = int(h * 0.25)
+        # The bottom ~8% is a black letterbox border with no text.
+        # The timestamp OSD sits in the 15% band just above that border.
+        bottomSkip = int(h * 0.08)
+        regionHeight = int(h * 0.15)   # 15% band above the border
         regionWidth = int(w * 0.65)
-        
-        # Extract the timestamp region
-        timestampRegion = frame[h - regionHeight:h, 0:regionWidth]
-        
-       
-        
+
+        # Extract the timestamp region (skip the black border at the very bottom).
+        timestampRegion = frame[h - bottomSkip - regionHeight : h - bottomSkip, 0:regionWidth]
+
+        # Upscale 2× — improves OCR accuracy on small/compressed text.
+        timestampRegion = cv2.resize(
+            timestampRegion,
+            (regionWidth * 2, regionHeight * 2),
+            interpolation=cv2.INTER_CUBIC,
+        )
+
         # Convert to grayscale
         gray = cv2.cvtColor(timestampRegion, cv2.COLOR_BGR2GRAY)
         

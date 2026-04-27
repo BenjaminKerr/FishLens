@@ -189,7 +189,7 @@ model = Sequential([
     
     # Dense layers
     layers.Flatten(),
-    layers.Dense(256, activation='relu'),
+    layers.Dense(64, activation='relu'),
     layers.Dropout(DROPOUT_RATE),
     layers.Dense(num_classes, activation='softmax') 
 ])
