@@ -66,57 +66,13 @@ namespace FishLens_App
             CheckBoxes = new CheckBoxToggle();
             Configuration = new AppConfiguration();
 
-            // Read persisted settings before later startup work so runtime state matches
-            // the user's last saved Fast Mode / active run configuration immediately.
-            try
-            {
-                string configPath = Path.Combine(GetProjectRoot(), "appsettings.json");
-                if (File.Exists(configPath))
-                {
-                    using var stream = File.OpenRead(configPath);
-                    using var doc = JsonDocument.Parse(stream);
-                    var root = doc.RootElement;
+            // Startup only pulls JSON-backed runtime settings. User/org visual settings
+            // like High Contrast and Large Text are populated from the database at sign-in.
+            LoadRuntimeSettingsFromJson();
 
-                    if (root.TryGetProperty("ConfidenceThreshold", out var ctEl) &&
-                        ctEl.ValueKind == JsonValueKind.Number)
-                        Configuration.ConfidenceThreshold = ctEl.GetDouble();
-
-                    if (root.TryGetProperty("FastMode", out var fmEl) &&
-                        (fmEl.ValueKind == JsonValueKind.True || fmEl.ValueKind == JsonValueKind.False))
-                        CheckBoxes.FastMode = fmEl.GetBoolean();
-
-                    if (root.TryGetProperty("ActiveLocation", out var alEl) &&
-                        alEl.ValueKind == JsonValueKind.String)
-                        ActiveLocation = alEl.GetString() ?? "Unknown";
-
-                    if (root.TryGetProperty("ActiveRun", out var arEl) &&
-                        arEl.ValueKind == JsonValueKind.String)
-                        ActiveRun = arEl.GetString() ?? string.Empty;
-
-                    if (root.TryGetProperty("Runs", out var runsEl) &&
-                        runsEl.ValueKind == JsonValueKind.Array)
-                    {
-                        var runs = new System.Collections.Generic.List<RunEntry>();
-                        foreach (var runEl in runsEl.EnumerateArray())
-                        {
-                            string runName = runEl.TryGetProperty("Name", out var nameEl)
-                                ? nameEl.GetString() ?? string.Empty
-                                : string.Empty;
-                            bool locked = runEl.TryGetProperty("Locked", out var lockedEl) &&
-                                lockedEl.ValueKind == JsonValueKind.True;
-
-                            if (!string.IsNullOrWhiteSpace(runName))
-                                runs.Add(new RunEntry { Name = runName, Locked = locked });
-                        }
-
-                        Configuration.Runs = runs;
-                    }
-                }
-            }
-            catch
-            {
-                // Defaults stay in place if appsettings.json is missing or unreadable.
-            }
+            NormalizeConfigurationState();
+            ActiveLocation = Configuration.ActiveLocation;
+            ActiveRun = Configuration.ActiveRun;
 
             // Ensure the All History folder exists for seasonal run archiving.
             try
@@ -127,6 +83,82 @@ namespace FishLens_App
                 Directory.CreateDirectory(allHistoryDir);
             }
             catch { /* non-critical */ }
+
+            EnsureRunStorageInitialized();
+        }
+
+        public void LoadRuntimeSettingsFromJson()
+        {
+            try
+            {
+                string configPath = Path.Combine(GetProjectRoot(), "appsettings.json");
+                if (!File.Exists(configPath))
+                    return;
+
+                using var stream = File.OpenRead(configPath);
+                using var doc = JsonDocument.Parse(stream);
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("ConfidenceThreshold", out var ctEl) &&
+                    ctEl.ValueKind == JsonValueKind.Number)
+                    Configuration.ConfidenceThreshold = ctEl.GetDouble();
+
+                if (root.TryGetProperty("FastMode", out var fmEl) &&
+                    (fmEl.ValueKind == JsonValueKind.True || fmEl.ValueKind == JsonValueKind.False))
+                    CheckBoxes.FastMode = fmEl.GetBoolean();
+
+                if (root.TryGetProperty("ActiveLocation", out var alEl) &&
+                    alEl.ValueKind == JsonValueKind.String)
+                    Configuration.ActiveLocation = alEl.GetString() ?? "Unknown";
+
+                if (root.TryGetProperty("ActiveRun", out var arEl) &&
+                    arEl.ValueKind == JsonValueKind.String)
+                    Configuration.ActiveRun = arEl.GetString() ?? string.Empty;
+
+                if (root.TryGetProperty("Runs", out var runsEl) &&
+                    runsEl.ValueKind == JsonValueKind.Array)
+                {
+                    var runs = new System.Collections.Generic.List<RunEntry>();
+                    foreach (var runEl in runsEl.EnumerateArray())
+                    {
+                        string runName = runEl.TryGetProperty("Name", out var nameEl)
+                            ? nameEl.GetString() ?? string.Empty
+                            : string.Empty;
+                        bool locked = runEl.TryGetProperty("Locked", out var lockedEl) &&
+                            lockedEl.ValueKind == JsonValueKind.True;
+
+                        if (!string.IsNullOrWhiteSpace(runName))
+                            runs.Add(new RunEntry { Name = runName, Locked = locked });
+                    }
+
+                    Configuration.Runs = runs;
+                }
+
+                if (root.TryGetProperty("Locations", out var locsEl) &&
+                    locsEl.ValueKind == JsonValueKind.Array)
+                {
+                    var locations = new System.Collections.Generic.List<LocationEntry>();
+                    foreach (var locEl in locsEl.EnumerateArray())
+                    {
+                        string locName = locEl.TryGetProperty("Name", out var nameEl)
+                            ? nameEl.GetString() ?? "Unknown"
+                            : "Unknown";
+                        string upstreamDirection = locEl.TryGetProperty("UpstreamDirection", out var dirEl)
+                            ? dirEl.GetString() ?? "left"
+                            : "left";
+
+                        if (!string.IsNullOrWhiteSpace(locName))
+                            locations.Add(new LocationEntry { Name = locName, UpstreamDirection = upstreamDirection });
+                    }
+
+                    if (locations.Count > 0)
+                        Configuration.Locations = locations;
+                }
+            }
+            catch
+            {
+                // Defaults stay in place if appsettings.json is missing or unreadable.
+            }
         }
 
         // ****************************************************************
@@ -144,6 +176,9 @@ namespace FishLens_App
             Configuration.HighContrastMode = false;
             Configuration.LargeText = false;
             CheckBoxes.FastMode = false;
+            NormalizeConfigurationState();
+            ActiveLocation = Configuration.ActiveLocation;
+            ActiveRun = Configuration.ActiveRun;
 
             ApplyCurrentSettings();
         }
@@ -180,9 +215,11 @@ namespace FishLens_App
         {
             try
             {
+                NormalizeConfigurationState();
                 string allHistoryDir = Path.Combine(GetProjectRoot(), "All History");
                 Directory.CreateDirectory(allHistoryDir);
                 CleanupFishImages();
+                EnsureCsvFile(Path.Combine(allHistoryDir, "all_history.csv"), FishCsvHeader);
 
                 EnsureRunStorageExists("debug", isDebugRun: true);
                 foreach (var run in Configuration.Runs.Where(r => !string.IsNullOrWhiteSpace(r.Name)))
@@ -212,6 +249,39 @@ namespace FishLens_App
         {
             if (File.Exists(path)) return;
             File.WriteAllText(path, header + Environment.NewLine);
+        }
+
+        private void NormalizeConfigurationState()
+        {
+            Configuration ??= new AppConfiguration();
+
+            if (Configuration.Locations == null || Configuration.Locations.Count == 0)
+            {
+                Configuration.Locations = new System.Collections.Generic.List<LocationEntry>
+                {
+                    new LocationEntry { Name = "Unknown", UpstreamDirection = "left" }
+                };
+            }
+
+            if (string.IsNullOrWhiteSpace(Configuration.ActiveLocation) ||
+                !Configuration.Locations.Any(l => string.Equals(l.Name, Configuration.ActiveLocation, StringComparison.OrdinalIgnoreCase)))
+            {
+                Configuration.ActiveLocation = Configuration.Locations.First().Name;
+            }
+
+            Configuration.Runs ??= new System.Collections.Generic.List<RunEntry>();
+            Configuration.Runs = Configuration.Runs
+                .Where(r => !string.IsNullOrWhiteSpace(r?.Name))
+                .GroupBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToList();
+
+            if (!string.IsNullOrWhiteSpace(Configuration.ActiveRun) &&
+                !string.Equals(Configuration.ActiveRun, "debug", StringComparison.OrdinalIgnoreCase) &&
+                !Configuration.Runs.Any(r => string.Equals(r.Name, Configuration.ActiveRun, StringComparison.OrdinalIgnoreCase)))
+            {
+                Configuration.ActiveRun = string.Empty;
+            }
         }
 
         private static void CleanupFishImages()

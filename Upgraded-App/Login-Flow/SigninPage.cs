@@ -20,9 +20,9 @@ namespace FishLens_App
         private bool Signin(string username, string password)
         {
             bool success = false;
+            var app = Application.Current as App;
             try
             {
-                var app = Application.Current as App;
                 using (SqlConnection conn = new SqlConnection(app.connectionString))
                 {
                     conn.Open();
@@ -99,6 +99,13 @@ namespace FishLens_App
             catch (SqlException ex) { Debug.WriteLine("SQL: " + ex.Message); }
             catch (Exception ex) { Debug.WriteLine("EX: " + ex.Message); }
 
+            if (success)
+            {
+                // After DB-backed user/org settings are loaded, refresh the JSON-backed
+                // runtime settings such as Fast Mode, active run, and active location.
+                app.LoadRuntimeSettingsFromJson();
+            }
+
             return success;
         }
 
@@ -110,7 +117,9 @@ namespace FishLens_App
             if (Signin(SignInUsernameBox.Text, SignInPasswordBox.Password))
             {
                 // Apply this user's saved settings to app resources before MainWindow renders
-                ((App)Application.Current).ApplyCurrentSettings();
+                var app = (App)Application.Current;
+                app.ApplyCurrentSettings();
+                app.EnsureRunStorageInitialized();
 
                 new MainWindow().Show();
                 this.Close();

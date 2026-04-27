@@ -651,53 +651,5 @@
             </StackPanel>
         </ScrollViewer>
 
-        <Border Grid.Row="2" 
-                Background="{DynamicResource CardBackground}" 
-                BorderBrush="{DynamicResource BorderBrush}" 
-                BorderThickness="0,1,0,0"
-                Padding="30,20">
-            <StackPanel Orientation="Horizontal" 
-                        HorizontalAlignment="Right">
-                <TextBlock x:Name="saveStatusText"
-                           Visibility="Collapsed"
-                           FontSize="{DynamicResource BaseFontSize}"
-                           FontWeight="SemiBold"
-                           VerticalAlignment="Center"
-                           Margin="0,0,16,0"/>
-
-                <Button x:Name="saveSettingsButton"
-                        Content="Save Settings" 
-                        Click="SaveSettings_Click"
-                        Background="{DynamicResource HeaderBackground}"
-                        Foreground="{DynamicResource OnAccentForeground}"
-                        FontSize="{DynamicResource BaseFontSize}"
-                        FontWeight="SemiBold"
-                        Padding="20,10"
-                        BorderThickness="0"
-                        Cursor="Hand">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border Background="{TemplateBinding Background}"
-                                                CornerRadius="6"
-                                                Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter HorizontalAlignment="Center"
-                                                            VerticalAlignment="Center"/>
-                                        </Border>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Opacity" Value="0.8"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
-            </StackPanel>
-        </Border>
     </Grid>
 </Page>

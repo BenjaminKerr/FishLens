@@ -250,6 +250,8 @@ namespace FishLens_App
                 newRunNameBox.Text = string.Empty;
 
             PersistRuns();
+            if (Application.Current is App createRunApp)
+                createRunApp.EnsureRunStorageInitialized();
             LoadRunsDropdown();
             UpdateRunStatusText();
             App.RaiseRunChanged();
@@ -277,6 +279,8 @@ namespace FishLens_App
                 app.ActiveRun = selectedRun;
 
             PersistRuns();
+            if (Application.Current is App activeRunApp)
+                activeRunApp.EnsureRunStorageInitialized();
             UpdateRunStatusText();
             App.RaiseRunChanged();
             UpdateSaveStatusAfterImmediateRunPersist();
@@ -307,6 +311,8 @@ namespace FishLens_App
                 {
                     runEntry.Locked = false;
                     PersistRuns();
+                    if (Application.Current is App reopenRunApp)
+                        reopenRunApp.EnsureRunStorageInitialized();
                     UpdateRunStatusText();
                     UpdateSaveStatusAfterImmediateRunPersist();
                 }
@@ -333,6 +339,8 @@ namespace FishLens_App
             }
 
             PersistRuns();
+            if (Application.Current is App endRunApp)
+                endRunApp.EnsureRunStorageInitialized();
             UpdateRunStatusText();
             UpdateSaveStatusAfterImmediateRunPersist();
         }
@@ -392,6 +400,13 @@ namespace FishLens_App
 
                 if (string.IsNullOrWhiteSpace(_config.ActiveLocation))
                     _config.ActiveLocation = _config.Locations.FirstOrDefault()?.Name ?? "Unknown";
+
+                if (Application.Current is App app)
+                {
+                    app.ActiveLocation = _config.ActiveLocation;
+                    app.ActiveRun = _config.ActiveRun;
+                    app.EnsureRunStorageInitialized();
+                }
 
                 LoadRunsDropdown();
                 RefreshLocationsPanel();

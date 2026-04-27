@@ -138,10 +138,11 @@ namespace FishLens_App
             app.ApplyCurrentSettings();
             _checkBoxes = GetCheckBoxToggleFromApplication();
             _config = GetConfigurationFromApplication();
-           
+            Loaded += MainWindow_Loaded;
+            Closed += MainWindow_Closed;
 
            AccountSettingsButton.Visibility = app.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
-       
+        
         }
 
         // **************************************************
@@ -198,6 +199,20 @@ namespace FishLens_App
         }
 
         #endregion
+
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            PopulateLocationDropdown();
+            UpdateRunDisplay();
+            App.LocationChanged += OnLocationChanged;
+            App.RunChanged += OnRunChanged;
+        }
+
+        private void MainWindow_Closed(object sender, EventArgs e)
+        {
+            App.LocationChanged -= OnLocationChanged;
+            App.RunChanged -= OnRunChanged;
+        }
 
         #region Directory Management
 
