@@ -154,12 +154,28 @@ CORNER_ARTIFACT_MAX_SIZE = 0.20   # box must be < 20 % of frame width AND height
 
 # Constants--DeepSort
 FPS_DEFAULT = 30 
-<<<<<<< HEAD
 MAX_EXPORT_PER_VIDEO = 5
 
+CLI_INPUT_PATH = sys.argv[1].strip() if len(sys.argv) > 1 else ""
+
+
+def _resolve_run_folder():
+    env_run_folder = os.getenv("FISHLENS_RUN_FOLDER", "").strip()
+    if env_run_folder:
+        return env_run_folder
+
+    if CLI_INPUT_PATH:
+        return os.path.join(PROJECT_ROOT, "results", "cli")
+
+    return ""
+
+
 # CSV paths are determined by the active run folder passed via the FISHLENS_RUN_FOLDER environment variable.
-_RUN_FOLDER = os.getenv("FISHLENS_RUN_FOLDER", "").strip()
+_RUN_FOLDER = _resolve_run_folder()
 _IS_DEBUG_RUN = _RUN_FOLDER and os.path.basename(_RUN_FOLDER).lower() == "debug"
+OUTPUT_CSV = os.path.join(PROJECT_ROOT, "fish_summary.csv")
+FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
+
 
 if not _RUN_FOLDER:
     print("[ERROR] FISHLENS_RUN_FOLDER is not set. A run must be active before starting analysis.", flush=True)
@@ -187,18 +203,12 @@ FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
 # Performance tuning
 # FISHLENS_FAST_MODE is set by the app via the Fast Mode setting in Settings.
 # When enabled: skips every other frame and uses lower YOLO resolution.
-FAST_MODE = os.getenv("FISHLENS_FAST_MODE", "0") == "1"
-FRAME_STRIDE = max(1, int(os.getenv("FISHLENS_FRAME_STRIDE", "3" if FAST_MODE else "1")))
-=======
-MAX_EXPORT_PER_VIDEO = 3  
-OUTPUT_CSV = os.path.join(PROJECT_ROOT, "fish_summary.csv")
-FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
-
 # Performance tuning (set via env vars when needed)
+FISHLENS_LOCATION = os.getenv("FISHLENS_LOCATION", "Unknown").strip() or "Unknown"
 FAST_MODE = os.getenv("FISHLENS_FAST_MODE", "1") == "1"
 STRICT_FRAME_STRIDE = max(1, int(os.getenv("FISHLENS_STRICT_FRAME_STRIDE", "3")))
 FRAME_STRIDE = STRICT_FRAME_STRIDE
->>>>>>> increasing_accuracy
+
 YOLO_IMGSZ = max(320, int(os.getenv("FISHLENS_YOLO_IMGSZ", "448" if FAST_MODE else "512")))
 SAVE_TIMESTAMP_DEBUG_FRAMES = os.getenv("FISHLENS_SAVE_TIMESTAMP_DEBUG", "0") == "1"
 TIMESTAMP_MAX_ATTEMPTS = max(1, int(os.getenv("FISHLENS_TIMESTAMP_MAX_ATTEMPTS", "4" if FAST_MODE else "8")))
@@ -207,14 +217,7 @@ VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRA
 STRICT_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DURATION_SEC", "0.65")))
 LOOSE_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_LOOSE_MIN_TRACK_DURATION_SEC", "0.45")))
 MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
-<<<<<<< HEAD
-FISHLENS_LOCATION = os.getenv("FISHLENS_LOCATION", "Unknown")
-# "left" means fish moving left-to-right are upstream (default).
-# "right" means fish moving right-to-left are upstream (flips the direction labels).
-FISHLENS_UPSTREAM_DIRECTION = os.getenv("FISHLENS_UPSTREAM_DIRECTION", "left").strip().lower()
-=======
 MIN_TRACK_TRAVEL_PX = max(0.0, float(os.getenv("FISHLENS_MIN_TRACK_TRAVEL_PX", "8")))
->>>>>>> increasing_accuracy
 
 # Constants--Classifier
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
@@ -284,12 +287,7 @@ class VideoData:
         self.v_confidence_sum = 0.0
         self.v_confidence_count = 0 
         self.v_video_timestamp = None
-<<<<<<< HEAD
-        self.v_probe_confidence = None   # "HIGH" / "MEDIUM" / None from probe_video_timestamp
-        self.v_frame_width = 640
-=======
         self.frame_width = 640
->>>>>>> increasing_accuracy
 
 
 @contextmanager
@@ -432,23 +430,10 @@ def _process_video_with_retry(video_path, source_video_path):
         FRAME_STRIDE = STRICT_FRAME_STRIDE
         YOLO_CONFIDENCE_THRESHOLD = STRICT_YOLO_CONFIDENCE_THRESHOLD
         MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
-<<<<<<< HEAD
-        video_tracks = run_video_tracker(
-            video_path,
-            source_video_path,
-            emit_no_fish=(original_stride == 1)
-        )
-
-        # Pass 2: only retry when fast mode skipped frames in pass 1.
-        # In normal mode FRAME_STRIDE is already 1, so a second full decode would be redundant.
-        should_retry = (original_stride > 1)
-        if not video_tracks and should_retry:
-=======
         video_tracks = _run_pass("strict")
 
         # Pass 2: loose settings with FRAME_STRIDE=1 whenever pass 1 found no fish.
         if not video_tracks:
->>>>>>> increasing_accuracy
             print(
                 f"[INFO] No fish found with strict settings (FRAME_STRIDE={STRICT_FRAME_STRIDE}); "
                 "retrying once with FRAME_STRIDE=1 and loose thresholds"
@@ -456,20 +441,11 @@ def _process_video_with_retry(video_path, source_video_path):
             FRAME_STRIDE = 1
             YOLO_CONFIDENCE_THRESHOLD = LOOSE_YOLO_CONFIDENCE_THRESHOLD
             MIN_TRACK_DURATION_SEC = LOOSE_MIN_TRACK_DURATION_SEC
-<<<<<<< HEAD
-            video_tracks = run_video_tracker(video_path, source_video_path, emit_no_fish=True)
-        elif not video_tracks:
-            print(
-                f"[INFO] No fish found with strict settings at FRAME_STRIDE=1; "
-                "skipping retry because normal mode already checked every frame"
-            )
-=======
             video_tracks = _run_pass("loose")
 
         # Only mark/copy as no-fish after all passes are exhausted.
         if not video_tracks:
             no_fish_found(source_video_path or video_path, os.path.basename(source_video_path or video_path))
->>>>>>> increasing_accuracy
 
         # Second pass (ffmpeg/ffprobe): enrich export with display duration only.
         # No changes to track creation, filtering, dedupe, or existing fields.
@@ -864,14 +840,7 @@ def run_video_tracker(video_path, source_video_path=None, emit_no_fish=True):
 
     # Cycle through video frames until end of video
     while ret:
-
-        # Record actual decoder position BEFORE processing this frame.
-        # Using CAP_PROP_POS_MSEC is reliable regardless of FPS metadata accuracy,
-        # which is especially important for ASF files where OpenCV often reads the
-        # wrong FPS (e.g. 7.5 instead of 30), inflating all frame-based time calculations.
-        frameData = FrameData(f_index=vidData.v_frame_index)
-        frameData.f_pos_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
-        frameData.f_detections = []
+        vidData.v_current_track_ids = set()
 
         if frame is not None:
             try:
@@ -885,16 +854,19 @@ def run_video_tracker(video_path, source_video_path=None, emit_no_fish=True):
             vidData.v_total_frames += 1
             ret, frame = _video_capture_read(cap)
             continue
+
+        # Initialize new FrameData object each frame.
+        frameData = FrameData(f_index=vidData.v_frame_index)
+        frameData.f_pos_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
+        frameData.f_detections = []
+
         analyze_yolo_detections(frame, MODEL, frameData, vidData)
 
-        # Reset per-frame track set before DeepSort populates it
-        vidData.v_current_track_ids.clear()
+        # Match increasing_accuracy ordering: classify YOLO frame results before DeepSort finalizes tracks.
+        process_yolo_results(frameData, vidData, MODEL)
 
         # DeepSort Tracking
         deepsort_analysis(tracker, frame, frameData, vidData)
-
-        # YOLO post-processing runs after DeepSort overlap filtering
-        process_yolo_results(frameData, vidData, MODEL)
 
         # Finalize disappeared tracks (detections that ended before the video ended)
         finalize_tracks(frameData, vidData, termination_reason="disappeared")
@@ -918,14 +890,7 @@ def run_video_tracker(video_path, source_video_path=None, emit_no_fish=True):
     # Skip export if fish was not detected in this pass.
     # Do not copy to no_fish here; caller may still run a retry pass.
     if not vidData.v_found_fish:
-<<<<<<< HEAD
-        print(f"[INFO] No fish detected in {vidData.v_filename}")
-        if emit_no_fish:
-            no_fish_found(source_video_path, vidData.v_filename)
-            _append_no_fish_row(source_video_path, vidData.v_video_timestamp)
-=======
         print(f"[INFO] No fish detected in {vidData.v_filename} (current pass)")
->>>>>>> increasing_accuracy
         return []
 
     # Timestamp dedupe can collapse distinct fish that share the same OCR second.
@@ -1055,36 +1020,48 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         is_new_track = trackId not in vidData.v_active_tracks
 
         if is_new_track:
-<<<<<<< HEAD
-            x1_e, y1_e, x2_e, y2_e = obj["bbox"]
-            # Use the probe confidence when the probe already gave us a timestamp.
-            # "HIGH" probe skips per-frame retries; "MEDIUM"/None keeps retrying.
-            _probe_conf_val = getattr(vidData, "v_probe_confidence", None)
-            if vidData.v_video_timestamp and vidData.v_video_timestamp != "Not detected":
-                initial_conf = _probe_conf_val if _probe_conf_val in ("HIGH", "MEDIUM") else "LOW"
-            else:
-                initial_conf = None
-=======
             initial_conf = "LOW" if (vidData.v_video_timestamp and vidData.v_video_timestamp != "Not detected") else None
             initial_x = float(obj.get("centroid", (0, 0))[0])
->>>>>>> increasing_accuracy
             vidData.v_active_tracks[trackId] = {
                 "start_frame": frameData.f_index,
-                "start_ms": frameData.f_pos_ms,  # actual decoder time; avoids FPS metadata errors
                 "confidences": [],
                 "directions": [],
                 "entry_x": initial_x,
                 "last_x": initial_x,
                 "best_conf": -1.0,
                 "best_crop": None,
-                "entry_x": (x1_e + x2_e) / 2,
                 "video_timestamp": vidData.v_video_timestamp or "Not detected",
                 "timestamp_confidence": initial_conf,
                 "timestamp_attempts": 0
             }
             
-            # Track created; timestamp comes from probe only.
-            print(f"  New fish detected (Track {trackId}) at frame {frameData.f_index} - ts='{vidData.v_video_timestamp}' conf={initial_conf}")
+            # Track created; timestamp OCR will be retried for several frames if needed.
+            print(f"  New fish detected (Track {trackId}) at frame {frameData.f_index} - initial ts_conf={initial_conf}")
+
+        # Retry timestamp OCR on early frames of each track until one succeeds.
+        track_data = vidData.v_active_tracks[trackId]
+        current_confidence = track_data.get("timestamp_confidence")
+        current_ts = track_data.get("video_timestamp", "Not detected")
+
+        # Keep trying to get direct OCR if we only have LOW confidence (from probe) or no timestamp at all.
+        if current_confidence in (None, "LOW"):
+            attempts = track_data.get("timestamp_attempts", 0)
+            if attempts < TIMESTAMP_MAX_ATTEMPTS:
+                result = extractTimestamFromFrame(frame, False)
+                track_data["timestamp_attempts"] = attempts + 1
+
+                if result and result[0]:
+                    old_ts = current_ts
+                    old_conf = current_confidence
+                    track_data["video_timestamp"] = result[0]
+                    track_data["timestamp_confidence"] = result[1]
+                    print(f"    Track {trackId}: Updated ts from '{old_ts}' ({old_conf}) to '{result[0]}' ({result[1]})")
+                elif track_data["timestamp_attempts"] == TIMESTAMP_MAX_ATTEMPTS and current_confidence is None:
+                    print(f"    Could not extract timestamp after {TIMESTAMP_MAX_ATTEMPTS} attempts")
+                    if SAVE_TIMESTAMP_DEBUG_FRAMES:
+                        debug_frame_path = f"debug_full_frame_track_{trackId}.jpg"
+                        cv2.imwrite(debug_frame_path, frame)
+                        print(f"    Saved full frame to: {debug_frame_path}")
 
         # Update track data per-frame
         vidData.v_active_tracks[trackId]["confidences"].append(obj["confidence"])
@@ -1129,13 +1106,13 @@ def finalize_tracks(frameData, vidData, termination_reason):
         disappeared_ids = set(vidData.v_active_tracks.keys()) - vidData.v_current_track_ids 
         for tid in disappeared_ids:
             track_data = vidData.v_active_tracks.pop(tid)
-            track_dict = build_track_summary(tid, track_data, frameData, vidData)
+            track_dict = build_track_summary(tid, track_data, frameData, vidData, None, frame_width=getattr(vidData, "frame_width", 640))
             if track_dict:
                 vidData.v_finished_tracks.append(track_dict)
 
     elif termination_reason == "forced":
         for tid, track_data in vidData.v_active_tracks.items():
-            track_dict = build_track_summary(tid, track_data, frameData, vidData)
+            track_dict = build_track_summary(tid, track_data, frameData, vidData, None, frame_width=getattr(vidData, "frame_width", 640))
             if track_dict:
                 vidData.v_finished_tracks.append(track_dict)
 
@@ -1144,7 +1121,7 @@ def finalize_tracks(frameData, vidData, termination_reason):
 # Function: build_track_summary
 # Description: Helper function for finalizing track data.
 # Notes: N/A
-def build_track_summary(trackId, track_data, frameData, vidData, image_path=None):
+def build_track_summary(trackId, track_data, frameData, vidData, image_path=None, frame_width=640):
     duration_sec = (frameData.f_index - track_data["start_frame"]) / vidData.v_fps
     confidences = [c for c in track_data["confidences"] if c is not None]
 
@@ -1174,64 +1151,11 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         )
         return None
 
-    entry_x = track_data.get("entry_x", vidData.v_frame_width / 2)
-    exit_x  = track_data.get("last_x",  vidData.v_frame_width / 2)
-
-    # Track-level corner-artifact filter.
-    # A static IR illuminator or lens artifact stays planted in one corner across
-    # the entire video; its entry_x and exit_x (the YOLO bbox center) are both
-    # close to the same frame edge.  A real small fish will move across the frame,
-    # so its traversal (|exit_x - entry_x|) will be at least 10% of frame width
-    # even if it is physically tiny.  We only reject a track when:
-    #   * it barely moved horizontally (traversal < 10% of frame width), and
-    #   * both entry and exit are within CORNER_ARTIFACT_ZONE of the same side.
-    traversal = abs(exit_x - entry_x)
-    fw = vidData.v_frame_width
-    if traversal < fw * 0.10:
-        in_left_corner  = entry_x < fw * CORNER_ARTIFACT_ZONE and exit_x < fw * CORNER_ARTIFACT_ZONE
-        in_right_corner = entry_x > fw * (1.0 - CORNER_ARTIFACT_ZONE) and exit_x > fw * (1.0 - CORNER_ARTIFACT_ZONE)
-        if in_left_corner or in_right_corner:
-            print(f"  [FILTER] Track {trackId} rejected: static corner artifact "
-                  f"(traversal={traversal:.1f}px, entry_x={entry_x:.1f}, exit_x={exit_x:.1f})")
-            return None
-
     # Calculate DeepSort average confidence
     avg_conf_DS = sum(confidences) / len(confidences) if confidences else 0.0
 
     # Get best confidence for track
     best_conf_pct = best_conf * 100 if best_conf <= 1.0 else best_conf
-<<<<<<< HEAD
-
-    # Determine direction.
-    # Uses net displacement (exit_x - entry_x) cross-checked against per-frame DeepSort counts.
-    # The center-line "left/right side" approach is unreliable because DeepSort's n_init=10 means
-    # entry_x is recorded about 10 frames in; a fast fish may already be past center by then.
-    net_dx = exit_x - entry_x  # positive = fish moved right (downstream) overall
-
-    directions = track_data["directions"]
-    upstream_count = directions.count("upstream")
-    downstream_count = directions.count("downstream")
-    total_directional = upstream_count + downstream_count
-
-    if total_directional == 0:
-        # Only stationary frames; there is no directional movement to infer from them.
-        overall_direction = directions[-1] if directions else "unknown"
-    elif downstream_count > upstream_count:
-        # Majority of frames were downstream; net displacement must also be rightward to confirm.
-        # If net_dx contradicts the frame counts, movement was genuinely ambiguous.
-        overall_direction = "downstream" if net_dx >= 0 else "indecisive"
-    elif upstream_count > downstream_count:
-        overall_direction = "upstream" if net_dx <= 0 else "indecisive"
-    else:
-        # Equal upstream and downstream frame counts mean the result is genuinely ambiguous.
-        overall_direction = "indecisive"
-
-    # If upstream direction at this location is right-to-left, the DeepSort labels and
-    # net_dx assumptions are inverted, so flip upstream/downstream on the final result.
-    if FISHLENS_UPSTREAM_DIRECTION == "right" and overall_direction in ("upstream", "downstream"):
-        overall_direction = "downstream" if overall_direction == "upstream" else "upstream"
-
-=======
     
     # Calculate overall direction based on entry and exit positions
     # Determine if entry and exit are on same side of frame
@@ -1276,7 +1200,6 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     
     species_data = classify_image(image_path) if image_path else ("No image", 0.0)
     
->>>>>>> increasing_accuracy
     # Handle timestamp with confidence flag
     video_timestamp = track_data.get("video_timestamp") or vidData.v_video_timestamp or "Not detected"
     timestamp_confidence = track_data.get("timestamp_confidence")
@@ -1290,8 +1213,8 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         "likely_class": vidData.v_most_common_class,
         "confidence": f"{(best_conf_pct / 100):.4f}" if best_conf_pct > 0 else f"{(vidData.v_avg_confidence_YL / 100):.4f}",
         "avg_confidence": f"{(best_conf_pct / 100):.4f}" if best_conf_pct > 0 else f"{(avg_conf_DS / 100):.4f}",
-        "start_time_sec": f"{track_data.get('start_ms', track_data['start_frame'] / vidData.v_fps * 1000) / 1000.0:.2f}",
-        "end_time_sec": f"{(frameData.f_pos_ms / 1000.0) if frameData.f_pos_ms > 0 else (frameData.f_index / vidData.v_fps):.2f}",
+        "start_time_sec": f"{track_data['start_frame'] / vidData.v_fps:.2f}",
+        "end_time_sec": f"{frameData.f_index / vidData.v_fps:.2f}",
         "direction": overall_direction,
         "best_crop": track_data.get("best_crop"),
         "species": "No data",
@@ -1335,15 +1258,11 @@ def dedupe_fragmented_tracks(finished_tracks):
     def _same_or_unknown_direction(a, b):
         da = str(a.get("direction", "unknown")).lower()
         db = str(b.get("direction", "unknown")).lower()
-<<<<<<< HEAD
-        if da in ("unknown", "stationary", "indecisive") or db in ("unknown", "stationary", "indecisive"):
-=======
         if da in {"unknown", "stationary"} or db in {"unknown", "stationary"}:
             return True
         # "indecisive" is noisy and often appears on short fragments.
         # Treat it as compatible to improve split-track merging.
         if da == "indecisive" or db == "indecisive":
->>>>>>> increasing_accuracy
             return True
         return da == db
 
@@ -1370,74 +1289,6 @@ def dedupe_fragmented_tracks(finished_tracks):
         overlap_ratio = overlap / shorter
         gap = min(abs(a_start - b_end), abs(b_start - a_end))
 
-<<<<<<< HEAD
-        # Temporal relationship expected for split IDs.
-        # 0.25 overlap ratio catches heavily-overlapping duplicate tracks;
-        # 1.0s gap allows for brief detection dropout between the same fish.
-        temporal_match = (overlap_ratio >= 0.25) or (gap <= 1.0)
-        if not temporal_match:
-            return False
-
-        # Spatial / ID-split check using interpolated position.
-        #
-        # Problem with comparing overall midpoints: a fish that has already
-        # traversed half the frame has a very different average-x from a fish
-        # just entering, yet those two tracks might co-exist in time as two
-        # _different_ fish.  Comparing midpoints would incorrectly see them
-        # as close and allow a merge.
-        #
-        # Better: estimate where track A actually IS at the moment track B
-        # first appears (linear interpolation along entry_x -> exit_x), then
-        # compare that to track B's entry position.
-        #
-        # Two outcomes:
-        #   * separation > 20% of A's traversal means a different fish, so block the merge
-        #   * separation <= 20% of A's traversal and overlap_ratio >= 0.50
-        #     means an ID split of the same fish, so force the merge
-        a_ex = a.get("entry_x")
-        a_lx = a.get("exit_x")
-        b_ex = b.get("entry_x")
-
-        if overlap_ratio >= 0.25 and a_ex is not None and a_lx is not None and b_ex is not None:
-            # Interpolate track A's x position at the start of the overlap.
-            overlap_start = max(a_start, b_start)
-            dur_a = max(0.001, a_end - a_start)
-            frac = max(0.0, min(1.0, (overlap_start - a_start) / dur_a))
-            ax_at_overlap = a_ex + frac * (a_lx - a_ex)
-
-            separation = abs(ax_at_overlap - b_ex)
-            raw_traversal = abs(a_lx - a_ex)
-            # Only apply the spatial guard when track A actually traverses a
-            # meaningful distance. For stationary or slow fish the traversal is
-            # near zero, so the 50-pixel floor would make the threshold absurdly
-            # tight (10 px) and block legitimate ID-split merges due to box jitter.
-            # Very high temporal overlap alone is near-conclusive evidence of an
-            # ID split on the same fish (82%+ of the shorter track is shared).
-            # Skip the spatial check entirely at this level.
-            if overlap_ratio >= 0.45:
-                return True
-
-            if raw_traversal >= 100:
-                spatial_threshold = raw_traversal * 0.20
-                if separation > spatial_threshold:
-                    # Before blocking, check for a dramatic confidence gap; a very
-                    # high-confidence track and a very low-confidence track at the same
-                    # position are almost always the same fish re-detected with a new ID.
-                    pa = _pct(a)
-                    pb = _pct(b)
-                    if abs(pa - pb) >= 30.0:
-                        return True   # forced merge: confidence gap overrides spatial guard
-                    # Tracks are spatially far apart at the time they overlap,
-                    # these are two different fish onscreen simultaneously.
-                    return False
-
-        # Fall back to quality gate for gap-only or low-overlap cases, or
-        # when spatial data is unavailable.
-        pa = _pct(a)
-        pb = _pct(b)
-        conf_gap = abs(pa - pb)
-        dur_ratio = min(_duration(a), _duration(b)) / max(0.001, max(_duration(a), _duration(b)))
-=======
         # Strong overlap is a clear split-ID signal.
         if overlap_ratio >= 0.50:
             return True
@@ -1445,7 +1296,6 @@ def dedupe_fragmented_tracks(finished_tracks):
         # Near-immediate handoff is also a strong split-ID signal.
         if gap <= 0.55:
             return True
->>>>>>> increasing_accuracy
 
         # Same OCR second + close in time is also a strong split-ID signal.
         if a_ts and b_ts and a_ts == b_ts and gap <= 2.00:
@@ -1787,13 +1637,22 @@ def classify_image(image_path):
 
 
 # Persistent server loop: accept one folder path per line from stdin, process it, signal done.
-for raw_line in sys.stdin:
-    input_path = raw_line.strip()
-    if input_path:
-        try:
-            main(input_path)
-        except Exception as e:
-            print(f"[ERROR] Unhandled exception during processing: {e}", flush=True)
-            import traceback
-            traceback.print_exc()
-        print("[PROGRESS] DONE", flush=True)
+if CLI_INPUT_PATH:
+    try:
+        main(CLI_INPUT_PATH)
+    except Exception as e:
+        print(f"[ERROR] Unhandled exception during processing: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+    print("[PROGRESS] DONE", flush=True)
+else:
+    for raw_line in sys.stdin:
+        input_path = raw_line.strip()
+        if input_path:
+            try:
+                main(input_path)
+            except Exception as e:
+                print(f"[ERROR] Unhandled exception during processing: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
+            print("[PROGRESS] DONE", flush=True)
