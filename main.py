@@ -9,22 +9,27 @@
 import sys
 print("[PROGRESS] STARTUP", flush=True)
 
-import warnings
-import os
 import csv
-import cv2
-import subprocess
 import importlib
-from contextlib import contextmanager
-import tempfile
-import numpy as np
+import os
 import shutil
-#from YOLO.detector import YoloDetector
-from tracking.deepsort_tracker import DeepSortTracker
+import subprocess
+import tempfile
+import warnings
 from collections import Counter
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import List
-from extract_timestamp import extractTimestamFromFrame, check_tesseract, probe_video_timestamp, dedupe_tracks_by_timestamp
+
+import cv2
+import numpy as np
+
+from extract_timestamp import extractTimestamFromFrame, check_tesseract, probe_video_timestamp
+from tracking.deepsort_tracker import DeepSortTracker
+
+# ========================================================================
+# STARTUP CONFIGURATION
+# ========================================================================
 
 # Keep OpenCV logging quieter (FFmpeg decode warnings can be very noisy on damaged ASF streams).
 try:
@@ -44,6 +49,7 @@ warnings.filterwarnings(
 
 
 def _load_yolo_model(model_path):
+    """Load the YOLO detector lazily so startup can fail gracefully."""
     try:
         ultralytics = importlib.import_module("ultralytics")
         return ultralytics.YOLO(model_path)
@@ -53,6 +59,7 @@ def _load_yolo_model(model_path):
 
 
 def _load_classifier_model(model_path):
+    """Load the fish species classifier from whichever Keras package is available."""
     loader_attempts = [
         ("tensorflow.keras.models", {"compile": False}),
         ("keras.models", {"compile": False}),
@@ -73,6 +80,7 @@ def _load_classifier_model(model_path):
 
 
 def _load_keras_image_utils():
+    """Resolve Keras image helpers from tensorflow.keras or standalone keras."""
     for module_name in ("tensorflow.keras.preprocessing.image", "keras.preprocessing.image"):
         try:
             keras_image = importlib.import_module(module_name)
@@ -83,6 +91,7 @@ def _load_keras_image_utils():
 
 
 def _get_classifier_input_size(model, default=(150, 150)):
+    """Infer classifier input dimensions from the loaded model when possible."""
     try:
         shape = getattr(model, "input_shape", None)
         if shape and len(shape) >= 3 and shape[1] and shape[2]:
@@ -93,6 +102,7 @@ def _get_classifier_input_size(model, default=(150, 150)):
 
 
 def _classifier_uses_mobilenet_preprocessing(model):
+    """Best-effort detection for MobileNet-style [-1, 1] preprocessing."""
     try:
         for layer in getattr(model, "layers", []):
             name = str(getattr(layer, "name", "")).lower()
@@ -104,6 +114,7 @@ def _classifier_uses_mobilenet_preprocessing(model):
 
 
 def _resolve_classifier_model_path():
+    """Prefer the native .keras classifier artifact inside the models folder."""
     candidates = [
         os.path.join(PROJECT_ROOT, "models", "fish_classifier_model.keras"),
         os.path.join(PROJECT_ROOT, "models", "fish_classifier_model.h5"),
@@ -114,11 +125,14 @@ def _resolve_classifier_model_path():
     # Keep old default if none found so warning message still shows attempted path.
     return candidates[0]
 
-# Constants--Folders and Directories
+# ========================================================================
+# PATHS AND RUNTIME CONSTANTS
+# ========================================================================
+
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
-# Constants--General
+# CSV export schema
 CSV_KEYS = [
     "video_file",         # col 0
     "location",           # col 1
@@ -135,7 +149,7 @@ CSV_KEYS = [
 NO_FISH_CSV_KEYS = ["video_file", "location", "video_timestamp"]
 TESSERACT_AVAILABLE = check_tesseract()
 
-# Constants--YOLO
+# Detector configuration
 MODEL = _load_yolo_model("models/fish_detector4.pt")
 STRICT_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_YOLO_CONFIDENCE_THRESHOLD", "0.42"))
 LOOSE_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_LOOSE_YOLO_CONFIDENCE_THRESHOLD", "0.34"))
@@ -152,7 +166,7 @@ NO_FISH = os.path.join(PROJECT_ROOT, "no_fish")
 CORNER_ARTIFACT_ZONE     = 0.15   # 15 % from each edge defines the corner zone
 CORNER_ARTIFACT_MAX_SIZE = 0.20   # box must be < 20 % of frame width AND height
 
-# Constants--DeepSort
+# Tracking/export configuration
 FPS_DEFAULT = 30 
 MAX_EXPORT_PER_VIDEO = 5
 
@@ -170,7 +184,7 @@ def _resolve_run_folder():
     return ""
 
 
-# CSV paths are determined by the active run folder passed via the FISHLENS_RUN_FOLDER environment variable.
+# Output files are determined by the active run folder passed via FISHLENS_RUN_FOLDER.
 _RUN_FOLDER = _resolve_run_folder()
 _IS_DEBUG_RUN = _RUN_FOLDER and os.path.basename(_RUN_FOLDER).lower() == "debug"
 OUTPUT_CSV = os.path.join(PROJECT_ROOT, "fish_summary.csv")
@@ -200,10 +214,7 @@ else:
 
 FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
 
-# Performance tuning
-# FISHLENS_FAST_MODE is set by the app via the Fast Mode setting in Settings.
-# When enabled: skips every other frame and uses lower YOLO resolution.
-# Performance tuning (set via env vars when needed)
+# Runtime tuning (primarily fed by the WPF app through environment variables)
 FISHLENS_LOCATION = os.getenv("FISHLENS_LOCATION", "Unknown").strip() or "Unknown"
 FAST_MODE = os.getenv("FISHLENS_FAST_MODE", "1") == "1"
 STRICT_FRAME_STRIDE = max(1, int(os.getenv("FISHLENS_STRICT_FRAME_STRIDE", "3")))
@@ -219,7 +230,7 @@ LOOSE_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_LOOSE_MIN_TRAC
 MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
 MIN_TRACK_TRAVEL_PX = max(0.0, float(os.getenv("FISHLENS_MIN_TRACK_TRAVEL_PX", "8")))
 
-# Constants--Classifier
+# Classifier configuration
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
 CLASSIFIER_MODEL = _load_classifier_model(CLASSIFIER_MODEL_PATH)
 LOAD_IMG, IMG_TO_ARRAY = _load_keras_image_utils()
@@ -231,7 +242,10 @@ USE_MOBILENET_PREPROCESS = _classifier_uses_mobilenet_preprocessing(CLASSIFIER_M
 os.makedirs(NO_FISH, exist_ok=True)
 os.makedirs(FISH_IMAGE_DIR, exist_ok=True)
 
-# Create or refresh CSV headers.
+# ========================================================================
+# CSV INITIALIZATION
+# ========================================================================
+
 # Session CSVs are wiped on startup; master CSVs are only created if missing/empty.
 def _initialize_csv_header(path, keys, overwrite=False):
     if not path:
@@ -263,14 +277,20 @@ _init_csvs()
 # Signal to the host application that models are loaded and we are ready for work.
 print("[PROGRESS] READY", flush=True)
 
+# ========================================================================
+# LIGHTWEIGHT RUNTIME DATA CONTAINERS
+# ========================================================================
+
 @dataclass
 class FrameData:
-        f_index: int = 0
-        f_found_fish: bool = False
-        f_detections: List = field(default_factory=list)
-        f_pos_ms: float = 0.0  # Actual decoder position in milliseconds (from CAP_PROP_POS_MSEC)
+    """Per-frame state shared between YOLO, DeepSort, and finalization logic."""
+    f_index: int = 0
+    f_found_fish: bool = False
+    f_detections: List = field(default_factory=list)
+    f_pos_ms: float = 0.0  # Actual decoder position in milliseconds (from CAP_PROP_POS_MSEC)
 
 class VideoData:
+    """Mutable per-video state accumulated across the analysis pipeline."""
     def __init__(self):
         self.v_filename = "default.mp4"
         self.v_frames_with_fish = 0
@@ -290,8 +310,13 @@ class VideoData:
         self.frame_width = 640
 
 
+# ========================================================================
+# VIDEO I/O AND METADATA HELPERS
+# ========================================================================
+
 @contextmanager
 def _suppress_stderr(enabled=True):
+    """Temporarily silence noisy native stderr output from OpenCV/FFmpeg wrappers."""
     if not enabled:
         yield
         return
@@ -313,15 +338,18 @@ def _suppress_stderr(enabled=True):
 
 
 def _video_capture_open(video_path):
+    """Open a video capture while optionally suppressing codec warning spam."""
     with _suppress_stderr(SUPPRESS_CODEC_WARNINGS):
         return cv2.VideoCapture(video_path)
 
 
 def _video_capture_read(cap):
+    """Single indirection point for cap.read(), useful for timestamp probing hooks."""
     return cap.read()
 
 
 def _resolve_ffprobe_path():
+    """Locate ffprobe from env, PATH, or an ffmpeg sibling directory."""
     env_path = os.getenv("FISHLENS_FFPROBE_PATH", "").strip()
     if env_path and os.path.isfile(env_path):
         return env_path
@@ -340,6 +368,7 @@ def _resolve_ffprobe_path():
 
 
 def _probe_video_duration_sec(video_path):
+    """Read container duration via ffprobe for export-only display labels."""
     ffprobe_path = _resolve_ffprobe_path()
     if not ffprobe_path or not os.path.isfile(video_path):
         return None
@@ -365,6 +394,7 @@ def _probe_video_duration_sec(video_path):
 
 
 def _format_mmss(seconds):
+    """Format a floating-point second count as M:SS."""
     seconds = max(0.0, float(seconds or 0.0))
     total = int(round(seconds))
     minutes = total // 60
@@ -399,10 +429,10 @@ def _enrich_tracks_with_duration(video_tracks, processed_video_path, source_vide
         track["duration"] = f"{_format_mmss(scaled_start)}-{_format_mmss(scaled_end)}"
 
 
-# ****************************************************************
-# Function: main
-# Description: Process all videos and export data as a CSV.
-# Notes: N/A
+# ========================================================================
+# ENTRY-PIPELINE HELPERS
+# ========================================================================
+
 def _process_video_with_retry(video_path, source_video_path):
     """Two-pass processing: strict pass, then optional loose retry if fast mode may have skipped fish."""
     global FRAME_STRIDE, YOLO_CONFIDENCE_THRESHOLD, MIN_TRACK_DURATION_SEC
@@ -433,7 +463,7 @@ def _process_video_with_retry(video_path, source_video_path):
         video_tracks = _run_pass("strict")
 
         # Pass 2: loose settings with FRAME_STRIDE=1 whenever pass 1 found no fish.
-        if not video_tracks:
+        if not video_tracks and ENABLE_LOOSE_RETRY:
             print(
                 f"[INFO] No fish found with strict settings (FRAME_STRIDE={STRICT_FRAME_STRIDE}); "
                 "retrying once with FRAME_STRIDE=1 and loose thresholds"
@@ -458,7 +488,12 @@ def _process_video_with_retry(video_path, source_video_path):
         MIN_TRACK_DURATION_SEC = original_min_duration
 
 
+# ========================================================================
+# PUBLIC ENTRY POINT
+# ========================================================================
+
 def main(input_path=None):
+    """Process either one video or every video in a folder and flush results per video."""
     if input_path is None:
         input_path = os.path.join(PROJECT_ROOT, "SavedVids")
 
@@ -571,11 +606,12 @@ def main(input_path=None):
 
             print(f"[PROGRESS] VIDEO_DONE:{filename}", flush=True)
 
-# ****************************************************************
-# Function: enhance_image
-# Description: Enhance image quality through upscaling and sharpening.
-# Notes: N/A
+# ========================================================================
+# IMAGE, CSV, AND CONVERSION HELPERS
+# ========================================================================
+
 def enhance_image(crop):
+    """Upscale and sharpen a crop before classifier inference and image export."""
     if crop is None or crop.size == 0:
         return None
     
@@ -598,12 +634,8 @@ def enhance_image(crop):
     return crop
 
 
-# ****************************************************************
-# Function: _flush_tracks_to_csv
-# Description: Appends one video's fish tracks to the session + run master + all-history CSVs.
-#              Called immediately after each video finishes so results survive a cancel.
-# Notes: N/A
 def _ensure_csv_schema(path, keys, fill_values=None):
+    """Expand older CSVs to the current schema without dropping existing data."""
     if path is None or not os.path.exists(path) or os.path.getsize(path) == 0:
         return
 
@@ -633,6 +665,7 @@ def _ensure_csv_schema(path, keys, fill_values=None):
         writer.writerows(expanded_rows)
 
 def _flush_tracks_to_csv(tracks):
+    """Append one video's fish tracks to the active session/master CSV outputs."""
     def _append_csv(path, rows, keys):
         if path is None:
             return
@@ -653,11 +686,8 @@ def _flush_tracks_to_csv(tracks):
         _append_csv(MASTER_FISH_CSV, tracks, CSV_KEYS)
 
 
-# ****************************************************************
-# Function: convert_asf_to_mp4
-# Description: Convert ASF/WMV video to a temporary MP4 to improve decode reliability.
-# Notes: Returns (path, is_temp). Caller is responsible for deleting the temp file.
 def convert_asf_to_mp4(video_path):
+    """Convert ASF/WMV inputs to a temporary MP4 when that improves decode reliability."""
     ext = os.path.splitext(video_path)[1].lower()
     if ext not in ('.asf', '.wmv'):
         return video_path, False
@@ -774,18 +804,19 @@ def convert_asf_to_mp4(video_path):
 
 
 def _cleanup_temp(path):
+    """Best-effort cleanup for temporary converted videos."""
     try:
         if path and os.path.exists(path):
             os.remove(path)
     except OSError:
         pass
 
-# ****************************************************************
-# Function: run_video_tracker
-# Description: Process a single video through both YOLO and DeepSort;
-# return tracked fish data.
-# Notes: N/A
-def run_video_tracker(video_path, source_video_path=None, emit_no_fish=True):
+# ========================================================================
+# CORE ANALYSIS PIPELINE
+# ========================================================================
+
+def run_video_tracker(video_path, source_video_path=None):
+    """Process one video through YOLO, DeepSort, timestamp OCR, and export prep."""
 
     # Initialize new VideoData and DeepSort tracker for each video
     vidData = VideoData()
@@ -924,11 +955,8 @@ def run_video_tracker(video_path, source_video_path=None, emit_no_fish=True):
     return vidData.v_finished_tracks
 
 
-# ****************************************************************
-# Function: analyse_yolo_detections
-# Description: Analyze YOLO detections to determine most common class of frame.
-# Notes: Vars modified: found_fish (frame, video), detections(frame), frames with/without fish (video)
 def analyze_yolo_detections(frame, model, frameData, vidData):
+    """Run YOLO on one frame and keep only fish-like detections that survive filters."""
 
     # Run YOLO on frame
     results = model.predict(
@@ -981,11 +1009,8 @@ def analyze_yolo_detections(frame, model, frameData, vidData):
     vidData.v_frames_without_fish += 0 if frameData.f_found_fish else 1
 
 
-# ****************************************************************
-# Function: process_yolo_results
-# Description: Process YOLO results to determine most common class and average confidence.
-# Notes: N/A
 def process_yolo_results(frameData, vidData, model):
+    """Update running video-level class/confidence stats from the current frame."""
     if frameData.f_detections:
         ids = [d[5] for d in frameData.f_detections]
         id_counter = Counter(ids)
@@ -1001,11 +1026,8 @@ def process_yolo_results(frameData, vidData, model):
         if vidData.v_confidence_count > 0:
             vidData.v_avg_confidence_YL = (vidData.v_confidence_sum / vidData.v_confidence_count) * 100
             
-# ***************************************************************
-# Function: deepsort_analysis
-# Description: Run video through DeepSort and return track data.
-# Notes: N/A
 def deepsort_analysis(tracker, frame, frameData, vidData):
+    """Advance DeepSort tracks for the current frame and maintain per-track state."""
 
     # Use the tracker's default iou threshold (tuned in the tracker)
     frameData.f_detections = tracker.filterOverlaps(frameData.f_detections)
@@ -1091,13 +1113,8 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                 vidData.v_active_tracks[trackId]["best_frame"] = frame.copy()
 
 
-# ****************************************************************
-# Function: finalize_tracks
-# Description: Finalizes ends of tracks.
-# Notes: termination_reason can be:
-# "disappeared" (normal end of track), or,
-# "forced" (end of video with active tracks).
 def finalize_tracks(frameData, vidData, termination_reason): 
+    """Convert ended active tracks into exportable summaries."""
 
     if termination_reason not in ("disappeared", "forced"):
         raise ValueError("Invalid termination reason. Must be 'disappeared' or 'forced'.")
@@ -1117,11 +1134,8 @@ def finalize_tracks(frameData, vidData, termination_reason):
                 vidData.v_finished_tracks.append(track_dict)
 
 
-# ****************************************************************
-# Function: build_track_summary
-# Description: Helper function for finalizing track data.
-# Notes: N/A
 def build_track_summary(trackId, track_data, frameData, vidData, image_path=None, frame_width=640):
+    """Build one export row for a finished track after duration/direction filtering."""
     duration_sec = (frameData.f_index - track_data["start_frame"]) / vidData.v_fps
     confidences = [c for c in track_data["confidences"] if c is not None]
 
@@ -1198,8 +1212,6 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         print(f"  [FILTER] Track {trackId} dropped: indecisive + travel_px {travel_px:.1f} < {MIN_TRACK_TRAVEL_PX:.1f}")
         return None
     
-    species_data = classify_image(image_path) if image_path else ("No image", 0.0)
-    
     # Handle timestamp with confidence flag
     video_timestamp = track_data.get("video_timestamp") or vidData.v_video_timestamp or "Not detected"
     timestamp_confidence = track_data.get("timestamp_confidence")
@@ -1228,11 +1240,8 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     }
 
 
-# ****************************************************************
-# Function: dedupe_fragmented_tracks
-# Description: Merge likely duplicate tracks caused by tracker ID splits.
-# Notes: Conservative heuristic to reduce false double-fish reports.
 def dedupe_fragmented_tracks(finished_tracks):
+    """Merge likely duplicate rows created when one fish is split across tracker IDs."""
     if not finished_tracks:
         return finished_tracks
 
@@ -1328,11 +1337,8 @@ def dedupe_fragmented_tracks(finished_tracks):
     return kept
 
 
-# ****************************************************************
-# Function: dedupe_duplicate_track_ids
-# Description: Keep a single best export row when the same trackId was finalized more than once.
-# Notes: This addresses occasional duplicate counting/export for one fish in a single video.
 def dedupe_duplicate_track_ids(finished_tracks):
+    """Collapse duplicate finalizations of the same DeepSort track ID."""
     if not finished_tracks:
         return finished_tracks
 
@@ -1405,21 +1411,15 @@ def dedupe_duplicate_track_ids(finished_tracks):
     return sorted(kept, key=lambda t: _start(t))
 
 
-# ***************************************************************
-# Function: no_fish_found
-# Description: Moves video to no_fish if no fish detected. 
-# Notes:
 def no_fish_found(video_path, filename):
+    """Log that a video produced no fish tracks after all configured passes."""
     print("***************************************************************")
     print(f"No fish detected in {filename}. Skipping export.")
     print("***************************************************************")
 
 
-# ***************************************************************
-# Function: _append_no_fish_row
-# Description: Appends one row to no_fish_summary.csv for a video with no detections.
-# Notes: N/A
 def _append_no_fish_row(video_file_path, video_timestamp):
+    """Append a no-fish result to the slim session file and the master CSV outputs."""
     slim_row = {
         "video_file": video_file_path,
         "location": FISHLENS_LOCATION,
@@ -1473,53 +1473,42 @@ def _append_no_fish_row(video_file_path, video_timestamp):
         print(f"[ERROR] Failed to write no-fish row: {e}")
 
 
-# ***************************************************************
-# Function: save_best_image
-# Description: Saves the best image from each video. 
-# Notes:
 def save_best_image(finished_tracks, filename):
-        for track in finished_tracks:
-            best_crop = track.get("best_crop")
+    """Save each track's best crop, classify it, and move it into a species subfolder."""
+    for track in finished_tracks:
+        best_crop = track.get("best_crop")
 
-            if best_crop is not None:
-                enhanced_crop = enhance_image(best_crop)
-                
-                # Classify the image first to determine species folder
-                temp_image_name = f"{os.path.splitext(filename)[0]}_track_{track['trackId']}.jpg"
-                temp_image_path = os.path.join(FISH_IMAGE_DIR, temp_image_name)
-                write_ok = cv2.imwrite(temp_image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
-                if not write_ok:
-                    print(f"Failed to write image at {temp_image_path}. Skipping classification.")
-                    track["species"] = "No data"
-                    track["species_confidence"] = "0.0000"
-                    track["image_path"] = None
-                    track.pop("best_crop", None)
-                    continue
-                
-                # Classify the saved image
-                species_data = classify_image(temp_image_path)
-                species = species_data[0] if species_data else "No data"
-                track["species"] = species
-                track["species_confidence"] = f"{(species_data[1] / 100):.4f}" if species_data and len(species_data) > 1 else "0.0000"
-                
-                # Create species subfolder and move image
-                if species in CLASS_NAMES:
-                    species_folder = os.path.join(FISH_IMAGE_DIR, species)
-                    os.makedirs(species_folder, exist_ok=True)
-                    final_image_path = os.path.join(species_folder, temp_image_name)
-                    try:
-                        shutil.move(temp_image_path, final_image_path)
-                        track["image_path"] = final_image_path
-                    except Exception as e:
-                        print(f"Error moving image to species folder: {e}")
-                        track["image_path"] = None
-                        try:
-                            if os.path.exists(temp_image_path):
-                                os.remove(temp_image_path)
-                        except OSError:
-                            pass
-                else:
-                    # Do not keep unclassified images in root fish_images.
+        if best_crop is not None:
+            enhanced_crop = enhance_image(best_crop)
+            
+            # Classify the image first to determine species folder
+            temp_image_name = f"{os.path.splitext(filename)[0]}_track_{track['trackId']}.jpg"
+            temp_image_path = os.path.join(FISH_IMAGE_DIR, temp_image_name)
+            write_ok = cv2.imwrite(temp_image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            if not write_ok:
+                print(f"Failed to write image at {temp_image_path}. Skipping classification.")
+                track["species"] = "No data"
+                track["species_confidence"] = "0.0000"
+                track["image_path"] = None
+                track.pop("best_crop", None)
+                continue
+            
+            # Classify the saved image
+            species_data = classify_image(temp_image_path)
+            species = species_data[0] if species_data else "No data"
+            track["species"] = species
+            track["species_confidence"] = f"{(species_data[1] / 100):.4f}" if species_data and len(species_data) > 1 else "0.0000"
+            
+            # Create species subfolder and move image
+            if species in CLASS_NAMES:
+                species_folder = os.path.join(FISH_IMAGE_DIR, species)
+                os.makedirs(species_folder, exist_ok=True)
+                final_image_path = os.path.join(species_folder, temp_image_name)
+                try:
+                    shutil.move(temp_image_path, final_image_path)
+                    track["image_path"] = final_image_path
+                except Exception as e:
+                    print(f"Error moving image to species folder: {e}")
                     track["image_path"] = None
                     try:
                         if os.path.exists(temp_image_path):
@@ -1527,17 +1516,26 @@ def save_best_image(finished_tracks, filename):
                     except OSError:
                         pass
             else:
+                # Do not keep unclassified images in root fish_images.
                 track["image_path"] = None
-            
-            # Remove best_crop from track dict (no need to export it)
-            track.pop("best_crop", None)
+                try:
+                    if os.path.exists(temp_image_path):
+                        os.remove(temp_image_path)
+                except OSError:
+                    pass
+        else:
+            track["image_path"] = None
+        
+        # Remove best_crop from track dict (no need to export it)
+        track.pop("best_crop", None)
 
 
-# ****************************************************************
-# Function: _safe_path_component
-# Description: Convert arbitrary text into a filesystem-safe path segment.
-# Notes: N/A
+# ========================================================================
+# CLASSIFICATION AND TIMESTAMP DEBUG HELPERS
+# ========================================================================
+
 def _safe_path_component(value, default="unknown"):
+    """Convert arbitrary text into a filesystem-safe path segment."""
     text = str(value).strip() if value is not None else ""
     if not text:
         return default
@@ -1547,11 +1545,8 @@ def _safe_path_component(value, default="unknown"):
     return text or default
 
 
-# ****************************************************************
-# Function: _get_uncertain_timestamp_dir
-# Description: Build output directory for uncertain timestamp frames.
-# Notes: Format: results/uncertain_timestamps/<video_directory>
 def _get_uncertain_timestamp_dir(source_video_path):
+    """Build the output directory for uncertain-timestamp debug frames."""
     video_dir = os.path.basename(os.path.dirname(source_video_path)) or "root"
 
     return os.path.join(
@@ -1562,11 +1557,8 @@ def _get_uncertain_timestamp_dir(source_video_path):
     )
 
 
-# ****************************************************************
-# Function: save_uncertain_timestamp_frames
-# Description: Save frame screenshots for tracks with uncertain (non-HIGH) timestamps.
-# Notes: Includes LOW confidence and failed timestamp extraction (None / Not detected).
 def save_uncertain_timestamp_frames(finished_tracks, source_video_path):
+    """Save best-frame screenshots for tracks whose timestamps remain uncertain."""
     uncertain_dir = _get_uncertain_timestamp_dir(source_video_path)
     os.makedirs(uncertain_dir, exist_ok=True)
     
@@ -1591,11 +1583,8 @@ def save_uncertain_timestamp_frames(finished_tracks, source_video_path):
         track.pop("best_frame", None)
 
 
-# ****************************************************************
-# Function: classify_image
-# Description: Loads, preprocesses, and classifies a single image file.
-# Notes: Accepts image_path parameter for the image to classify.
 def classify_image(image_path):
+    """Run the loaded species classifier on one saved crop image."""
    
     # Use the global model (already loaded at startup)
     model = CLASSIFIER_MODEL
