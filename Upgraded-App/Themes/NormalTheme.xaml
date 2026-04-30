@@ -17,6 +17,7 @@
     <SolidColorBrush x:Key="SecondaryBackgroundBrush" Color="White"/>
     <SolidColorBrush x:Key="HoverBackgroundBrush" Color="#2D7A8F"/>
     <SolidColorBrush x:Key="OnAccentForeground" Color="White"/>
+    <SolidColorBrush x:Key="WhiteBrush" Color="White"/>
     <!-- Action button disabled-state colors -->
     <SolidColorBrush x:Key="AccentButtonDisabledBackground" Color="#081E27"/>
     <SolidColorBrush x:Key="AccentButtonDisabledForeground" Color="#3D6878"/>

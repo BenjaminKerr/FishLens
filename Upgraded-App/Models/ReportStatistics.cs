@@ -1,38 +1,35 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace FishLens_App.Models
 {
     public class ReportStatistics
     {
-        // Existing properties
+        // Detections overview
         public int TotalDetections { get; set; }
-        public int FishCount { get; set; }
-        public int BirdCount { get; set; }
+        public Dictionary<string, int> ClassBreakdown { get; set; }
+
+        // Movement patterns
         public int UpstreamCount { get; set; }
         public int DownstreamCount { get; set; }
-        public int HighConfidenceCount { get; set; }
-        public double AverageConfidence { get; set; }
-        public Dictionary<string, int> VideoDetections { get; set; }
+
+        // Species breakdown
         public Dictionary<string, int> SpeciesBreakdown { get; set; }
-        public Dictionary<int, int> DetectionsByHour { get; set; }
-        public Dictionary<DateTime, int> DetectionsByDate { get; set; }
+
+        // Location breakdown
         public Dictionary<string, int> DetectionsByLocation { get; set; }
-        public double FishPerDay { get; set; }
-        public double EstimatedUpstreamCount { get; set; }
-        public double AverageCorrectness { get; set; }
-        public double AverageLengthCm { get; set; } // Placeholder
+
+        // Observations by day
+        public Dictionary<DateTime, int> DetectionsByDate { get; set; }
+
+        // Observations by hour
+        public Dictionary<int, int> DetectionsByHour { get; set; }
+
         public int NoFishCount { get; set; }
         public int TotalVideoCount { get; set; }   // unique video files including no-fish videos
-        // Earliest and latest detection timestamps found in the report data
+        // Export header only
         public DateTime? MinDetectionTimestamp { get; set; }
         public DateTime? MaxDetectionTimestamp { get; set; }
-        public Dictionary<string, Dictionary<string, int>> GroupedBySpecies { get; set; }
-        public Dictionary<DateTime, Dictionary<string, int>> GroupedByDateTime { get; set; }
-        public Dictionary<string, Dictionary<string, int>> GroupedByLocation { get; set; }
         // Date × Location detection counts (yyyy-MM-dd → location → fish count)
         public Dictionary<DateTime, Dictionary<string, int>> DetectionsByDateLocation { get; set; }
     }
