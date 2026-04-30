@@ -917,6 +917,8 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         # Spatial info forwarded so dedupe_fragmented_tracks can guard against merging two simultaneous fish.
         "entry_x": track_data.get("entry_x"),
         "exit_x": track_data.get("last_x"),
+        "frame_width": frame_width,
+        "best_conf_raw": float(best_conf_pct),
     }
 
 def dedupe_fragmented_tracks(finished_tracks):
@@ -954,11 +956,112 @@ def dedupe_fragmented_tracks(finished_tracks):
             return True
         return da == db
 
-    def _is_likely_duplicate(a, b):
-        # Must be same class and compatible direction.
+    def _direction_pair(a, b):
+        return (
+            str(a.get("direction", "unknown")).lower(),
+            str(b.get("direction", "unknown")).lower(),
+        )
+
+    def _frame_width(track):
+        try:
+            return float(track.get("frame_width", 640.0))
+        except Exception:
+            return 640.0
+
+    def _x(track, key):
+        try:
+            return float(track.get(key, 0.0))
+        except Exception:
+            return 0.0
+
+    def _continuity_threshold(track):
+        width = max(1.0, _frame_width(track))
+        return max(50.0, width * 0.18)
+
+    def _merge_track_rows(a, b, merged_direction):
+        # Keep chronology from the earlier segment and take best media/confidence
+        # from whichever half saw the fish more clearly.
+        a_start = float(a.get("start_time_sec", 0.0))
+        b_start = float(b.get("start_time_sec", 0.0))
+        first, second = (a, b) if a_start <= b_start else (b, a)
+
+        merged = dict(first)
+        merged["end_time_sec"] = second.get("end_time_sec", first.get("end_time_sec"))
+        merged["direction"] = merged_direction
+        merged["exit_x"] = second.get("exit_x", first.get("exit_x"))
+
+        try:
+            first_conf = float(first.get("best_conf_raw", 0.0))
+        except Exception:
+            first_conf = 0.0
+        try:
+            second_conf = float(second.get("best_conf_raw", 0.0))
+        except Exception:
+            second_conf = 0.0
+
+        if second_conf > first_conf:
+            for key in ("confidence", "avg_confidence", "best_crop", "best_frame", "species", "species_confidence"):
+                if key in second:
+                    merged[key] = second[key]
+            merged["best_conf_raw"] = second.get("best_conf_raw", merged.get("best_conf_raw"))
+
+        # Prefer the more confident timestamp if they disagree.
+        first_ts_conf = str(first.get("timestamp_confidence", "")).upper()
+        second_ts_conf = str(second.get("timestamp_confidence", "")).upper()
+        if second_ts_conf == "HIGH" and first_ts_conf != "HIGH":
+            merged["video_timestamp"] = second.get("video_timestamp", merged.get("video_timestamp"))
+            merged["timestamp_confidence"] = second.get("timestamp_confidence", merged.get("timestamp_confidence"))
+
+        return merged
+
+    def _is_turnaround_split(a, b):
+        da, db = _direction_pair(a, b)
+        if {da, db} != {"upstream", "downstream"}:
+            return False
+
         if str(a.get("likely_class", "")).lower() != str(b.get("likely_class", "")).lower():
             return False
-        if not _same_or_unknown_direction(a, b):
+
+        a_start = float(a.get("start_time_sec", 0.0))
+        a_end = float(a.get("end_time_sec", a_start))
+        b_start = float(b.get("start_time_sec", 0.0))
+        b_end = float(b.get("end_time_sec", b_start))
+        if a_start <= b_start:
+            earlier, later = a, b
+            earlier_end, later_start = a_end, b_start
+        else:
+            earlier, later = b, a
+            earlier_end, later_start = b_end, a_start
+
+        gap = max(0.0, later_start - earlier_end)
+        if gap > 1.50:
+            return False
+
+        early_entry = _x(earlier, "entry_x")
+        early_exit = _x(earlier, "exit_x")
+        later_entry = _x(later, "entry_x")
+        later_exit = _x(later, "exit_x")
+
+        width = max(_frame_width(earlier), _frame_width(later))
+        side_boundary = width / 2.0
+        continuity_threshold = max(_continuity_threshold(earlier), _continuity_threshold(later))
+
+        # Turnaround pattern: the later fragment starts where the earlier fragment ended,
+        # and the combined path exits near the same side where it originally entered.
+        same_turn_point = abs(early_exit - later_entry) <= continuity_threshold
+        same_outer_side = abs(early_entry - later_exit) <= max(continuity_threshold, width * 0.28)
+        starts_and_ends_same_side = (
+            (early_entry < side_boundary and later_exit < side_boundary)
+            or (early_entry >= side_boundary and later_exit >= side_boundary)
+        )
+
+        return same_turn_point and same_outer_side and starts_and_ends_same_side
+
+    def _is_likely_duplicate(a, b):
+        # Must be same class and either compatible direction or a clear turnaround split.
+        if str(a.get("likely_class", "")).lower() != str(b.get("likely_class", "")).lower():
+            return False
+        if not _same_or_unknown_direction(a, b) and not _is_turnaround_split(a, b):
             return False
 
         # If OCR timestamp resolves to the same second, treat close tracks as likely split IDs.
@@ -1006,7 +1109,9 @@ def dedupe_fragmented_tracks(finished_tracks):
         merged = False
         for i, existing in enumerate(kept):
             if _is_likely_duplicate(existing, track):
-                if _score(track) > _score(existing):
+                if _is_turnaround_split(existing, track):
+                    kept[i] = _merge_track_rows(existing, track, "indecisive")
+                elif _score(track) > _score(existing):
                     kept[i] = track
                 merged = True
                 break
