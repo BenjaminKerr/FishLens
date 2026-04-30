@@ -101,16 +101,19 @@ def _get_classifier_input_size(model, default=(150, 150)):
     return default
 
 
-def _classifier_uses_mobilenet_preprocessing(model):
-    """Best-effort detection for MobileNet-style [-1, 1] preprocessing."""
+def _get_classifier_preprocess_mode(model):
+    """Return the expected caller-side preprocessing mode for the loaded classifier."""
     try:
-        for layer in getattr(model, "layers", []):
-            name = str(getattr(layer, "name", "")).lower()
-            if "mobilenet" in name:
-                return True
+        layer_names = [str(getattr(layer, "name", "")).lower() for layer in getattr(model, "layers", [])]
+        has_mobilenet_backbone = any("mobilenet" in name for name in layer_names)
+        has_internal_rescaling = any(name.startswith("rescaling") for name in layer_names)
+        if has_internal_rescaling:
+            return "raw_255"
+        if has_mobilenet_backbone:
+            return "mobilenet_v2"
     except Exception:
         pass
-    return False
+    return "zero_one"
 
 
 def _resolve_classifier_model_path():
@@ -236,7 +239,7 @@ CLASSIFIER_MODEL = _load_classifier_model(CLASSIFIER_MODEL_PATH)
 LOAD_IMG, IMG_TO_ARRAY = _load_keras_image_utils()
 CLASS_NAMES = ["Chinook", "Omykiss"]
 IMAGE_SIZE = _get_classifier_input_size(CLASSIFIER_MODEL, default=(150, 150))
-USE_MOBILENET_PREPROCESS = _classifier_uses_mobilenet_preprocessing(CLASSIFIER_MODEL)
+CLASSIFIER_PREPROCESS_MODE = _get_classifier_preprocess_mode(CLASSIFIER_MODEL)
 
 # Create and initialize folders
 os.makedirs(NO_FISH, exist_ok=True)
@@ -1269,9 +1272,9 @@ def classify_image(image_path):
         # Load and preprocess image
         img = LOAD_IMG(image_path, target_size=IMAGE_SIZE)
         img_array = IMG_TO_ARRAY(img)
-        if USE_MOBILENET_PREPROCESS:
+        if CLASSIFIER_PREPROCESS_MODE == "mobilenet_v2":
             img_array = (img_array / 127.5) - 1.0
-        else:
+        elif CLASSIFIER_PREPROCESS_MODE == "zero_one":
             img_array = img_array / 255.0
         img_array = np.expand_dims(img_array, axis=0)
 

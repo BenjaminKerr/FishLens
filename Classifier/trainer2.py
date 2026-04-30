@@ -21,6 +21,7 @@ import tensorflow as tf
 from keras import layers, callbacks, Model, Sequential
 from keras.optimizers import Adam
 from keras.applications import MobileNetV2
+from keras.models import load_model
 
 # ========================================================================
 # CONFIGURATION AND CONSTANTS
@@ -227,8 +228,16 @@ model.compile(
 
 # ******************************
 # Function: Configure Initial Training Callbacks
-# Description: Stops early if validation loss stops improving and gently
-#   reduces the learning rate when validation performance plateaus.
+# Description: Saves the best validation model, stops early if validation loss
+#   stops improving, and gently reduces the learning rate when performance plateaus.
+best_model_checkpoint = callbacks.ModelCheckpoint(
+    filepath=EXPORT_PATH,
+    monitor="val_loss",
+    save_best_only=True,
+    save_weights_only=False,
+    verbose=1
+)
+
 early_stop = callbacks.EarlyStopping(
     monitor="val_loss",
     patience=PATIENCE,
@@ -250,7 +259,7 @@ history_initial = model.fit(
     train_dataset,
     epochs=INITIAL_EPOCHS,
     validation_data=validation_dataset,
-    callbacks=[early_stop, reduce_lr]
+    callbacks=[best_model_checkpoint, early_stop, reduce_lr]
 )
 
 
@@ -286,7 +295,7 @@ history_fine = model.fit(
     epochs=INITIAL_EPOCHS + FINE_TUNE_EPOCHS,
     initial_epoch=len(history_initial.history["loss"]),
     validation_data=validation_dataset,
-    callbacks=[early_stop, reduce_lr]
+    callbacks=[best_model_checkpoint, early_stop, reduce_lr]
 )
 
 
@@ -296,7 +305,7 @@ history_fine = model.fit(
 
 # ******************************
 # Function: Save Final Model
-# Description: Saves the trained model to disk in native Keras format for later use.
-model.save(EXPORT_PATH)
+# Description: Reloads the best validation checkpoint from disk and reports metrics from it.
+best_model = load_model(EXPORT_PATH, compile=False)
 print("Model saved successfully as fish_classifier_model.keras")
-print_confusion_matrix(model, validation_dataset, class_names)
+print_confusion_matrix(best_model, validation_dataset, class_names)
