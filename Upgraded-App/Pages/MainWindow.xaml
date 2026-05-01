@@ -9,12 +9,36 @@
         WindowState="Maximized"
         Background="{DynamicResource WindowBackground}"
         PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
 
-<<<<<<< HEAD
-=======
-   
->>>>>>> d6706cf (ProgressBar tenatively replaced with dynamic row of rectangles.)
+        <DataTemplate x:Key="FilledSegment">
+            <Rectangle Fill="Green" Stroke="Black" StrokeThickness="0.5" Margin="0.5" Height="10"/>
+        </DataTemplate>
 
+        <DataTemplate x:Key="EmptySegment">
+            <Rectangle Fill="White" Stroke="Black" StrokeThickness="0.5" Margin="0.5" Height="10"/>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ActiveSegment">
+            <Rectangle Fill="#FFCC66" Stroke="Black" StrokeThickness="0.5" Margin="0.5" Height="10">
+                <Rectangle.Triggers>
+                    <EventTrigger RoutedEvent="Loaded">
+                        <BeginStoryboard>
+                            <Storyboard RepeatBehavior="Forever">
+                                <DoubleAnimation
+                                Storyboard.TargetProperty="Opacity"
+                                From="0.4" To="1"
+                                Duration="0:0:0.6"
+                                AutoReverse="True"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </EventTrigger>
+                </Rectangle.Triggers>
+            </Rectangle>
+        </DataTemplate>
+
+    </Window.Resources>
+    
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition x:Name="SidebarColumn" Width="320"/>
@@ -144,49 +168,28 @@ Height="70">
                                     Cursor="Hand"
                                     Margin="8,0,0,0"/>
                         </Grid>
-                        <TextBlock x:Name="analysisFrameText"
+                            <TextBlock x:Name="analysisFrameText"
                                    Text=""
                                    Foreground="{DynamicResource OnAccentForeground}"
                                    FontSize="11"
                                    Opacity="0.75"
                                    Margin="0,0,0,6"
                                    TextTrimming="CharacterEllipsis"/>
-<<<<<<< HEAD
-                        <ProgressBar x:Name="analysisProgressBar"
-                                     Height="6"
-                                     Minimum="0"
-                                     Maximum="100"
-                                     Value="0"
-                                     Background="{DynamicResource CardBackground}"
-                                     Foreground="#E8A038"/>
-=======
-                        <ItemsControl ItemsSource="{Binding Bars}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <UniformGrid Rows="1"/>
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
+                            <ItemsControl ItemsSource="{Binding Bars}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Rows="1"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
 
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Rectangle Margin="0.25" Height="10">
-                                        <Rectangle.Style>
-                                            <Style TargetType="Rectangle">
-                                                <Setter Property="Fill" Value="#444"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding}" Value="True">
-                                                        <Setter Property="Fill" Value="#E8A038"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Rectangle.Style>
-                                    </Rectangle>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        
->>>>>>> d6706cf (ProgressBar tenatively replaced with dynamic row of rectangles.)
-                    </StackPanel>
+                                <ItemsControl.ItemTemplateSelector>
+                                    <local:VideoProgressSelector
+                                    FilledTemplate="{StaticResource FilledSegment}"
+                                    EmptyTemplate="{StaticResource EmptySegment}"
+                                    ActiveTemplate="{StaticResource ActiveSegment}" />
+                                </ItemsControl.ItemTemplateSelector>
+                            </ItemsControl>
+                        </StackPanel>
                 </Border>
 
                 <!-- Video List -->

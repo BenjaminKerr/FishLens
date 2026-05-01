@@ -31,7 +31,6 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using System.Collections.ObjectModel;
-using FishLens_App.Helper_Classes;
 
 namespace FishLens_App
 {
@@ -94,7 +93,9 @@ namespace FishLens_App
         private int _suppressTimerTicks = 0;
         private string _playbackTempPath = null; // temp MP4 created from ASF for accurate scrubbing
         private bool _processingComplete = false;
-        public ObservableCollection<bool> Bars { get; } = new ObservableCollection<bool>();
+        public enum VideoProgressState { Empty, Active, Filled }
+        public ObservableCollection<VideoProgressState> Bars { get; } = new ObservableCollection<VideoProgressState>();
+
 
         // Multi-track state - all tracks for the currently displayed video
         private List<FishLens_App.Models.Video> _currentTracks = new List<FishLens_App.Models.Video>();
