@@ -1140,7 +1140,6 @@ namespace FishLens_App
                     lock (_errorBuilder) { error = _errorBuilder.ToString(); _errorBuilder.Clear(); }
                     Dispatcher.Invoke(() =>
                     {
-                        //analysisProgressBar.Value = analysisProgressBar.Maximum;
                         HideAnalysisProgress();
                         DisplayProcessOutputIfNeeded(error);
                     });
@@ -1168,7 +1167,6 @@ namespace FishLens_App
         private void ShowAnalysisProgress()
         {
             analysisProgressArea.Visibility = Visibility.Visible;
-            //analysisProgressBar.Value = 0;
             analysisStatusText.Text = "Starting up, please wait...";
             analysisFrameText.Text = string.Empty;
             App.RaiseAnalysisStateChanged(true);

@@ -1,4 +1,9 @@
-﻿using DocumentFormat.OpenXml.Math;
+﻿// ***************************************************************************************************************************
+// File: User.cs
+// Description: Helper class to create a dynamic row of rectangles as a collective processing bar.
+// Notes: N/A
+// ***************************************************************************************************************************
+using DocumentFormat.OpenXml.Math;
 using Org.BouncyCastle.Security;
 using System;
 using System.Collections.Generic;
@@ -14,8 +19,9 @@ namespace FishLens_App
     {
         // **************************************************
         // Function: Build
-        // Description: Builds a new row of bars.
-        // **************************************************
+        // Description: Builds a new row of bars as a 
+        // collective progress bar.
+        // Notes: N/A
         public List<MainWindow.VideoProgressState> Build(int count, int currentIndex)
         {
             var result = new List<MainWindow.VideoProgressState>();
