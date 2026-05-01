@@ -10,8 +10,37 @@
         Background="{DynamicResource WindowBackground}"
         PreviewKeyDown="Window_PreviewKeyDown">
 
-   
 
+    <Window.Resources>
+
+        <DataTemplate x:Key="FilledSegment">
+            <Rectangle Fill="Green" Stroke="Black" StrokeThickness="0.5" Margin="0.5" Height="10"/>
+        </DataTemplate>
+
+        <DataTemplate x:Key="EmptySegment">
+            <Rectangle Fill="White" Stroke="Black" StrokeThickness="0.5" Margin="0.5" Height="10"/>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ActiveSegment">
+            <Rectangle Fill="#FFCC66" Stroke="Black" StrokeThickness="0.5" Margin="0.5" Height="10">
+                <Rectangle.Triggers>
+                    <EventTrigger RoutedEvent="Loaded">
+                        <BeginStoryboard>
+                            <Storyboard RepeatBehavior="Forever">
+                                <DoubleAnimation
+                                Storyboard.TargetProperty="Opacity"
+                                From="0.4" To="1"
+                                Duration="0:0:0.6"
+                                AutoReverse="True"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </EventTrigger>
+                </Rectangle.Triggers>
+            </Rectangle>
+        </DataTemplate>
+
+    </Window.Resources>
+    
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition x:Name ="SidebarColumn" Width="Auto"/>
@@ -149,24 +178,14 @@ Height="70">
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
 
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Rectangle Margin="0.25" Height="10">
-                                        <Rectangle.Style>
-                                            <Style TargetType="Rectangle">
-                                                <Setter Property="Fill" Value="#444"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding}" Value="True">
-                                                        <Setter Property="Fill" Value="#E8A038"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Rectangle.Style>
-                                    </Rectangle>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
+                            <ItemsControl.ItemTemplateSelector>
+                                <local:VideoProgressSelector
+                                    FilledTemplate="{StaticResource FilledSegment}"
+                                    EmptyTemplate="{StaticResource EmptySegment}"
+                                    ActiveTemplate="{StaticResource ActiveSegment}" />
+                            </ItemsControl.ItemTemplateSelector>
                         </ItemsControl>
-                        
+
                     </StackPanel>
                 </Border>
 
