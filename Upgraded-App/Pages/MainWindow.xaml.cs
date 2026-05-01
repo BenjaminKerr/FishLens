@@ -7,6 +7,7 @@
 // ***********************************
 // **************************************************
 
+using DocumentFormat.OpenXml.Math;
 using FishLens_App.Interfaces;
 using FishLens_App.Models;
 using FishLens_App.Services;
@@ -27,6 +28,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Collections.ObjectModel;
 
 namespace FishLens_App
 {
@@ -93,6 +95,8 @@ namespace FishLens_App
         private List<FishLens_App.Models.Video> _currentTracks = new List<FishLens_App.Models.Video>();
         private int _currentTrackIndex;
 
+        public ObservableCollection<bool> Bars { get; } = new ObservableCollection<bool>();
+
         #endregion
 
         #region Nested Classes
@@ -142,7 +146,7 @@ namespace FishLens_App
             Closed += MainWindow_Closed;
 
            AccountSettingsButton.Visibility = app.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
-        
+            DataContext = this;
         }
 
         // **************************************************
@@ -1060,11 +1064,13 @@ namespace FishLens_App
                     int.TryParse(line.Substring("[PROGRESS] TOTAL:".Length), out int total))
                 {
                     _totalVideos = total;
+
+                    Build(_totalVideos, 0);
                     Dispatcher.Invoke(() =>
                     {
-                        analysisProgressBar.Minimum = 0;
-                        analysisProgressBar.Maximum = total;
-                        analysisProgressBar.Value = 0;
+                        //analysisProgressBar.Minimum = 0;
+                        //analysisProgressBar.Maximum = total;
+                        //analysisProgressBar.Value = 0;
                     });
                 }
                 else if (line.StartsWith("[PROGRESS] VIDEO:"))
@@ -1082,7 +1088,7 @@ namespace FishLens_App
                         {
                             SetAnalysisStatus(_currentVideoStatus);
                             SetAnalysisFrameInfo(string.Empty); // clear frame line between videos
-                            analysisProgressBar.Value = capturedCurrent - 1;
+                            //analysisProgressBar.Value = capturedCurrent - 1;
                         });
                     }
                 }
@@ -1123,7 +1129,7 @@ namespace FishLens_App
                     lock (_errorBuilder) { error = _errorBuilder.ToString(); _errorBuilder.Clear(); }
                     Dispatcher.Invoke(() =>
                     {
-                        analysisProgressBar.Value = analysisProgressBar.Maximum;
+                        //analysisProgressBar.Value = analysisProgressBar.Maximum;
                         HideAnalysisProgress();
                         DisplayProcessOutputIfNeeded(error);
                     });
@@ -1151,7 +1157,7 @@ namespace FishLens_App
         private void ShowAnalysisProgress()
         {
             analysisProgressArea.Visibility = Visibility.Visible;
-            analysisProgressBar.Value = 0;
+            //analysisProgressBar.Value = 0;
             analysisStatusText.Text = "Starting up, please wait...";
             analysisFrameText.Text = string.Empty;
             App.RaiseAnalysisStateChanged(true);
@@ -3137,9 +3143,9 @@ namespace FishLens_App
         // Function: CreateButtonStyle
         // Description: Creates styled button with hover effects and appropriate colors
         // **************************************************
-        private Style CreateButtonStyle(bool isLowConfidence)
+        private System.Windows.Style CreateButtonStyle(bool isLowConfidence)
         {
-            var style = new Style(typeof(Button));
+            var style = new System.Windows.Style(typeof(Button));
 
             SetButtonDefaultAppearance(style, isLowConfidence);
 
@@ -3153,7 +3159,7 @@ namespace FishLens_App
         // Function: SetButtonDefaultAppearance
         // Description: Sets default colors and properties for button
         // **************************************************
-        private void SetButtonDefaultAppearance(Style style, bool isLowConfidence)
+        private void SetButtonDefaultAppearance(System.Windows.Style style, bool isLowConfidence)
         {
             style.Setters.Add(new Setter(Button.BackgroundProperty,
                 isLowConfidence
@@ -3274,6 +3280,21 @@ namespace FishLens_App
         private void MainFrame_Navigated(object sender, System.Windows.Navigation.NavigationEventArgs e)
         {
 
+        }
+
+        // **************************************************
+        // Function: Build
+        // Description: Builds a new row of bars.
+        // **************************************************
+        public void Build(int count, int active)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                Bars.Clear();
+
+                for (int i = 0; i < count; i++)
+                    Bars.Add(i < active);
+            });
         }
     }
 }
