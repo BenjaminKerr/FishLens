@@ -1,0 +1,999 @@
+﻿<Window x:Class="FishLens_App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:FishLens_App"
+        mc:Ignorable="d"
+        Title="FishLens" Height="{x:Static SystemParameters.PrimaryScreenHeight}" Width="{x:Static SystemParameters.PrimaryScreenWidth}"
+        WindowState="Maximized"
+        Background="{DynamicResource WindowBackground}"
+        PreviewKeyDown="Window_PreviewKeyDown">
+
+    <Window.Resources>
+        <local:ProgressWidthConverter x:Key="ProgressWidthConverter"/>
+
+        <Style x:Key="TemplateBar" TargetType="ProgressBar">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+
+                        <Grid Background="#222">
+
+                            <Border x:Name="PART_Indicator"
+                                Background="{TemplateBinding Foreground}"
+                                HorizontalAlignment="Left">
+                                <Border.Width>
+                                    <MultiBinding Converter="{StaticResource ProgressWidthConverter}">
+                                        <Binding Path="Value" RelativeSource="{RelativeSource TemplatedParent}" />
+                                        <Binding Path="Maximum" RelativeSource="{RelativeSource TemplatedParent}" />
+                                        <Binding Path="ActualWidth" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                    </MultiBinding>
+                                </Border.Width>
+                            </Border>
+                        </Grid>
+
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name ="SidebarColumn" Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Frame x:Name="MainFrame" NavigationUIVisibility="Hidden" Grid.Column="1" Panel.ZIndex="1" Navigated="MainFrame_Navigated"/>
+        <!--Sidebar: Media Selector-->
+        <Border x:Name="SideBar" Width="320" Grid.Column="0" Background="{DynamicResource AccentBrush}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource HeaderBackground}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Sidebar Header -->
+                <StackPanel Grid.Row="0" Margin="20,30,20,20">
+                    <Grid x:Name="ButtonGrid" Margin="0" ShowGridLines="False">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="Home" 
+                Background="{x:Null}" 
+                Foreground="{DynamicResource OnAccentForeground}" 
+Grid.Column="0" 
+BorderBrush="Transparent" 
+Click="HomeButtonClick"
+Padding="10"
+Width="70"
+Height="70">
+                            <Viewbox Width="40" Height="40">
+                                <TextBlock Text="&#x1F3E0;" Foreground="{DynamicResource OnAccentForeground}"/>
+                            </Viewbox>
+                        </Button>
+
+                        <Button x:Name="History" 
+                Background="{x:Null}" 
+                Foreground="{DynamicResource OnAccentForeground}" 
+Grid.Column="1" 
+BorderBrush="Transparent" 
+Click="HistoryButtonClick"
+Padding="10"
+Width="70"
+Height="70">
+                            <Viewbox Width="40" Height="40">
+                                <TextBlock Text="&#x1F4DC;" Foreground="{DynamicResource OnAccentForeground}"/>
+                            </Viewbox>
+                        </Button>
+
+                        <Button x:Name="Settings" 
+                Background="{x:Null}" 
+                Foreground="{DynamicResource OnAccentForeground}" 
+Grid.Column="2" 
+BorderBrush="Transparent" 
+Click="SettingsButtonClick"
+Padding="10"
+Width="70"
+Height="70">
+                            <Viewbox Width="40" Height="40">
+                                <TextBlock Text="&#x2699;&#xFE0F;" Foreground="{DynamicResource OnAccentForeground}"/>
+                            </Viewbox>
+                        </Button>
+                        <Button x:Name="AccountSettingsButton" 
+            Background="{x:Null}" 
+            Foreground="{DynamicResource OnAccentForeground}" 
+            Grid.Column="3" 
+            BorderBrush="Transparent" 
+            Click="AccountSettingsButtonClick"
+            Visibility="Collapsed"
+            Padding="10" Width="70" Height="70"
+            ToolTip="Account Settings">
+                            <Viewbox Width="40" Height="40">
+                                <TextBlock Text="👤" Foreground="{DynamicResource OnAccentForeground}"/>
+                            </Viewbox>
+                        </Button>
+
+                    </Grid>
+                    <Rectangle x:Name="sidebarSeperator" Height="2" Fill="{DynamicResource HoverBackgroundBrush}" Margin="0,10,0,10"/>
+                    <TextBlock Text="Video Library" 
+                               x:Name="videoLibraryTitle"
+                       FontSize="{DynamicResource HeaderFontSize}"
+                       FontWeight="SemiBold" 
+                       Foreground="{DynamicResource OnAccentForeground}"
+                       HorizontalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Inline Analysis Progress (shown only during analysis) -->
+                <Border x:Name="analysisProgressArea"
+                        Grid.Row="1"
+                        Visibility="Collapsed"
+                        Background="{DynamicResource HeaderBackground}"
+                        CornerRadius="6"
+                        Margin="10,0,10,8"
+                        Padding="12,10">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="analysisStatusText"
+                                       Grid.Column="0"
+                                       Text="Analyzing..."
+                                       Foreground="{DynamicResource OnAccentForeground}"
+                                       FontSize="12"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center"/>
+                            <Button x:Name="inlineCancelButton"
+                                    Grid.Column="1"
+                                    Content="&#x2715; Cancel"
+                                    Click="InlineCancelClick"
+                                    Background="Transparent"
+                                    Foreground="{DynamicResource OnAccentForeground}"
+                                    BorderThickness="0"
+                                    FontSize="11"
+                                    Padding="6,2"
+                                    Cursor="Hand"
+                                    Margin="8,0,0,0"/>
+                        </Grid>
+                        <TextBlock x:Name="analysisFrameText"
+                                   Text=""
+                                   Foreground="{DynamicResource OnAccentForeground}"
+                                   FontSize="11"
+                                   Opacity="0.75"
+                                   Margin="0,0,0,6"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <ProgressBar Style="{StaticResource TemplateBar}"
+                                     x:Name="analysisProgressBar"
+                                     Height="6"
+                                     Minimum="0"
+                                     Maximum="100"
+                                     Value="0"
+                                     Background="{DynamicResource CardBackground}"
+                                     Foreground="#E8A038"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Video List -->
+                <ScrollViewer Grid.Row="2"
+                      VerticalScrollBarVisibility="Auto"
+                      Margin="10,0,10,20">
+                    <StackPanel x:Name="videoList" Margin="10,0"/>
+                </ScrollViewer>
+
+                <!-- Delete + Undo Buttons -->
+                <StackPanel Grid.Row="3" Orientation="Vertical" Margin="20,0,20,20">
+                    <Button x:Name="deleteSelectedVideos"
+                            Style="{StaticResource AccentActionButton}"
+                            Click="DeleteSelectedVideosClick"
+                            IsEnabled="False"
+                            Margin="0,0,0,8">
+                        Delete Selected Videos
+                    </Button>
+
+                    <Button x:Name="changeLocationForSelected"
+                            Style="{StaticResource NeutralActionButton}"
+                            Click="ChangeLocationForSelectedClick"
+                            IsEnabled="False"
+                            Margin="0,0,0,8">
+                        Change Location for Selected
+                    </Button>
+
+                    <Button x:Name="undoLastDelete"
+                            Style="{StaticResource NeutralActionButton}"
+                            Click="UndoLastDeleteClick"
+                            IsEnabled="False">
+                        Undo Last Delete
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!--Main Content: File Upload + Media Viewer-->
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header Section -->
+            <Grid Grid.Row="0" Margin="40,30,40,20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Name="Title" 
+                               FontSize="{DynamicResource TitleFontSize}"
+                               FontFamily="Georgia" 
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource PrimaryText}">
+                        FishLens
+                    </TextBlock>
+                </StackPanel>
+
+                <!-- Location Selector -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,15,0">
+                    <TextBlock Text="Location:" 
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <ComboBox x:Name="locationDropdown"
+                              Width="160"
+                              Height="36"
+                              FontSize="{DynamicResource BaseFontSize}"
+                              VerticalContentAlignment="Center"
+                              SelectionChanged="LocationDropdown_SelectionChanged"/>
+                </StackPanel>
+
+                <!-- Run Indicator (read-only) -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,15,0">
+                    <TextBlock Text="Run:" 
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <TextBlock x:Name="runDisplayLabel"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource PrimaryText}"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Text="No run selected"/>
+                </StackPanel>
+
+                <!-- Export Button (initially hidden) -->
+                <Button Name="exportData" 
+                        Grid.Column="3"
+                        Click="ExportDataClick" 
+                        VerticalAlignment="Center"
+                        Padding="20,12" 
+                        Background="{DynamicResource AccentBrush}" 
+                        Foreground="{DynamicResource OnAccentForeground}"
+                        FontSize="{DynamicResource BaseFontSize}"
+                        FontWeight="Medium"
+                        BorderThickness="0"
+                        Cursor="Hand"
+                        Margin="0,0,15,0"
+                        Visibility="Collapsed">
+                    <Button.Effect>
+                        <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.3"/>
+                    </Button.Effect>
+                    <Button.Resources>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" 
+                                    CornerRadius="6"
+                                    Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Resources>
+                    &#x1F4CA; Export Data to Excel
+                </Button>
+
+                <Button Name="openFolder"
+                    Grid.Column="4"
+                    Click="OpenFolderClick" 
+                    VerticalAlignment="Center"
+                    Padding="20,12" 
+                    Background="{DynamicResource AccentBrush}" 
+                    Foreground="{DynamicResource OnAccentForeground}"
+                    FontSize="{DynamicResource BaseFontSize}"
+                    FontWeight="Medium"
+                    BorderThickness="0"
+                    Cursor="Hand">
+                    <Button.Effect>
+                        <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.3"/>
+                    </Button.Effect>
+                    <Button.Resources>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" 
+                                                CornerRadius="6"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Resources>
+                    &#x1F4C1; Choose Video Folder
+                </Button>
+                <Button Name="SignOutButton"
+        Grid.Column="5"
+        Click="SignOutButtonClick"
+        VerticalAlignment="Center"
+        Padding="30,12"
+        Margin="20,0,0,0"
+        Background="{DynamicResource HeaderBackground}"
+        Foreground="{DynamicResource OnAccentForeground}"
+        FontSize="{DynamicResource BaseFontSize}"
+        FontWeight="SemiBold"
+        BorderThickness="0"
+        Cursor="Hand">
+
+                    <Button.Effect>
+                        <DropShadowEffect BlurRadius="10"
+                          ShadowDepth="2"
+                          Opacity="0.35"/>
+                    </Button.Effect>
+
+                     Sign Out
+                </Button>
+            </Grid>
+
+            <!-- Video Player and Analysis Panel Side by Side -->
+            <Grid Grid.Row="1" Margin="40,0,40,40">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*"/>
+                    <ColumnDefinition Width="0.65*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Video Player Section -->
+                <Border Grid.Column="0"
+                        Margin="0,0,10,0"
+                        Background="{DynamicResource CardBackground}"
+                        CornerRadius="12"
+                        BorderThickness="1"
+                        BorderBrush="{DynamicResource BorderBrush}">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.15"/>
+                    </Border.Effect>
+
+                    <!-- 4-row layout: top spacer | video | controls | bottom spacer
+                         Video group lands at ~upper-third of the full-height card. -->
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="1*"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="2*"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Controls bar (Row 2) sits immediately below the video area -->
+                        <StackPanel Grid.Row="2" Margin="16,0,16,14" Visibility="Collapsed" x:Name="videoControls">
+
+                            <!-- Scrub row: current time | slider | total time -->
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock x:Name="videoCurrentTimeText"
+                                           Grid.Column="0"
+                                           Text="0:00"
+                                           FontSize="{DynamicResource BaseFontSize}"
+                                           Foreground="{DynamicResource SecondaryText}"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"/>
+
+                                <Grid Grid.Column="1">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Row 0: Fish emoji markers - drawn dynamically from C# per track -->
+                                    <Canvas x:Name="fishEmojiCanvas"
+                                            Grid.Row="0"
+                                            Height="18"
+                                            IsHitTestVisible="False"
+                                            HorizontalAlignment="Stretch"/>
+
+                                    <!-- Row 1: Slider with full ControlTemplate.
+                                         Child order = Z-order: track bg -> range bars canvas -> circular thumb -->
+                                    <Slider x:Name="videoScrubber"
+                                            Grid.Row="1"
+                                            Minimum="0" Maximum="1" Value="0"
+                                            SmallChange="0.01" LargeChange="0.05"
+                                            VerticalAlignment="Center"
+                                            ValueChanged="VideoScrubber_ValueChanged"
+                                            PreviewMouseDown="VideoScrubber_PreviewMouseDown"
+                                            PreviewMouseMove="VideoScrubber_PreviewMouseMove"
+                                            PreviewMouseUp="VideoScrubber_PreviewMouseUp">
+                                        <Slider.Template>
+                                            <ControlTemplate TargetType="Slider">
+                                                <Grid>
+                                                    <!-- 1: Gray track background (bottom of stack) -->
+                                                    <Border Height="4" CornerRadius="2"
+                                                            Background="#DDE3E8"
+                                                            HorizontalAlignment="Stretch"
+                                                            VerticalAlignment="Center"/>
+                                                    <!-- 2: Fish range bars canvas - populated dynamically from C# -->
+                                                    <Canvas Name="fishMarkersCanvas"
+                                                            IsHitTestVisible="False"
+                                                            HorizontalAlignment="Stretch"
+                                                            VerticalAlignment="Center"
+                                                            Height="4"/>
+                                                    <!-- 3: Track with circular thumb (top of stack) -->
+                                                    <Track Name="PART_Track" VerticalAlignment="Center">
+                                                        <Track.DecreaseRepeatButton>
+                                                            <RepeatButton Focusable="False">
+                                                                <RepeatButton.Template>
+                                                                    <ControlTemplate TargetType="RepeatButton">
+                                                                        <Border Background="Transparent"/>
+                                                                    </ControlTemplate>
+                                                                </RepeatButton.Template>
+                                                            </RepeatButton>
+                                                        </Track.DecreaseRepeatButton>
+                                                        <Track.IncreaseRepeatButton>
+                                                            <RepeatButton Focusable="False">
+                                                                <RepeatButton.Template>
+                                                                    <ControlTemplate TargetType="RepeatButton">
+                                                                        <Border Background="Transparent"/>
+                                                                    </ControlTemplate>
+                                                                </RepeatButton.Template>
+                                                            </RepeatButton>
+                                                        </Track.IncreaseRepeatButton>
+                                                        <Track.Thumb>
+                                                            <Thumb>
+                                                                <Thumb.Template>
+                                                                    <ControlTemplate TargetType="Thumb">
+                                                                        <Ellipse Width="14" Height="14"
+                                                                                 Fill="{DynamicResource AccentBrush}"
+                                                                                 Stroke="White"
+                                                                                 StrokeThickness="2">
+                                                                            <Ellipse.Effect>
+                                                                                <DropShadowEffect BlurRadius="4"
+                                                                                                  ShadowDepth="1"
+                                                                                                  Opacity="0.4"/>
+                                                                            </Ellipse.Effect>
+                                                                        </Ellipse>
+                                                                    </ControlTemplate>
+                                                                </Thumb.Template>
+                                                            </Thumb>
+                                                        </Track.Thumb>
+                                                    </Track>
+                                                </Grid>
+                                            </ControlTemplate>
+                                        </Slider.Template>
+                                    </Slider>
+                                </Grid>
+
+                                <TextBlock x:Name="videoTotalTimeText"
+                                           Grid.Column="2"
+                                           Text="0:00"
+                                           FontSize="{DynamicResource BaseFontSize}"
+                                           Foreground="{DynamicResource SecondaryText}"
+                                           VerticalAlignment="Center"
+                                           Margin="8,0,0,0"/>
+                            </Grid>
+
+                            <!-- Transport controls: prev-fish | skip-back | play/pause | skip-forward | next-fish -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,0">
+
+                                <!-- Jump to previous fish track -->
+                                <Button x:Name="prevFishButton"
+                                        Content="&#x1F41F;&#x25C0;"
+                                        FontSize="12"
+                                        Width="36" Height="36"
+                                        Background="{DynamicResource AccentBrush}"
+                                        Foreground="{DynamicResource OnAccentForeground}"
+                                        BorderThickness="0"
+                                        Cursor="Hand"
+                                        Margin="0,0,6,0"
+                                        Visibility="Collapsed"
+                                        Click="PrevFishButton_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="border"
+                                                    Background="{TemplateBinding Background}"
+                                                    CornerRadius="18"
+                                                    Width="36" Height="36">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource HeaderBackground}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+
+                                <!-- Skip back 1 second -->
+                                <Button x:Name="skipBackButton"
+                                        Content="&#x23EA;"
+                                        FontSize="14"
+                                        Width="36" Height="36"
+                                        Background="{DynamicResource AccentBrush}"
+                                        Foreground="{DynamicResource OnAccentForeground}"
+                                        BorderThickness="0"
+                                        Cursor="Hand"
+                                        Margin="0,0,10,0"
+                                        Click="SkipBackButton_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="border"
+                                                    Background="{TemplateBinding Background}"
+                                                    CornerRadius="18"
+                                                    Width="36" Height="36">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="Background"
+                                                            Value="{DynamicResource HoverBackgroundBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="border" Property="Background"
+                                                            Value="{DynamicResource HeaderBackground}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+
+                                <!-- Play/Pause -->
+                                <Button x:Name="playPauseButton"
+                                        Content="&#x25B6;"
+                                        FontSize="16"
+                                        Width="44" Height="44"
+                                        Background="{DynamicResource AccentBrush}"
+                                        Foreground="{DynamicResource OnAccentForeground}"
+                                        BorderThickness="0"
+                                        Cursor="Hand"
+                                        Click="PlayPauseButton_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="border"
+                                                    Background="{TemplateBinding Background}"
+                                                    CornerRadius="22"
+                                                    Width="44" Height="44">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="Background"
+                                                            Value="{DynamicResource HoverBackgroundBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="border" Property="Background"
+                                                            Value="{DynamicResource HeaderBackground}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+
+                                <!-- Skip forward 1 second -->
+                                <Button x:Name="skipForwardButton"
+                                        Content="&#x23E9;"
+                                        FontSize="14"
+                                        Width="36" Height="36"
+                                        Background="{DynamicResource AccentBrush}"
+                                        Foreground="{DynamicResource OnAccentForeground}"
+                                        BorderThickness="0"
+                                        Cursor="Hand"
+                                        Margin="10,0,0,0"
+                                        Click="SkipForwardButton_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="border"
+                                                    Background="{TemplateBinding Background}"
+                                                    CornerRadius="18"
+                                                    Width="36" Height="36">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="Background"
+                                                            Value="{DynamicResource HoverBackgroundBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="border" Property="Background"
+                                                            Value="{DynamicResource HeaderBackground}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+
+                                <!-- Jump to next fish track -->
+                                <Button x:Name="nextFishButton"
+                                        Content="&#x25B6;&#x1F41F;"
+                                        FontSize="12"
+                                        Width="36" Height="36"
+                                        Background="{DynamicResource AccentBrush}"
+                                        Foreground="{DynamicResource OnAccentForeground}"
+                                        BorderThickness="0"
+                                        Cursor="Hand"
+                                        Margin="6,0,0,0"
+                                        Visibility="Collapsed"
+                                        Click="NextFishButton_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="border"
+                                                    Background="{TemplateBinding Background}"
+                                                    CornerRadius="18"
+                                                    Width="36" Height="36">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource HeaderBackground}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Video area (Row 1) - auto-sizes by video aspect ratio, capped at MaxHeight -->
+                        <Grid Grid.Row="1" MinHeight="200" MaxHeight="520">
+                            <!-- Placeholder when no video selected -->
+                            <StackPanel x:Name="placeholderPanel"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="&#x1F3AC;"
+                                           FontSize="{DynamicResource LargeTitleFontSize}"
+                                           HorizontalAlignment="Center"
+                                           Opacity="0.3"/>
+                                <TextBlock Text="Select a video from the library"
+                                           FontSize="{DynamicResource LargeFontSize}"
+                                           Foreground="{DynamicResource SecondaryText}"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,20,0,0"/>
+                            </StackPanel>
+
+                            <!-- Video Player -->
+                            <MediaElement Name="videoPlayer"
+                                          LoadedBehavior="Manual"
+                                          Stretch="Uniform"
+                                          Margin="20,20,20,8"
+                                          MediaOpened="VideoPlayer_MediaOpened"
+                                          MediaEnded="VideoPlayer_MediaEnded"/>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <!-- Data Display Section -->
+                <Grid Grid.Column="1" Margin="10,0,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="4.7*"/>
+                        <RowDefinition Height="1.25*"/>
+                    </Grid.RowDefinitions>
+                    <!-- Per-Video Analysis Panel -->
+                    <Border Grid.Row="0"
+                            Background="{DynamicResource CardBackground}"
+                            CornerRadius="12"
+                            BorderThickness="1"
+                            BorderBrush="{DynamicResource BorderBrush}">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.15"/>
+                    </Border.Effect>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="dataPanel" Margin="30">
+                            <TextBlock Text="Analysis" 
+                                       FontSize="{DynamicResource HeaderFontSize}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource PrimaryText}"
+                                       Margin="0,0,0,8"/>
+
+                            <!-- Track Navigator - hidden when video has only one track -->
+                            <Border x:Name="trackNavigator"
+                                    Visibility="Collapsed"
+                                    Background="{DynamicResource CardBackground}"
+                                    CornerRadius="6"
+                                    Padding="8,6"
+                                    Margin="0,0,0,12">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="trackPrevButton"
+                                            Grid.Column="0"
+                                            Content="&#x25C0;"
+                                            Click="TrackPrevClick"
+                                            FontSize="13"
+                                            Padding="8,4"
+                                            BorderThickness="0"
+                                            Cursor="Hand"
+                                            Background="Transparent"
+                                            Foreground="{DynamicResource PrimaryText}"/>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <TextBlock x:Name="trackLabel"
+                                                   Text="Fish 1 / 1"
+                                                   FontSize="{DynamicResource BaseFontSize}"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource PrimaryText}"
+                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock x:Name="trackVideoLabel"
+                                                   Text=""
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource SecondaryText}"
+                                                   HorizontalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   MaxWidth="160"/>
+                                    </StackPanel>
+                                    <Button x:Name="trackNextButton"
+                                            Grid.Column="2"
+                                            Content="&#x25B6;"
+                                            Click="TrackNextClick"
+                                            FontSize="13"
+                                            Padding="8,4"
+                                            BorderThickness="0"
+                                            Cursor="Hand"
+                                            Background="Transparent"
+                                            Foreground="{DynamicResource PrimaryText}"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- Video Info - Small and Gray -->
+                            <StackPanel Margin="0,0,0,20">
+                                <TextBlock x:Name="videoName" 
+                                           Text="--" 
+                                           FontSize="{DynamicResource BaseFontSize}"
+                                           Foreground="{DynamicResource SecondaryText}"
+                                           Margin="0,0,0,5"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock x:Name="videoLocation"
+                                           Text="--"
+                                           FontSize="{DynamicResource BaseFontSize}"
+                                           Foreground="{DynamicResource SecondaryText}"
+                                           Margin="0,0,0,5"/>
+                                <TextBlock x:Name="videoDateTime" 
+                                           Text="--" 
+                                           FontSize="{DynamicResource BaseFontSize}"
+                                           Foreground="{DynamicResource SecondaryText}"/>
+                            </StackPanel>
+
+                            <!-- Fish Present -->
+                            <StackPanel Margin="0,0,0,20">
+                                <TextBlock Text="Fish Present" 
+                                           FontSize="{DynamicResource LargeFontSize}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource PrimaryText}"
+                                           Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock Text="Status: " 
+                                               FontSize="{DynamicResource BaseFontSize}"
+                                               Foreground="{DynamicResource SecondaryText}"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,8,0"/>
+                                        <ComboBox x:Name="fishPresentStatus" 
+                                              FontSize="{DynamicResource BaseFontSize}"
+                                              FontWeight="Medium"
+                                              Foreground="{DynamicResource PrimaryText}"
+                                              BorderBrush="{DynamicResource BorderBrush}"
+                                              BorderThickness="1"
+                                              Padding="8,4"
+                                              MinWidth="120"
+                                              IsEnabled="False">
+                                            <ComboBoxItem Content="Present"/>
+                                        <ComboBoxItem Content="Not Present"/>
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock Text="Confidence: " 
+                                               FontSize="{DynamicResource BaseFontSize}"
+                                               Foreground="{DynamicResource SecondaryText}"
+                                               Margin="0,0,8,0"/>
+                                    <TextBox x:Name="fishPresentConfidence" 
+                                             Text="--" 
+                                             FontSize="{DynamicResource BaseFontSize}"
+                                             FontWeight="Medium"
+                                             Foreground="{DynamicResource PrimaryText}"
+                                             BorderBrush="{DynamicResource BorderBrush}"
+                                             BorderThickness="1"
+                                             Padding="8,4"
+                                             Width="80"
+                                             IsEnabled="False"
+                                             />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Direction of Travel -->
+                            <StackPanel Margin="0,0,0,20">
+                                <TextBlock Text="Direction of Travel" 
+                                           FontSize="{DynamicResource LargeFontSize}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource PrimaryText}"
+                                           Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Direction: " 
+                                               FontSize="{DynamicResource BaseFontSize}"
+                                               Foreground="{DynamicResource SecondaryText}"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,8,0">
+                                    <ComboBox x:Name="fishTravelDirection" 
+                                              FontSize="{DynamicResource BaseFontSize}"
+                                              FontWeight="Medium"
+                                              Foreground="{DynamicResource PrimaryText}"
+                                              BorderBrush="{DynamicResource BorderBrush}"
+                                              BorderThickness="1"
+                                              Padding="8,4"
+                                              MinWidth="120"
+                                              IsEnabled="False">
+                                        <ComboBoxItem Content="Upstream"/>
+                                        <ComboBoxItem Content="Downstream"/>
+                                        <ComboBoxItem Content="Indecisive"/>
+                                    </ComboBox>
+                                    </TextBlock>
+                                    </StackPanel>
+                            </StackPanel>
+
+                            <!-- Fish Species -->
+                            <StackPanel Margin="0,0,0,20">
+                                <TextBlock Text="Fish Species" 
+                                           FontSize="{DynamicResource LargeFontSize}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource PrimaryText}"
+                                           Margin="0,0,0,8"/>
+                                <StackPanel Margin="0,0,0,8"
+                                            Orientation="Horizontal">
+                                    <TextBlock Text="Species: " 
+                                               FontSize="{DynamicResource BaseFontSize}"
+                                               Foreground="{DynamicResource SecondaryText}"
+                                               Margin="0,0,0,4"/>
+                                        <ComboBox x:Name="fishSpecies" 
+                                              FontSize="{DynamicResource BaseFontSize}"
+                                              FontWeight="Medium"
+                                              Foreground="{DynamicResource PrimaryText}"
+                                              BorderBrush="{DynamicResource BorderBrush}"
+                                              BorderThickness="1"
+                                              Padding="8,4"
+                                              MinWidth="120"
+                                              IsEnabled="False">
+                                            <System:String xmlns:System="clr-namespace:System;assembly=netstandard">Chinook</System:String>
+                                        <System:String xmlns:System="clr-namespace:System;assembly=netstandard">Omykiss</System:String>
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock Text="Confidence: " 
+                                               FontSize="{DynamicResource BaseFontSize}"
+                                               Foreground="{DynamicResource SecondaryText}"
+                                               Margin="0,0,8,0"/>
+                                    <TextBox x:Name="fishSpeciesConfidence" 
+                                             Text="--" 
+                                             FontSize="{DynamicResource BaseFontSize}"
+                                             FontWeight="Medium"
+                                             Foreground="{DynamicResource PrimaryText}"
+                                             BorderBrush="{DynamicResource BorderBrush}"
+                                             BorderThickness="1"
+                                             Padding="8,4"
+                                             Width="80"
+                                             IsEnabled="False"
+                                             />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Save Button -->
+                            <Button x:Name="saveButton" 
+                                    Content="Save Changes" 
+                                    Click="SaveButtonClick"
+                                    Background="{DynamicResource HeaderBackground}"
+                                    Foreground="{DynamicResource OnAccentForeground}"
+                                    FontSize="{DynamicResource BaseFontSize}"
+                                    FontWeight="SemiBold"
+                                    Padding="20,10"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    HorizontalAlignment="Stretch"
+                                    Margin="0,0,0,20"
+                                    IsEnabled="False">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            CornerRadius="6"
+                                                            Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="Center"
+                                                                          VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </StackPanel>
+                    </ScrollViewer>
+                    </Border>
+
+                    <!-- Session Overview Box -->
+                    <Border Grid.Row="1" Margin="0,10,0,0"
+                            Background="{DynamicResource HoverBackgroundBrush}"
+                            CornerRadius="12">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.15"/>
+                        </Border.Effect>
+                        <StackPanel Margin="20,16">
+                            <TextBlock Text="Session Overview"
+                                       FontSize="{DynamicResource HeaderFontSize}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource OnAccentForeground}"
+                                       Margin="0,0,0,10"/>
+                            <TextBlock x:Name="sessionRunText"
+                                       Text="Run: --"
+                                       FontSize="{DynamicResource BaseFontSize}"
+                                       Foreground="{DynamicResource OnAccentForeground}"
+                                       Margin="0,0,0,6"/>
+                            <TextBlock x:Name="sessionLocationText"
+                                       Text="Location: --"
+                                       FontSize="{DynamicResource BaseFontSize}"
+                                       Foreground="{DynamicResource OnAccentForeground}"
+                                       Margin="0,0,0,6"/>
+                            <TextBlock x:Name="sessionNetUpstreamText"
+                                       Text="Net Upstream: --"
+                                       FontSize="{DynamicResource BaseFontSize}"
+                                       Foreground="{DynamicResource OnAccentForeground}"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

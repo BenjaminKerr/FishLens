@@ -1,0 +1,397 @@
+<Page x:Class="FishLens_App.Settings"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="Settings"
+      Background="{DynamicResource WindowBackground}">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                Background="{DynamicResource HeaderBackground}"
+                Padding="30,20">
+            <TextBlock Text="Settings"
+                       FontSize="{DynamicResource LargeHeaderFontSize}"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource OnAccentForeground}"/>
+        </Border>
+
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      CanContentScroll="False"
+                      Padding="30"
+                      PreviewMouseWheel="ScrollViewer_PreviewMouseWheel">
+            <StackPanel MaxWidth="800"
+                        HorizontalAlignment="Center">
+
+                <Border x:Name="analysisWarningBanner"
+                        Background="#FFF3E0"
+                        BorderBrush="#FF9800"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16,12"
+                        Margin="0,0,0,20"
+                        Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x26A0;"
+                                   FontSize="16"
+                                   Foreground="#E65100"
+                                   Margin="0,0,8,0"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="Analysis is currently running. Run, location, and settings changes are locked until the analysis completes or is cancelled."
+                                   FontSize="13"
+                                   Foreground="#E65100"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock x:Name="AnalysisHeader"
+                           Text="Analysis"
+                           FontSize="{DynamicResource LargeHeaderFontSize}"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource PrimaryText}"
+                           Margin="0,0,0,15"/>
+
+                <Border x:Name="AnalysisCard"
+                        Background="{DynamicResource CardBackground}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="20"
+                        Margin="0,0,0,30">
+                    <StackPanel>
+                        <TextBlock Text="Low-Confidence Highlight Threshold"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PrimaryText}"
+                                   Margin="0,0,0,8"/>
+
+                        <TextBlock Text="Detections below this percent stay populated, but they get the red low-confidence tint in the video library."
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   Foreground="{DynamicResource SecondaryText}"
+                                   Margin="0,0,0,10"
+                                   TextWrapping="Wrap"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Slider x:Name="confidenceThreshold"
+                                    Grid.Column="0"
+                                    Minimum="0"
+                                    Maximum="100"
+                                    Value="75"
+                                    TickFrequency="1"
+                                    IsSnapToTickEnabled="True"
+                                    IsMoveToPointEnabled="True"
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,15,0"
+                                    SmallChange="1"
+                                    LargeChange="5"
+                                    ValueChanged="ConfidenceThreshold_ValueChanged"/>
+
+                            <TextBox x:Name="confidenceValueBox"
+                                     Grid.Column="1"
+                                     Width="56"
+                                     Padding="8,4"
+                                     FontSize="{DynamicResource BaseFontSize}"
+                                     FontWeight="SemiBold"
+                                     Background="{DynamicResource CardBackground}"
+                                     Foreground="{DynamicResource PrimaryText}"
+                                     BorderBrush="{DynamicResource BorderBrush}"
+                                     HorizontalContentAlignment="Center"
+                                     VerticalContentAlignment="Center"
+                                     VerticalAlignment="Center"
+                                     LostFocus="ConfidenceValueBox_LostFocus"
+                                     KeyDown="ConfidenceValueBox_KeyDown"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock x:Name="RunSetupText"
+                           Text="Run Setup"
+                           FontSize="{DynamicResource LargeHeaderFontSize}"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource PrimaryText}"
+                           Margin="0,0,0,15"/>
+
+                <Border x:Name="RunSetupCard"
+                        Background="{DynamicResource CardBackground}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="20"
+                        Margin="0,0,0,30">
+                    <StackPanel>
+                        <TextBlock Text="Create and manage seasonal monitoring runs. Each run stores its own fish and no-fish records."
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   Foreground="{DynamicResource SecondaryText}"
+                                   Margin="0,0,0,15"
+                                   TextWrapping="Wrap"/>
+
+                        <TextBlock Text="Active Run"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PrimaryText}"
+                                   Margin="0,0,0,6"/>
+
+                        <Grid Margin="0,0,0,15">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <ComboBox x:Name="activeRunDropdown"
+                                      Grid.Column="0"
+                                      Height="36"
+                                      Padding="8"
+                                      FontSize="{DynamicResource BaseFontSize}"
+                                      Margin="0,0,10,0"
+                                      SelectionChanged="ActiveRunDropdown_SelectionChanged"/>
+
+                            <Button Grid.Column="1"
+                                    Content="Set Active"
+                                    Height="36"
+                                    Padding="14,0"
+                                    FontSize="{DynamicResource BaseFontSize}"
+                                    Background="{DynamicResource HeaderBackground}"
+                                    Foreground="{DynamicResource OnAccentForeground}"
+                                    BorderThickness="0"
+                                    Margin="0,0,8,0"
+                                    Click="SetActiveRun_Click"/>
+
+                            <Button Grid.Column="2"
+                                    Content="End Run"
+                                    Height="36"
+                                    Padding="14,0"
+                                    FontSize="{DynamicResource BaseFontSize}"
+                                    Background="#C62828"
+                                    Foreground="White"
+                                    BorderThickness="0"
+                                    Click="EndRun_Click"/>
+                        </Grid>
+
+                        <TextBlock x:Name="runStatusText"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   Foreground="{DynamicResource SecondaryText}"
+                                   Margin="0,0,0,15"
+                                   TextWrapping="Wrap"/>
+
+                        <TextBlock Text="Create New Run"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PrimaryText}"
+                                   Margin="0,0,0,8"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox x:Name="newRunNameBox"
+                                     Grid.Column="0"
+                                     Height="36"
+                                     Padding="8"
+                                     FontSize="{DynamicResource BaseFontSize}"
+                                     Margin="0,0,10,0"
+                                     VerticalContentAlignment="Center"
+                                     ToolTip="e.g. Spring 2026"/>
+
+                            <Button Grid.Column="1"
+                                    Content="Create Run"
+                                    Height="36"
+                                    Padding="14,0"
+                                    FontSize="{DynamicResource BaseFontSize}"
+                                    Background="{DynamicResource HeaderBackground}"
+                                    Foreground="{DynamicResource OnAccentForeground}"
+                                    BorderThickness="0"
+                                    Click="CreateRun_Click"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock x:Name="LocationsText"
+                           Text="Locations"
+                           FontSize="{DynamicResource LargeHeaderFontSize}"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource PrimaryText}"
+                           Margin="0,0,0,15"/>
+
+                <Border x:Name="LocationsCard"
+                        Background="{DynamicResource CardBackground}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="20"
+                        Margin="0,0,0,30">
+                    <StackPanel>
+                        <TextBlock Text="Manage named monitoring locations and their upstream direction."
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   Foreground="{DynamicResource SecondaryText}"
+                                   Margin="0,0,0,15"
+                                   TextWrapping="Wrap"/>
+
+                        <StackPanel x:Name="locationsListPanel"
+                                    Margin="0,0,0,15"/>
+
+                        <TextBlock Text="Add New Location"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PrimaryText}"
+                                   Margin="0,0,0,8"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox x:Name="newLocationName"
+                                     Grid.Column="0"
+                                     Height="36"
+                                     Padding="8"
+                                     FontSize="{DynamicResource BaseFontSize}"
+                                     Margin="0,0,10,0"
+                                     VerticalContentAlignment="Center"/>
+
+                            <ComboBox x:Name="newLocationDirection"
+                                      Grid.Column="1"
+                                      Height="36"
+                                      Margin="0,0,10,0"
+                                      FontSize="{DynamicResource BaseFontSize}"
+                                      SelectedIndex="0">
+                                <ComboBoxItem Content="Upstream: Left"/>
+                                <ComboBoxItem Content="Upstream: Right"/>
+                            </ComboBox>
+
+                            <Button Grid.Column="2"
+                                    Content="Add Location"
+                                    Height="36"
+                                    Padding="14,0"
+                                    FontSize="{DynamicResource BaseFontSize}"
+                                    Background="{DynamicResource HeaderBackground}"
+                                    Foreground="{DynamicResource OnAccentForeground}"
+                                    BorderThickness="0"
+                                    Click="AddLocation_Click"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Performance"
+                           FontSize="{DynamicResource LargeHeaderFontSize}"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource PrimaryText}"
+                           Margin="0,0,0,15"/>
+
+                <Border Background="{DynamicResource CardBackground}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="20"
+                        Margin="0,0,0,30">
+                    <StackPanel>
+                        <CheckBox x:Name="enableFastMode"
+                                  Content="Enable Fast Mode"
+                                  FontSize="{DynamicResource BaseFontSize}"
+                                  Foreground="{DynamicResource PrimaryText}"
+                                  Margin="0,0,0,8"
+                                  Click="ToggleFastMode"/>
+
+                        <TextBlock Text="Process every other frame and use a lower YOLO resolution. This speeds up analysis but may reduce accuracy."
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   Foreground="{DynamicResource SecondaryText}"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Accessibility"
+                           FontSize="{DynamicResource LargeHeaderFontSize}"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource PrimaryText}"
+                           Margin="0,0,0,15"/>
+
+                <Border Background="{DynamicResource CardBackground}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="20"
+                        Margin="0,0,0,30">
+                    <StackPanel>
+                        <CheckBox x:Name="highContrastMode"
+                                  Content="High contrast mode"
+                                  FontSize="{DynamicResource BaseFontSize}"
+                                  Foreground="{DynamicResource PrimaryText}"
+                                  Margin="0,0,0,15"
+                                  Click="SettingsControl_Changed"/>
+
+                        <CheckBox x:Name="largeText"
+                                  Content="Use larger text throughout the application"
+                                  FontSize="{DynamicResource BaseFontSize}"
+                                  Foreground="{DynamicResource PrimaryText}"
+                                  Margin="0,0,0,15"
+                                  Click="SettingsControl_Changed"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="2"
+                Background="{DynamicResource CardBackground}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,1,0,0"
+                Padding="30,20">
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right">
+                <TextBlock x:Name="saveStatusText"
+                           Visibility="Collapsed"
+                           FontSize="{DynamicResource BaseFontSize}"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           Margin="0,0,16,0"/>
+
+                <Button x:Name="saveSettingsButton"
+                        Content="Save Settings"
+                        Click="SaveSettings_Click"
+                        Background="{DynamicResource HeaderBackground}"
+                        Foreground="{DynamicResource OnAccentForeground}"
+                        FontSize="{DynamicResource BaseFontSize}"
+                        FontWeight="SemiBold"
+                        Padding="20,10"
+                        BorderThickness="0"
+                        Cursor="Hand">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}"
+                                                CornerRadius="6"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Opacity" Value="0.8"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Page>

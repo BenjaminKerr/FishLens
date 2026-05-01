@@ -1,0 +1,648 @@
+﻿<Window x:Class="FishLens_App.AuthWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:FishLens_App"
+        mc:Ignorable="d"
+        Title="FishLens"
+        Width="1000" Height="700"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        WindowState="Maximized"
+        Background="#0D3640">
+
+    <Window.Resources>
+
+        <!-- ── Rounded button (replaces every inline ControlTemplate) ── -->
+        <Style x:Key="RoundedButton" TargetType="Button">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="0.85"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- ── Clickable link text (hover fade) ── -->
+        <Style x:Key="LinkText" TargetType="TextBlock">
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="0.7"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ═══════════════════════════════════════════════════ -->
+        <!--  HEADER  (shared)                                   -->
+        <!-- ═══════════════════════════════════════════════════ -->
+        <Border Grid.Row="0"
+                Background="{DynamicResource HeaderBackground}"
+                Padding="30,20">
+            <TextBlock Text="FishLens"
+                       FontSize="{DynamicResource LargeHeaderFontSize}"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource OnAccentForeground}"/>
+        </Border>
+
+        <!-- ═══════════════════════════════════════════════════ -->
+        <!--  CONTENT  — five panels, one visible at a time      -->
+        <!-- ═══════════════════════════════════════════════════ -->
+        <Grid Grid.Row="1">
+
+            <!-- ─────────────────────────────────────────── -->
+            <!--  PANEL 1 · SIGN IN                          -->
+            <!-- ─────────────────────────────────────────── -->
+            <Border x:Name="SignInPanel"
+                    Visibility="Visible"
+                    Background="{DynamicResource CardBackground}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="25"
+                    Margin="30"
+                    Width="400"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+
+                <StackPanel>
+
+                    <TextBlock Text="Sign in"
+                               FontSize="{DynamicResource LargeHeaderFontSize}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource PrimaryText}"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,20"/>
+
+                    <TextBlock Text="Username"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"/>
+
+                    <TextBox x:Name="SignInUsernameBox"
+                             Height="36"
+                             Padding="8"
+                             FontSize="{DynamicResource BaseFontSize}"
+                             Margin="0,5,0,15"
+                             TabIndex="0"
+                             KeyDown="SignInUsername_KeyDown"
+                             GotKeyboardFocus="UsernameBox_GotKeyFocus"/>
+
+                    <TextBlock Text="Password"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"/>
+
+                    <PasswordBox x:Name="SignInPasswordBox"
+                                 Height="36"
+                                 Padding="8"
+                                 FontSize="{DynamicResource BaseFontSize}"
+                                 Margin="0,5,0,20"
+                                 TabIndex="1"
+                                 KeyDown="SignInPassword_KeyDown"
+                                 GotKeyboardFocus="PasswordBox_GotKeyFocus"/>
+
+                    <TextBlock x:Name="SignInError"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="#F44336"
+                               TextWrapping="Wrap"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,10"
+                               Visibility="Collapsed"/>
+
+                    <Button Content="Sign In"
+                            Width="140"
+                            Padding="10,6"
+                            Background="{DynamicResource HeaderBackground}"
+                            Foreground="{DynamicResource OnAccentForeground}"
+                            FontSize="{DynamicResource BaseFontSize}"
+                            FontWeight="SemiBold"
+                            BorderThickness="0"
+                            HorizontalAlignment="Center"
+                            Cursor="Hand"
+                            TabIndex="2"
+                            Style="{StaticResource RoundedButton}"
+                            Click="SigninButton_Click"/>
+
+                    <TextBlock Text="Forgot Password?"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource SecondaryText}"
+                               HorizontalAlignment="Center"
+                               Cursor="Hand"
+                               Margin="0,10,0,0"
+                               Style="{StaticResource LinkText}"
+                               MouseLeftButtonUp="GoToForgotPassword_Click"/>
+
+                </StackPanel>
+            </Border>
+
+            <!-- ─────────────────────────────────────────── -->
+            <!--  PANEL 2 · SIGN UP                          -->
+            <!-- ─────────────────────────────────────────── -->
+            <Border x:Name="SignUpPanel"
+                    Visibility="Collapsed"
+                    Background="{DynamicResource CardBackground}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="25"
+                    Margin="30"
+                    Width="420"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+
+                        <TextBlock Text="Create your account"
+                                   FontSize="{DynamicResource LargeHeaderFontSize}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PrimaryText}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,0,5"/>
+
+                        <TextBlock Text="Set up your organization and admin account"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   Foreground="{DynamicResource SecondaryText}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,0,25"/>
+
+                        <!-- Organization Name -->
+                        <TextBlock Text="Organization Name"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   Foreground="{DynamicResource SecondaryText}"/>
+                        <TextBox x:Name="OrgNameBox"
+                                 Height="36"
+                                 Padding="8"
+                                 FontSize="{DynamicResource BaseFontSize}"
+                                 Margin="0,5,0,15"/>
+                        <TextBlock x:Name="OrgNameError"
+                                   FontSize="11"
+                                   Foreground="#F44336"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed"
+                                   Margin="0,0,0,12"/>
+
+                        <!-- Email -->
+                        <TextBlock Text="Email"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   Foreground="{DynamicResource SecondaryText}"/>
+                        <TextBox x:Name="NewEmailBox"
+                                 Height="36"
+                                 Padding="8"
+                                 FontSize="{DynamicResource BaseFontSize}"
+                                 Margin="0,5,0,5"/>
+                        <StackPanel Margin="0,0,0,10">
+                            <TextBlock Text="• Must be a valid address (e.g. name@gmail.com)"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource SecondaryText}"/>
+                        </StackPanel>
+                        <TextBlock x:Name="EmailError"
+                                   FontSize="11"
+                                   Foreground="#F44336"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed"
+                                   Margin="0,0,0,12"/>
+
+                        <!-- Username -->
+                        <TextBlock Text="Username"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   Foreground="{DynamicResource SecondaryText}"/>
+                        <TextBox x:Name="NewUsernameBox"
+                                 Height="36"
+                                 Padding="8"
+                                 FontSize="{DynamicResource BaseFontSize}"
+                                 Margin="0,5,0,5"/>
+                        <StackPanel Margin="0,0,0,10">
+                            <TextBlock x:Name="ReqSignUpUsernameLength"
+                                       Text="• At least 6 characters"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource SecondaryText}"/>
+                        </StackPanel>
+                        <TextBlock x:Name="UsernameError"
+                                   FontSize="11"
+                                   Foreground="#F44336"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed"
+                                   Margin="0,0,0,12"/>
+
+                        <!-- Password -->
+                        <TextBlock Text="Password"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   Foreground="{DynamicResource SecondaryText}"/>
+                        <PasswordBox x:Name="NewPasswordBox"
+                                     Height="36"
+                                     Padding="8"
+                                     FontSize="{DynamicResource BaseFontSize}"
+                                     Margin="0,5,0,5"/>
+                        <StackPanel Margin="0,0,0,10">
+                            <TextBlock x:Name="ReqSignUpPasswordLength"
+                                       Text="• At least 6 characters"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource SecondaryText}"/>
+                        </StackPanel>
+                        <TextBlock x:Name="PasswordError"
+                                   FontSize="11"
+                                   Foreground="#F44336"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed"
+                                   Margin="0,0,0,12"/>
+
+                        <!-- Confirm Password -->
+                        <TextBlock Text="Confirm Password"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   Foreground="{DynamicResource SecondaryText}"/>
+                        <PasswordBox x:Name="ConfirmPasswordBox"
+                                     Height="36"
+                                     Padding="8"
+                                     FontSize="{DynamicResource BaseFontSize}"
+                                     Margin="0,5,0,5"/>
+                        <StackPanel Margin="0,0,0,10">
+                            <TextBlock x:Name="ReqSignUpPasswordMatch"
+                                       Text="• Passwords must match"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource SecondaryText}"/>
+                        </StackPanel>
+                        <TextBlock x:Name="ConfirmPasswordError"
+                                   FontSize="11"
+                                   Foreground="#F44336"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed"
+                                   Margin="0,0,0,12"/>
+
+                        <Button Content="Create Account"
+                                Width="160"
+                                Padding="10,8"
+                                Background="{DynamicResource HeaderBackground}"
+                                Foreground="{DynamicResource OnAccentForeground}"
+                                FontSize="{DynamicResource BaseFontSize}"
+                                FontWeight="SemiBold"
+                                BorderThickness="0"
+                                HorizontalAlignment="Center"
+                                Cursor="Hand"
+                                Margin="0,10,0,0"
+                                Style="{StaticResource RoundedButton}"
+                                Click="CreateAccount_Click"/>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- ─────────────────────────────────────────── -->
+            <!--  PANEL 3 · VERIFY EMAIL  (sign-up flow)    -->
+            <!-- ─────────────────────────────────────────── -->
+            <Border x:Name="VerifyEmailPanel"
+                    Visibility="Collapsed"
+                    Background="{DynamicResource CardBackground}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="25"
+                    Margin="30"
+                    Width="420"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+
+                <StackPanel>
+
+                    <TextBlock Text="← Back"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource PrimaryTextBrush}"
+                               Cursor="Hand"
+                               HorizontalAlignment="Left"
+                               Margin="0,0,0,15"
+                               Style="{StaticResource LinkText}"
+                               MouseLeftButtonUp="BackToSignUpPanel_Click"/>
+
+                    <TextBlock Text="Verify your email"
+                               FontSize="{DynamicResource LargeHeaderFontSize}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource PrimaryText}"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,5"/>
+
+                    <TextBlock Text="We sent a 6-digit code to your email address. Enter it below to finish creating your account."
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"
+                               HorizontalAlignment="Center"
+                               TextWrapping="Wrap"
+                               TextAlignment="Center"
+                               Margin="0,0,0,25"/>
+
+                    <TextBlock Text="Verification Code"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"/>
+
+                    <TextBox x:Name="VerificationCodeBox"
+                             Height="36"
+                             Padding="8"
+                             FontSize="{DynamicResource BaseFontSize}"
+                             MaxLength="6"
+                             Margin="0,5,0,5"/>
+
+                    <TextBlock x:Name="VerifyError"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="#F44336"
+                               TextWrapping="Wrap"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,10"
+                               Visibility="Collapsed"/>
+
+                    <Button Content="Verify &amp; Create Account"
+                            Width="200"
+                            Padding="10,8"
+                            Background="{DynamicResource HeaderBackground}"
+                            Foreground="{DynamicResource OnAccentForeground}"
+                            FontSize="{DynamicResource BaseFontSize}"
+                            FontWeight="SemiBold"
+                            BorderThickness="0"
+                            HorizontalAlignment="Center"
+                            Cursor="Hand"
+                            Margin="0,10,0,15"
+                            Style="{StaticResource RoundedButton}"
+                            Click="VerifyCode_Click"/>
+
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Center">
+                        <TextBlock Text="Resend code"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
+                                   Cursor="Hand"
+                                   Style="{StaticResource LinkText}"
+                                   MouseLeftButtonUp="ResendSignUpCode_Click"/>
+                    </StackPanel>
+
+                </StackPanel>
+            </Border>
+
+            <!-- ─────────────────────────────────────────── -->
+            <!--  PANEL 4 · FORGOT PASSWORD (enter username) -->
+            <!-- ─────────────────────────────────────────── -->
+            <Border x:Name="ForgotPanel"
+                    Visibility="Collapsed"
+                    Background="{DynamicResource CardBackground}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="25"
+                    Margin="30"
+                    Width="420"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+
+                <StackPanel>
+
+                    <TextBlock Text="Reset your password"
+                               FontSize="{DynamicResource LargeHeaderFontSize}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource PrimaryText}"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,5"/>
+
+                    <TextBlock Text="Enter your username to receive a reset code"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,25"/>
+
+                    <TextBlock Text="Username"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"/>
+
+                    <TextBox x:Name="ForgotUsernameBox"
+                             Height="36"
+                             Padding="8"
+                             FontSize="{DynamicResource BaseFontSize}"
+                             Margin="0,5,0,20"/>
+
+                    <TextBlock x:Name="ForgotError"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="#F44336"
+                               TextWrapping="Wrap"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,10"
+                               Visibility="Collapsed"/>
+
+                    <Button Content="Send Reset Code"
+                            Width="160"
+                            Padding="10,8"
+                            Background="{DynamicResource HeaderBackground}"
+                            Foreground="{DynamicResource OnAccentForeground}"
+                            FontSize="{DynamicResource BaseFontSize}"
+                            FontWeight="SemiBold"
+                            BorderThickness="0"
+                            HorizontalAlignment="Center"
+                            Cursor="Hand"
+                            Style="{StaticResource RoundedButton}"
+                            Click="SendResetCode_Click"/>
+
+                </StackPanel>
+            </Border>
+
+            <!-- ─────────────────────────────────────────── -->
+            <!--  PANEL 5 · RESET PASSWORD (code + new pw)  -->
+            <!-- ─────────────────────────────────────────── -->
+            <Border x:Name="ResetPanel"
+                    Visibility="Collapsed"
+                    Background="{DynamicResource CardBackground}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="25"
+                    Margin="30"
+                    Width="420"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+
+                <StackPanel>
+
+                    <TextBlock Text="← Back"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource PrimaryTextBrush}"
+                               Cursor="Hand"
+                               HorizontalAlignment="Left"
+                               Margin="0,0,0,15"
+                               Style="{StaticResource LinkText}"
+                               MouseLeftButtonUp="BackToForgotFromReset_Click"/>
+
+                    <TextBlock Text="Enter your reset code"
+                               FontSize="{DynamicResource LargeHeaderFontSize}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource PrimaryText}"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,5"/>
+
+                    <TextBlock Text="Check your email for the 6-digit code"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,25"/>
+
+                    <TextBlock Text="Reset Code"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"/>
+
+                    <TextBox x:Name="ResetCodeBox"
+                             Height="36"
+                             Padding="8"
+                             FontSize="{DynamicResource BaseFontSize}"
+                             Margin="0,5,0,15"/>
+
+                    <TextBlock Text="New Password"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"/>
+
+                    <TextBlock x:Name="ReqResetPasswordLength"
+                               Text="• At least 6 characters"
+                               FontSize="11"
+                               Foreground="#888888"
+                               Margin="0,2,0,10"/>
+
+                    <PasswordBox x:Name="ResetNewPasswordBox"
+                                 Height="36"
+                                 Padding="8"
+                                 FontSize="{DynamicResource BaseFontSize}"
+                                 Margin="0,5,0,15"/>
+
+                    <TextBlock Text="Confirm Password"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"/>
+
+                    <TextBlock x:Name="ReqResetPasswordMatch"
+                               Text="• Passwords must match"
+                               FontSize="11"
+                               Foreground="#888888"
+                               Margin="0,2,0,10"/>
+
+                    <PasswordBox x:Name="ResetConfirmPasswordBox"
+                                 Height="36"
+                                 Padding="8"
+                                 FontSize="{DynamicResource BaseFontSize}"
+                                 Margin="0,5,0,5"/>
+
+                    <TextBlock x:Name="ResetError"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="#F44336"
+                               TextWrapping="Wrap"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,10"
+                               Visibility="Collapsed"/>
+
+                    <Button Content="Reset Password"
+                            Width="160"
+                            Padding="10,8"
+                            Background="{DynamicResource HeaderBackground}"
+                            Foreground="{DynamicResource OnAccentForeground}"
+                            FontSize="{DynamicResource BaseFontSize}"
+                            FontWeight="SemiBold"
+                            BorderThickness="0"
+                            HorizontalAlignment="Center"
+                            Cursor="Hand"
+                            Margin="0,10,0,0"
+                            Style="{StaticResource RoundedButton}"
+                            Click="ResetPassword_Click"/>
+
+                </StackPanel>
+            </Border>
+
+        </Grid>
+
+        <!-- ═══════════════════════════════════════════════════ -->
+        <!--  FOOTER  — three states, swapped by ShowPanel()    -->
+        <!-- ═══════════════════════════════════════════════════ -->
+        <Border Grid.Row="2"
+                Background="{DynamicResource CardBackground}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,1,0,0"
+                Padding="30,20">
+            <Grid>
+
+                <!-- Sign In footer -->
+                <StackPanel x:Name="SignInFooter"
+                            Visibility="Visible"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Center">
+                    <TextBlock Text="Don't have an account?"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <TextBlock Text="Sign Up"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource PrimaryText}"
+                               VerticalAlignment="Center"
+                               Cursor="Hand"
+                               Style="{StaticResource LinkText}"
+                               MouseLeftButtonUp="GoToSignUp_Click"/>
+                </StackPanel>
+
+                <!-- Sign Up + Verify Email footer -->
+                <StackPanel x:Name="SignUpFooter"
+                            Visibility="Collapsed"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Center">
+                    <TextBlock Text="Already have an account?"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <TextBlock Text="Sign In"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource PrimaryTextBrush}"
+                               VerticalAlignment="Center"
+                               Cursor="Hand"
+                               Style="{StaticResource LinkText}"
+                               MouseLeftButtonUp="GoToSignIn_Click"/>
+                </StackPanel>
+
+                <!-- Forgot Password + Reset Password footer -->
+                <StackPanel x:Name="ForgotFooter"
+                            Visibility="Collapsed"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Center">
+                    <TextBlock Text="Remember your password?"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               Foreground="{DynamicResource SecondaryText}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <TextBlock Text="Back to Sign In"
+                               FontSize="{DynamicResource BaseFontSize}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource PrimaryTextBrush}"
+                               VerticalAlignment="Center"
+                               Cursor="Hand"
+                               Style="{StaticResource LinkText}"
+                               MouseLeftButtonUp="BackToSignInFromForgot_Click"/>
+                </StackPanel>
+
+            </Grid>
+        </Border>
+
+    </Grid>
+</Window>
+
