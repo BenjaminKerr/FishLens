@@ -10,6 +10,10 @@
         Background="{DynamicResource WindowBackground}"
         PreviewKeyDown="Window_PreviewKeyDown">
 
+<<<<<<< HEAD
+=======
+   
+>>>>>>> d6706cf (ProgressBar tenatively replaced with dynamic row of rectangles.)
 
     <Grid>
         <Grid.ColumnDefinitions>
@@ -147,6 +151,7 @@ Height="70">
                                    Opacity="0.75"
                                    Margin="0,0,0,6"
                                    TextTrimming="CharacterEllipsis"/>
+<<<<<<< HEAD
                         <ProgressBar x:Name="analysisProgressBar"
                                      Height="6"
                                      Minimum="0"
@@ -154,6 +159,33 @@ Height="70">
                                      Value="0"
                                      Background="{DynamicResource CardBackground}"
                                      Foreground="#E8A038"/>
+=======
+                        <ItemsControl ItemsSource="{Binding Bars}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Rows="1"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Rectangle Margin="0.25" Height="10">
+                                        <Rectangle.Style>
+                                            <Style TargetType="Rectangle">
+                                                <Setter Property="Fill" Value="#444"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding}" Value="True">
+                                                        <Setter Property="Fill" Value="#E8A038"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Rectangle.Style>
+                                    </Rectangle>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        
+>>>>>>> d6706cf (ProgressBar tenatively replaced with dynamic row of rectangles.)
                     </StackPanel>
                 </Border>
 
