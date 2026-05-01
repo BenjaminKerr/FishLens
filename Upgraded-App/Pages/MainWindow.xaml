@@ -13,25 +13,26 @@
 
     <Window.Resources>
 
+
         <DataTemplate x:Key="FilledSegment">
-            <Rectangle Fill="Green" Stroke="Black" StrokeThickness="0.5" Margin="0.5" Height="10"/>
+            <Rectangle Fill="Green" Height="10"/>
         </DataTemplate>
 
         <DataTemplate x:Key="EmptySegment">
-            <Rectangle Fill="White" Stroke="Black" StrokeThickness="0.5" Margin="0.5" Height="10"/>
+            <Rectangle Fill="White" Height="10"/>
         </DataTemplate>
 
         <DataTemplate x:Key="ActiveSegment">
-            <Rectangle Fill="#FFCC66" Stroke="Black" StrokeThickness="0.5" Margin="0.5" Height="10">
+            <Rectangle Fill="#FFCC66" Height="10">
                 <Rectangle.Triggers>
                     <EventTrigger RoutedEvent="Loaded">
                         <BeginStoryboard>
                             <Storyboard RepeatBehavior="Forever">
                                 <DoubleAnimation
-                                Storyboard.TargetProperty="Opacity"
-                                From="0.4" To="1"
-                                Duration="0:0:0.6"
-                                AutoReverse="True"/>
+                        Storyboard.TargetProperty="Opacity"
+                        From="0.4" To="1"
+                        Duration="0:0:0.6"
+                        AutoReverse="True"/>
                             </Storyboard>
                         </BeginStoryboard>
                     </EventTrigger>
