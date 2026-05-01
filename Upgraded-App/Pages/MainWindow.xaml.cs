@@ -31,6 +31,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using System.Collections.ObjectModel;
+using FishLens_App.Helper_Classes;
 
 namespace FishLens_App
 {
@@ -87,17 +88,18 @@ namespace FishLens_App
 
         // Video player state
         private DispatcherTimer _videoTimer;
+        private ProgressBarBuilder _builder = new ProgressBarBuilder();
         private bool _isDraggingScrubber = false;
         private bool _isPlaying = false;
         private int _suppressTimerTicks = 0;
         private string _playbackTempPath = null; // temp MP4 created from ASF for accurate scrubbing
         private bool _processingComplete = false;
+        public ObservableCollection<bool> Bars { get; } = new ObservableCollection<bool>();
 
         // Multi-track state - all tracks for the currently displayed video
         private List<FishLens_App.Models.Video> _currentTracks = new List<FishLens_App.Models.Video>();
         private int _currentTrackIndex;
 
-        public ObservableCollection<bool> Bars { get; } = new ObservableCollection<bool>();
 
         #endregion
 
@@ -1061,12 +1063,13 @@ namespace FishLens_App
                 {
                     _totalVideos = total;
 
-                    Build(_totalVideos, 0);
                     Dispatcher.Invoke(() =>
                     {
-                        //analysisProgressBar.Minimum = 0;
-                        //analysisProgressBar.Maximum = total;
-                        //analysisProgressBar.Value = 0;
+                        Bars.Clear();
+                        foreach (var b in _builder.Build(_totalVideos, 0))
+                        {
+                            Bars.Add(b);
+                        }
                     });
                 }
                 else if (line.StartsWith("[PROGRESS] VIDEO:"))
@@ -3295,19 +3298,6 @@ namespace FishLens_App
 
         }
 
-        // **************************************************
-        // Function: Build
-        // Description: Builds a new row of bars.
-        // **************************************************
-        public void Build(int count, int active)
-        {
-            Dispatcher.Invoke(() =>
-            {
-                Bars.Clear();
 
-                for (int i = 0; i < count; i++)
-                    Bars.Add(i < active);
-            });
-        }
     }
 }
