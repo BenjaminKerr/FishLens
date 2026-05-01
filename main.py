@@ -708,6 +708,45 @@ def process_yolo_results(frameData, vidData, model):
         if vidData.v_confidence_count > 0:
             vidData.v_avg_confidence_YL = (vidData.v_confidence_sum / vidData.v_confidence_count) * 100
 
+def _score_species_crop(frame_shape, bbox, conf, track_age_frames):
+    """Score a candidate species screenshot, preferring centered, fully visible fish."""
+    frame_h, frame_w = frame_shape[:2]
+    x1, y1, x2, y2 = bbox
+    box_w = max(1.0, float(x2 - x1))
+    box_h = max(1.0, float(y2 - y1))
+
+    cx = (float(x1) + float(x2)) / 2.0
+    cy = (float(y1) + float(y2)) / 2.0
+    frame_cx = frame_w / 2.0
+    frame_cy = frame_h / 2.0
+
+    # Favor fish whose center is nearer the middle of the frame.
+    dx = abs(cx - frame_cx) / max(1.0, frame_cx)
+    dy = abs(cy - frame_cy) / max(1.0, frame_cy)
+    center_distance = min(1.0, np.hypot(dx, dy) / np.hypot(1.0, 1.0))
+    center_score = 1.0 - center_distance
+
+    # Penalize fish that are leaving the frame or clipped against an edge.
+    min_edge_distance = min(float(x1), float(y1), float(frame_w - x2), float(frame_h - y2))
+    edge_clearance_target = max(12.0, min(frame_w, frame_h) * 0.08)
+    edge_score = max(0.0, min(1.0, min_edge_distance / edge_clearance_target))
+
+    # Prefer reasonably large, readable fish, but cap the benefit.
+    area_fraction = (box_w * box_h) / max(1.0, float(frame_w * frame_h))
+    area_score = min(1.0, np.sqrt(max(0.0, area_fraction) / 0.12))
+
+    # Slightly prefer frames after the track has stabilized for a few detections.
+    maturity_score = min(1.0, max(0, int(track_age_frames)) / 4.0)
+
+    conf_score = max(0.0, min(1.0, float(conf)))
+    return (
+        conf_score * 0.35
+        + center_score * 0.30
+        + edge_score * 0.20
+        + area_score * 0.10
+        + maturity_score * 0.05
+    )
+
 def deepsort_analysis(tracker, frame, frameData, vidData):
     """Advance DeepSort tracks for the current frame and maintain per-track state."""
 
@@ -733,6 +772,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                 "entry_x": initial_x,
                 "last_x": initial_x,
                 "best_conf": -1.0,
+                "best_crop_score": -1.0,
                 "best_crop": None,
                 "video_timestamp": vidData.v_video_timestamp or "Not detected",
                 "timestamp_confidence": initial_conf,
@@ -789,8 +829,24 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         conf = obj["confidence"]
 
         if crop is not None and crop.size > 0:
-            if conf > vidData.v_active_tracks[trackId]["best_conf"]:
+            track_age_frames = len(vidData.v_active_tracks[trackId]["confidences"])
+            crop_score = _score_species_crop(frame.shape, (x1, y1, x2, y2), conf, track_age_frames)
+            previous_best_conf = vidData.v_active_tracks[trackId].get("best_conf", -1.0)
+            best_crop_score = vidData.v_active_tracks[trackId].get("best_crop_score", -1.0)
+
+            if conf > previous_best_conf:
                 vidData.v_active_tracks[trackId]["best_conf"] = conf
+
+            should_replace_crop = (
+                crop_score > best_crop_score
+                or (
+                    abs(crop_score - best_crop_score) <= 1e-6
+                    and conf > previous_best_conf
+                )
+            )
+
+            if should_replace_crop:
+                vidData.v_active_tracks[trackId]["best_crop_score"] = crop_score
                 vidData.v_active_tracks[trackId]["best_crop"] = crop.copy()
                 vidData.v_active_tracks[trackId]["best_frame"] = frame.copy()
 
@@ -1014,6 +1070,27 @@ def dedupe_fragmented_tracks(finished_tracks):
 
         return merged
 
+    def _merged_direction_from_path(a, b):
+        try:
+            a_start = float(a.get("start_time_sec", 0.0))
+            b_start = float(b.get("start_time_sec", 0.0))
+        except Exception:
+            a_start = 0.0
+            b_start = 0.0
+
+        first, second = (a, b) if a_start <= b_start else (b, a)
+        entry_x = _x(first, "entry_x")
+        exit_x = _x(second, "exit_x")
+        width = max(_frame_width(first), _frame_width(second))
+        min_net_dx = max(6.0, width * 0.02)
+        net_dx = exit_x - entry_x
+
+        if net_dx <= -min_net_dx:
+            return "upstream"
+        if net_dx >= min_net_dx:
+            return "downstream"
+        return "indecisive"
+
     def _is_turnaround_split(a, b):
         da, db = _direction_pair(a, b)
         if {da, db} != {"upstream", "downstream"}:
@@ -1057,11 +1134,55 @@ def dedupe_fragmented_tracks(finished_tracks):
 
         return same_turn_point and same_outer_side and starts_and_ends_same_side
 
+    def _is_opposite_direction_fragment(a, b):
+        da, db = _direction_pair(a, b)
+        if {da, db} != {"upstream", "downstream"}:
+            return False
+
+        if str(a.get("likely_class", "")).lower() != str(b.get("likely_class", "")).lower():
+            return False
+
+        a_start = float(a.get("start_time_sec", 0.0))
+        a_end = float(a.get("end_time_sec", 0.0))
+        b_start = float(b.get("start_time_sec", 0.0))
+        b_end = float(b.get("end_time_sec", 0.0))
+        gap = min(abs(a_start - b_end), abs(b_start - a_end))
+        if gap > 0.60:
+            return False
+
+        a_ts = str(a.get("video_timestamp", "")).replace("*", "").strip()
+        b_ts = str(b.get("video_timestamp", "")).replace("*", "").strip()
+        if a_ts and b_ts and a_ts != b_ts:
+            return False
+
+        if _is_turnaround_split(a, b):
+            return False
+
+        continuity_threshold = max(_continuity_threshold(a), _continuity_threshold(b))
+        a_entry = _x(a, "entry_x")
+        a_exit = _x(a, "exit_x")
+        b_entry = _x(b, "entry_x")
+        b_exit = _x(b, "exit_x")
+
+        close_exit_to_entry = (
+            abs(a_exit - b_entry) <= continuity_threshold
+            or abs(b_exit - a_entry) <= continuity_threshold
+        )
+        if not close_exit_to_entry:
+            return False
+
+        merged_direction = _merged_direction_from_path(a, b)
+        return merged_direction in {"upstream", "downstream"}
+
     def _is_likely_duplicate(a, b):
         # Must be same class and either compatible direction or a clear turnaround split.
         if str(a.get("likely_class", "")).lower() != str(b.get("likely_class", "")).lower():
             return False
-        if not _same_or_unknown_direction(a, b) and not _is_turnaround_split(a, b):
+        if (
+            not _same_or_unknown_direction(a, b)
+            and not _is_turnaround_split(a, b)
+            and not _is_opposite_direction_fragment(a, b)
+        ):
             return False
 
         # If OCR timestamp resolves to the same second, treat close tracks as likely split IDs.
@@ -1111,6 +1232,8 @@ def dedupe_fragmented_tracks(finished_tracks):
             if _is_likely_duplicate(existing, track):
                 if _is_turnaround_split(existing, track):
                     kept[i] = _merge_track_rows(existing, track, "indecisive")
+                elif _is_opposite_direction_fragment(existing, track):
+                    kept[i] = _merge_track_rows(existing, track, _merged_direction_from_path(existing, track))
                 elif _score(track) > _score(existing):
                     kept[i] = track
                 merged = True

@@ -109,30 +109,20 @@ def print_confusion_matrix(class_names, results):
         print(f"{class_name:>12s}  {row_values}")
 
 
-# ========================================================================
-# MAIN TEST RUNNER
-# ========================================================================
-
-def main():
-    model_path = resolve_model_path()
-    model = load_model(model_path, compile=False)
+def evaluate_model_on_validation(model, val_dir):
+    """Evaluate one loaded model against Classifier/data/val and return a summary dict."""
     image_size = get_model_input_size(model)
     preprocess_mode = get_preprocess_mode(model)
 
     class_names = [
-        name for name in sorted(os.listdir(VAL_DIR))
-        if os.path.isdir(os.path.join(VAL_DIR, name))
+        name for name in sorted(os.listdir(val_dir))
+        if os.path.isdir(os.path.join(val_dir, name))
     ]
-
-    print(f"Loaded model: {model_path}")
-    print(f"Model input size: {image_size}")
-    print(f"Preprocess mode: {preprocess_mode}")
-    print(f"Validation classes: {class_names}")
 
     results = []
     wrong_by_true_label = defaultdict(list)
 
-    for true_label, image_path in iter_validation_images(VAL_DIR):
+    for true_label, image_path in iter_validation_images(val_dir):
         batch = preprocess_image(image_path, image_size, preprocess_mode)
         predictions = model.predict(batch, verbose=0)[0]
         pred_index = int(np.argmax(predictions))
@@ -154,15 +144,33 @@ def main():
     correct = sum(1 for item in results if item["true_label"] == item["pred_label"])
     accuracy = (correct / total) if total else 0.0
 
-    print(f"\nValidation accuracy: {correct}/{total} = {accuracy:.4f}")
-    print_confusion_matrix(class_names, results)
+    return {
+        "image_size": image_size,
+        "preprocess_mode": preprocess_mode,
+        "class_names": class_names,
+        "results": results,
+        "wrong_by_true_label": wrong_by_true_label,
+        "correct": correct,
+        "total": total,
+        "accuracy": accuracy,
+    }
+
+
+def print_evaluation_summary(model_path, summary):
+    """Print a human-readable summary from evaluate_model_on_validation()."""
+    print(f"Loaded model: {model_path}")
+    print(f"Model input size: {summary['image_size']}")
+    print(f"Preprocess mode: {summary['preprocess_mode']}")
+    print(f"Validation classes: {summary['class_names']}")
+    print(f"\nValidation accuracy: {summary['correct']}/{summary['total']} = {summary['accuracy']:.4f}")
+    print_confusion_matrix(summary["class_names"], summary["results"])
 
     print("\nMisclassified images")
-    if not wrong_by_true_label:
+    if not summary["wrong_by_true_label"]:
         print("None")
     else:
-        for true_label in class_names:
-            mistakes = wrong_by_true_label.get(true_label, [])
+        for true_label in summary["class_names"]:
+            mistakes = summary["wrong_by_true_label"].get(true_label, [])
             if not mistakes:
                 continue
             print(f"\nTrue {true_label}:")
@@ -174,7 +182,7 @@ def main():
                 )
 
     print("\nPer-image predictions")
-    for item in results:
+    for item in summary["results"]:
         filename = os.path.basename(item["image_path"])
         marker = "OK" if item["true_label"] == item["pred_label"] else "MISS"
         print(
@@ -183,6 +191,17 @@ def main():
             f"conf={item['confidence']:.4f} "
             f"file={filename}"
         )
+
+
+# ========================================================================
+# MAIN TEST RUNNER
+# ========================================================================
+
+def main():
+    model_path = resolve_model_path()
+    model = load_model(model_path, compile=False)
+    summary = evaluate_model_on_validation(model, VAL_DIR)
+    print_evaluation_summary(model_path, summary)
 
 
 if __name__ == "__main__":
