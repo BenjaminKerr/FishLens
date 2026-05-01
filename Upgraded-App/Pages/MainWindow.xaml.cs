@@ -1087,7 +1087,14 @@ namespace FishLens_App
                         {
                             SetAnalysisStatus(_currentVideoStatus);
                             SetAnalysisFrameInfo(string.Empty); // clear frame line between videos
-                            //analysisProgressBar.Value = capturedCurrent - 1;
+
+                            var newBars = _builder.Build(_totalVideos, capturedCurrent - 1);
+                            
+                            Bars.Clear();
+                            foreach (var b in newBars)
+                            {
+                                Bars.Add(b);
+                            }
                         });
                     }
                 }
