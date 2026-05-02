@@ -13,15 +13,15 @@
 
 
         <DataTemplate x:Key="FilledSegment">
-            <Rectangle Fill="Green" Height="10"/>
+            <Rectangle Fill ="#40842F" Height="10"/>
         </DataTemplate>
 
         <DataTemplate x:Key="EmptySegment">
-            <Rectangle Fill="White" Height="10"/>
+            <Rectangle Fill="{DynamicResource WindowBackground}" Height="10"/>
         </DataTemplate>
 
         <DataTemplate x:Key="ActiveSegment">
-            <Rectangle Fill="#FFCC66" Height="10">
+            <Rectangle Fill="#E8A038" Height="10">
                 <Rectangle.Triggers>
                     <EventTrigger RoutedEvent="Loaded">
                         <BeginStoryboard>
