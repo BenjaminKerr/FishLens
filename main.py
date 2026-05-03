@@ -916,7 +916,7 @@ def run_video_tracker(video_path, source_video_path=None, emit_no_fish=True):
     print(f"[INFO] After dedupe/cap: {len(vidData.v_finished_tracks)} fish tracks")
 
     # Save the best image from each video for analysis.
-    save_best_image(vidData.v_finished_tracks, os.path.basename(source_video_path))
+    save_best_image(vidData.v_finished_tracks, source_video_path)
     
     # Save frames for uncertain timestamps
     save_uncertain_timestamp_frames(vidData.v_finished_tracks, source_video_path)
@@ -1475,51 +1475,45 @@ def _append_no_fish_row(video_file_path, video_timestamp):
 
 # ***************************************************************
 # Function: save_best_image
-# Description: Saves the best image from each video. 
-# Notes:
-def save_best_image(finished_tracks, filename):
-        for track in finished_tracks:
-            best_crop = track.get("best_crop")
+# Description: Saves the best image from each video.
+# Notes: Images are organized by source video directory, then species.
+def save_best_image(finished_tracks, source_video_path):
+    source_dir_name = _safe_path_component(os.path.basename(os.path.dirname(source_video_path)) or "root", default="root")
+    filename = os.path.basename(source_video_path)
+    for track in finished_tracks:
+        best_crop = track.get("best_crop")
 
-            if best_crop is not None:
-                enhanced_crop = enhance_image(best_crop)
-                
-                # Classify the image first to determine species folder
-                temp_image_name = f"{os.path.splitext(filename)[0]}_track_{track['trackId']}.jpg"
-                temp_image_path = os.path.join(FISH_IMAGE_DIR, temp_image_name)
-                write_ok = cv2.imwrite(temp_image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
-                if not write_ok:
-                    print(f"Failed to write image at {temp_image_path}. Skipping classification.")
-                    track["species"] = "No data"
-                    track["species_confidence"] = "0.0000"
-                    track["image_path"] = None
-                    track.pop("best_crop", None)
-                    continue
-                
-                # Classify the saved image
-                species_data = classify_image(temp_image_path)
-                species = species_data[0] if species_data else "No data"
-                track["species"] = species
-                track["species_confidence"] = f"{(species_data[1] / 100):.4f}" if species_data and len(species_data) > 1 else "0.0000"
-                
-                # Create species subfolder and move image
-                if species in CLASS_NAMES:
-                    species_folder = os.path.join(FISH_IMAGE_DIR, species)
-                    os.makedirs(species_folder, exist_ok=True)
-                    final_image_path = os.path.join(species_folder, temp_image_name)
-                    try:
-                        shutil.move(temp_image_path, final_image_path)
-                        track["image_path"] = final_image_path
-                    except Exception as e:
-                        print(f"Error moving image to species folder: {e}")
-                        track["image_path"] = None
-                        try:
-                            if os.path.exists(temp_image_path):
-                                os.remove(temp_image_path)
-                        except OSError:
-                            pass
-                else:
-                    # Do not keep unclassified images in root fish_images.
+        if best_crop is not None:
+            enhanced_crop = enhance_image(best_crop)
+
+            # Classify the image first to determine species folder
+            temp_image_name = f"{os.path.splitext(filename)[0]}_track_{track['trackId']}.jpg"
+            temp_image_path = os.path.join(FISH_IMAGE_DIR, temp_image_name)
+            write_ok = cv2.imwrite(temp_image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            if not write_ok:
+                print(f"Failed to write image at {temp_image_path}. Skipping classification.")
+                track["species"] = "No data"
+                track["species_confidence"] = "0.0000"
+                track["image_path"] = None
+                track.pop("best_crop", None)
+                continue
+
+            # Classify the saved image
+            species_data = classify_image(temp_image_path)
+            species = species_data[0] if species_data else "No data"
+            track["species"] = species
+            track["species_confidence"] = f"{(species_data[1] / 100):.4f}" if species_data and len(species_data) > 1 else "0.0000"
+
+            # Create source-dir/species subfolder and move image
+            if species in CLASS_NAMES:
+                species_folder = os.path.join(FISH_IMAGE_DIR, source_dir_name, species)
+                os.makedirs(species_folder, exist_ok=True)
+                final_image_path = os.path.join(species_folder, temp_image_name)
+                try:
+                    shutil.move(temp_image_path, final_image_path)
+                    track["image_path"] = final_image_path
+                except Exception as e:
+                    print(f"Error moving image to species folder: {e}")
                     track["image_path"] = None
                     try:
                         if os.path.exists(temp_image_path):
@@ -1527,10 +1521,18 @@ def save_best_image(finished_tracks, filename):
                     except OSError:
                         pass
             else:
+                # Do not keep unclassified images in root fish_images.
                 track["image_path"] = None
-            
-            # Remove best_crop from track dict (no need to export it)
-            track.pop("best_crop", None)
+                try:
+                    if os.path.exists(temp_image_path):
+                        os.remove(temp_image_path)
+                except OSError:
+                    pass
+        else:
+            track["image_path"] = None
+
+        # Remove best_crop from track dict (no need to export it)
+        track.pop("best_crop", None)
 
 
 # ****************************************************************
