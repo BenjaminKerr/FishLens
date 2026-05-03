@@ -532,7 +532,7 @@ def main(input_path=None):
                         for row in csv.DictReader(_f):
                             stored = row.get("video_file", "")
                             if stored:
-                                already_analyzed.add(os.path.basename(stored))
+                                already_analyzed.add(os.path.normcase(os.path.normpath(stored)))
                 except Exception as _e:
                     print(f"[WARNING] Could not read master CSV for skip-check: {_e}")
         else:
@@ -542,7 +542,7 @@ def main(input_path=None):
             item_path = os.path.join(video_folder, filename)
             print(f"[PROGRESS] VIDEO:{video_index}/{video_count}|{filename}", flush=True)
 
-            if filename in already_analyzed:
+            if os.path.normcase(os.path.normpath(item_path)) in already_analyzed:
                 print(f"[INFO] Skipping (already analyzed): {filename}", flush=True)
                 continue
 
