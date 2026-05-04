@@ -191,7 +191,7 @@ namespace FishLens_App
         //     application. Called after sign-in, settings save, and sign-out reset.
         public void ApplyCurrentSettings()
         {
-            ThemeHelper.ApplyHighContrastMode(Configuration.HighContrastMode);
+            ThemeHelper.ThemeSwap(Configuration.HighContrastMode);
 
             if (Configuration.LargeText)
             {

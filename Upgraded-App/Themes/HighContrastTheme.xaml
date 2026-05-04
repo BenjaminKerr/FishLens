@@ -23,4 +23,5 @@
     <SolidColorBrush x:Key="AccentButtonDisabledForeground" Color="#444444"/>
     <SolidColorBrush x:Key="NeutralButtonDisabledBackground" Color="#333333"/>
     <SolidColorBrush x:Key="NeutralButtonDisabledForeground" Color="#666666"/>
+    <SolidColorBrush x:Key="SidebarBorder" Color="#1B4F5C"/>
 </ResourceDictionary>

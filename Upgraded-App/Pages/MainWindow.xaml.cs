@@ -302,8 +302,19 @@ namespace FishLens_App
         // **************************************************
         private void HomeButtonClick(object sender, RoutedEventArgs e)
         {
-            ExpandSidebar();
-            MainFrame.Visibility = Visibility.Collapsed;
+            if (IsCurrentPageSettings())
+            {
+                //if (CheckForUnsavedChanges())
+                //{
+                    ExpandSidebar();
+                    MainFrame.Visibility = Visibility.Collapsed;
+                //}
+            }
+            else
+            {
+                ExpandSidebar();
+                MainFrame.Visibility = Visibility.Collapsed;
+            }
         }
 
         // **************************************************
@@ -312,19 +323,34 @@ namespace FishLens_App
         // **************************************************
         private void SignOutButtonClick(object sender, RoutedEventArgs e)
         {
+            if (IsCurrentPageSettings() /*&& !CheckForUnsavedChanges()*/)
+                return;
+
             ((App)Application.Current).ResetSettingsToDefaults();
             AuthWindow signin = new AuthWindow();
             signin.Show();
             this.Close();
         }
+
         // **************************************************
         // Function: HistoryButtonClick
         // Description: Navigates to the history page
         // **************************************************
         private void HistoryButtonClick(object sender, RoutedEventArgs e)
         {
-            CollapseSidebar();
-            NavigateToPage(new History(_pathResolver, _fileSystemManager, _logger), "History");
+            if (IsCurrentPageSettings())
+            {
+                //if (CheckForUnsavedChanges())
+                //{
+                    CollapseSidebar();
+                    NavigateToPage(new History(_pathResolver, _fileSystemManager, _logger), "History");
+                //}
+            }
+            else
+            {
+                CollapseSidebar();
+                NavigateToPage(new History(_pathResolver, _fileSystemManager, _logger), "History");
+            }
         }
 
         // **************************************************
@@ -333,23 +359,67 @@ namespace FishLens_App
         // **************************************************
         private void SettingsButtonClick(object sender, RoutedEventArgs e)
         {
-            CollapseSidebar();
-            NavigateToPage(new Settings(_pathResolver, _fileSystemManager, _logger), "Settings");
+            if (IsCurrentPageSettings())
+            {
+                //if (CheckForUnsavedChanges())
+                    NavigateToPage(new Settings(_pathResolver, _fileSystemManager, _logger), "Settings");
+            }
+            else
+            {
+                CollapseSidebar();
+                NavigateToPage(new Settings(_pathResolver, _fileSystemManager, _logger), "Settings");
+            }
         }
+
         private void AccountSettingsButtonClick(object sender, RoutedEventArgs e)
         {
+            if (IsCurrentPageSettings() /*&& !CheckForUnsavedChanges()*/)
+                return;
+
             CollapseSidebar();
             NavigateToPage(new AccountSettings(), "AccountSettings");
         }
 
+        // **************************************************
+        // Function: IsCurrentPageSettings
+        // Description: Returns true if the current frame content is the Settings page
+        // **************************************************
+        public bool IsCurrentPageSettings() => MainFrame.Content is Settings;
 
+        // **************************************************
+        // Function: CheckForUnsavedChanges
+        // Description: Prompts the user if there are unsaved settings changes before navigating away
+        // **************************************************
+        //public bool CheckForUnsavedChanges()
+        //{
+        //    var page = MainFrame.Content as Settings;
+        //    if (page == null)
+        //        return true;
 
+        //    var (confidence, hideOutput, hideErrors, highContrast, largeText) = page.GetCurrentValues();
 
+        //    var saved = App.Settings;
 
+        //    bool hasUnsavedChanges =
+        //        confidence != (saved.ConfidenceThreshold * 100.0) ||
+        //        hideOutput != saved.OutputBox ||
+        //        hideErrors != saved.ErrorBox ||
+        //        highContrast != saved.HighContrastMode ||
+        //        largeText != saved.LargeText;
 
+        //    if (hasUnsavedChanges)
+        //    {
+        //        var result = MessageBox.Show(
+        //            "Unsaved settings changes. Do you want to leave the page?",
+        //            "Settings",
+        //            MessageBoxButton.YesNo,
+        //            MessageBoxImage.Warning);
 
+        //        return result == MessageBoxResult.Yes;
+        //    }
 
-
+        //    return true;
+        //}
 
         // **************************************************
         // Function: NavigateToPage
@@ -363,7 +433,6 @@ namespace FishLens_App
             try
             {
                 MainFrame.Navigate(page);
-
             }
             catch (Exception ex)
             {
@@ -378,14 +447,14 @@ namespace FishLens_App
 
         #endregion
 
-            #region YOLO Processing
+        #region YOLO Processing
 
-            // **************************************************
-            // Function: RunYolo
-            // Description: Executes Python YOLO script for video analysis
-            // Notes: Original writing credit to Aden Ratliff, async update by Benjamin Kerr
-            //          Running async so that UI thread isn't blocked
-            // **************************************************
+        // **************************************************
+        // Function: RunYolo
+        // Description: Executes Python YOLO script for video analysis
+        // Notes: Original writing credit to Aden Ratliff, async update by Benjamin Kerr
+        //          Running async so that UI thread isn't blocked
+        // **************************************************
         private async Task RunYolo(string videoFolder)
         {
             _logger.LogInformation("Starting YOLO process with videoFolder: {VideoFolder}", videoFolder);
