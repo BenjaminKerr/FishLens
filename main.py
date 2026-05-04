@@ -136,7 +136,7 @@ NO_FISH_CSV_KEYS = ["video_file", "location", "video_timestamp"]
 TESSERACT_AVAILABLE = check_tesseract()
 
 # Constants--YOLO
-MODEL = _load_yolo_model("models/fish_detector4.pt")
+MODEL = _load_yolo_model("models/fish_detector5.pt")
 STRICT_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_YOLO_CONFIDENCE_THRESHOLD", "0.42"))
 LOOSE_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_LOOSE_YOLO_CONFIDENCE_THRESHOLD", "0.34"))
 ENABLE_LOOSE_RETRY = os.getenv("FISHLENS_ENABLE_LOOSE_RETRY", "1") == "1"
