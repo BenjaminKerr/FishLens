@@ -176,6 +176,7 @@ namespace FishLens_App
 
             string direction = newLocationDirection.SelectedIndex == 1 ? "right" : "left";
             _config.Locations.Add(new LocationEntry { Name = name, UpstreamDirection = direction });
+            DbAddLocation(name, direction);
             newLocationName.Text = string.Empty;
             newLocationDirection.SelectedIndex = 0;
             RefreshLocationsPanel();
@@ -192,6 +193,7 @@ namespace FishLens_App
                 return;
 
             _config.Locations.Remove(entry);
+            DbDeleteLocation(locName);
 
             if (string.Equals(_config.ActiveLocation, locName, StringComparison.OrdinalIgnoreCase))
             {
@@ -248,7 +250,7 @@ namespace FishLens_App
 
             if (newRunNameBox != null)
                 newRunNameBox.Text = string.Empty;
-
+            DbAddRun(name, false);  
             PersistRuns();
             if (Application.Current is App createRunApp)
                 createRunApp.EnsureRunStorageInitialized();
@@ -311,6 +313,7 @@ namespace FishLens_App
                 {
                     runEntry.Locked = false;
                     PersistRuns();
+                    DbUpdateRunLocked(selectedRun, false);
                     if (Application.Current is App reopenRunApp)
                         reopenRunApp.EnsureRunStorageInitialized();
                     UpdateRunStatusText();
@@ -339,6 +342,7 @@ namespace FishLens_App
             }
 
             PersistRuns();
+            DbUpdateRunLocked(selectedRun, true);
             if (Application.Current is App endRunApp)
                 endRunApp.EnsureRunStorageInitialized();
             UpdateRunStatusText();
@@ -386,6 +390,7 @@ namespace FishLens_App
             try
             {
                 LoadSettingsFromDatabase();
+                MigrateLegacyJsonToDatabase();
                 LoadSettingsFromJson();
 
                 _isUpdatingConfidenceControls = true;
@@ -429,6 +434,8 @@ namespace FishLens_App
                 using var conn = new SqlConnection(app.connectionString);
                 conn.Open();
 
+                // User settings: FastMode, HighContrast, LargeText, ActiveRunOverride
+                string userActiveRunOverride = null;
                 using (var cmd = new SqlCommand("kaharra.GetUserSettings", conn))
                 {
                     cmd.CommandType = System.Data.CommandType.StoredProcedure;
@@ -437,28 +444,80 @@ namespace FishLens_App
                     using var reader = cmd.ExecuteReader();
                     if (reader.Read())
                     {
-                        // Legacy output/error columns are ignored now, but high-contrast and text size remain useful.
-                        _config.HighContrastMode = reader.GetBoolean(2);
-                        _config.LargeText = reader.GetBoolean(3);
+                        _checkBoxes.FastMode = reader.GetBoolean(0);
+                        _config.HighContrastMode = reader.GetBoolean(1);
+                        _config.LargeText = reader.GetBoolean(2);
+                        userActiveRunOverride = reader.IsDBNull(3) ? null : reader.GetString(3);
                     }
                 }
 
-                if (!app.IsAdmin)
-                    return;
+                // Org settings: ConfidenceThreshold, ActiveRun
+                string orgActiveRun = null;
+                using (var orgCmd = new SqlCommand("kaharra.GetOrganizationSettings", conn))
+                {
+                    orgCmd.CommandType = System.Data.CommandType.StoredProcedure;
+                    orgCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
 
-                using var orgCmd = new SqlCommand("kaharra.GetOrganizationSettings", conn);
-                orgCmd.CommandType = System.Data.CommandType.StoredProcedure;
-                orgCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
+                    using var orgReader = orgCmd.ExecuteReader();
+                    if (orgReader.Read())
+                    {
+                        _config.ConfidenceThreshold = orgReader.GetDouble(0);
+                        orgActiveRun = orgReader.IsDBNull(1) ? null : orgReader.GetString(1);
+                    }
+                }
 
-                using var orgReader = orgCmd.ExecuteReader();
-                if (orgReader.Read())
-                    _config.ConfidenceThreshold = orgReader.GetDouble(0);
+                // ActiveRun = user override if set, else org default
+                _config.ActiveRun = !string.IsNullOrWhiteSpace(userActiveRunOverride)
+                    ? userActiveRunOverride
+                    : (orgActiveRun ?? string.Empty);
+
+                // Org Runs list
+                var runs = new List<RunEntry>();
+                using (var runsCmd = new SqlCommand("kaharra.GetOrganizationRuns", conn))
+                {
+                    runsCmd.CommandType = System.Data.CommandType.StoredProcedure;
+                    runsCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
+
+                    using var runsReader = runsCmd.ExecuteReader();
+                    while (runsReader.Read())
+                    {
+                        runs.Add(new RunEntry
+                        {
+                            Name = runsReader.GetString(0),
+                            Locked = runsReader.GetBoolean(1)
+                        });
+                    }
+                }
+                _config.Runs = runs;
+
+                // Org Locations list
+                var locations = new List<LocationEntry>();
+                using (var locsCmd = new SqlCommand("kaharra.GetOrganizationLocations", conn))
+                {
+                    locsCmd.CommandType = System.Data.CommandType.StoredProcedure;
+                    locsCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
+
+                    using var locsReader = locsCmd.ExecuteReader();
+                    while (locsReader.Read())
+                    {
+                        locations.Add(new LocationEntry
+                        {
+                            Name = locsReader.GetString(0),
+                            UpstreamDirection = locsReader.GetString(1)
+                        });
+                    }
+                }
+                if (locations.Count > 0)
+                    _config.Locations = locations;
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Could not load settings from database; using in-memory/default values");
             }
         }
+
+
+
 
         private void LoadSettingsFromJson()
         {
@@ -472,57 +531,9 @@ namespace FishLens_App
                 using var doc = JsonDocument.Parse(stream);
                 var root = doc.RootElement;
 
-                if (root.TryGetProperty("FastMode", out var fmEl) &&
-                    (fmEl.ValueKind == JsonValueKind.True || fmEl.ValueKind == JsonValueKind.False))
-                {
-                    _checkBoxes.FastMode = fmEl.GetBoolean();
-                }
-
                 if (root.TryGetProperty("ActiveLocation", out var alEl) && alEl.ValueKind == JsonValueKind.String)
                 {
                     _config.ActiveLocation = alEl.GetString() ?? "Unknown";
-                }
-
-                if (root.TryGetProperty("ActiveRun", out var arEl) && arEl.ValueKind == JsonValueKind.String)
-                {
-                    _config.ActiveRun = arEl.GetString() ?? string.Empty;
-                }
-
-                if (root.TryGetProperty("Runs", out var runsEl) && runsEl.ValueKind == JsonValueKind.Array)
-                {
-                    var runs = new List<RunEntry>();
-                    foreach (var runEl in runsEl.EnumerateArray())
-                    {
-                        string runName = runEl.TryGetProperty("Name", out var nameEl)
-                            ? nameEl.GetString() ?? string.Empty
-                            : string.Empty;
-                        bool locked = runEl.TryGetProperty("Locked", out var lockedEl) &&
-                            lockedEl.ValueKind == JsonValueKind.True;
-
-                        if (!string.IsNullOrWhiteSpace(runName))
-                            runs.Add(new RunEntry { Name = runName, Locked = locked });
-                    }
-
-                    _config.Runs = runs;
-                }
-
-                if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == JsonValueKind.Array)
-                {
-                    var locations = new List<LocationEntry>();
-                    foreach (var locEl in locsEl.EnumerateArray())
-                    {
-                        string locName = locEl.TryGetProperty("Name", out var nameEl)
-                            ? nameEl.GetString() ?? "Unknown"
-                            : "Unknown";
-                        string locDir = locEl.TryGetProperty("UpstreamDirection", out var dirEl)
-                            ? dirEl.GetString() ?? "left"
-                            : "left";
-
-                        locations.Add(new LocationEntry { Name = locName, UpstreamDirection = locDir });
-                    }
-
-                    if (locations.Count > 0)
-                        _config.Locations = locations;
                 }
             }
             catch (Exception ex)
@@ -530,6 +541,9 @@ namespace FishLens_App
                 _logger.LogWarning(ex, "Could not parse appsettings.json; keeping current settings");
             }
         }
+
+
+
 
         private void PersistSettingsToDatabase()
         {
@@ -540,46 +554,206 @@ namespace FishLens_App
             using var conn = new SqlConnection(app.connectionString);
             conn.Open();
 
+            string orgActiveRun = null;
+            if (app.IsAdmin)
+            {
+                orgActiveRun = _config.ActiveRun;
+            }
+            else
+            {
+                using var orgCmd = new SqlCommand("kaharra.GetOrganizationSettings", conn);
+                orgCmd.CommandType = System.Data.CommandType.StoredProcedure;
+                orgCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
+                using var orgReader = orgCmd.ExecuteReader();
+                if (orgReader.Read())
+                    orgActiveRun = orgReader.IsDBNull(1) ? null : orgReader.GetString(1);
+            }
+
+            string userOverride = string.Equals(_config.ActiveRun, orgActiveRun, StringComparison.OrdinalIgnoreCase)
+                ? null 
+                : _config.ActiveRun;
+
             using (var cmd = new SqlCommand("kaharra.SaveUserSettings", conn))
             {
                 cmd.CommandType = System.Data.CommandType.StoredProcedure;
                 cmd.Parameters.AddWithValue("@pUserId", app.CurrentUserId);
-                cmd.Parameters.AddWithValue("@pOutputBox", false);
-                cmd.Parameters.AddWithValue("@pErrorBox", false);
+                cmd.Parameters.AddWithValue("@pFastMode", _checkBoxes.FastMode);
                 cmd.Parameters.AddWithValue("@pHighContrastMode", _config.HighContrastMode);
                 cmd.Parameters.AddWithValue("@pLargeText", _config.LargeText);
+                cmd.Parameters.AddWithValue("@pActiveRunOverride", (object)userOverride ?? DBNull.Value);
                 cmd.ExecuteNonQuery();
             }
 
-            if (!app.IsAdmin)
-                return;
-
-            using var orgCmd = new SqlCommand("kaharra.SaveOrganizationSettings", conn);
-            orgCmd.CommandType = System.Data.CommandType.StoredProcedure;
-            orgCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
-            orgCmd.Parameters.AddWithValue("@pConfidenceThreshold", _config.ConfidenceThreshold);
-            orgCmd.Parameters.AddWithValue("@pUpdatedByUserId", app.CurrentUserId);
-            orgCmd.ExecuteNonQuery();
+            if (app.IsAdmin)
+            {
+                using var saveOrgCmd = new SqlCommand("kaharra.SaveOrganizationSettings", conn);
+                saveOrgCmd.CommandType = System.Data.CommandType.StoredProcedure;
+                saveOrgCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
+                saveOrgCmd.Parameters.AddWithValue("@pConfidenceThreshold", _config.ConfidenceThreshold);
+                saveOrgCmd.Parameters.AddWithValue("@pActiveRun", (object)_config.ActiveRun ?? DBNull.Value);
+                saveOrgCmd.Parameters.AddWithValue("@pUpdatedByUserId", app.CurrentUserId);
+                saveOrgCmd.ExecuteNonQuery();
+            }
         }
+
+        private void DbAddRun(string name, bool locked)
+        {
+            var app = Application.Current as App;
+            if (app == null) return;
+
+            try
+            {
+                using var conn = new SqlConnection(app.connectionString);
+                conn.Open();
+                using var cmd = new SqlCommand("kaharra.AddOrganizationRun", conn);
+                cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                cmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
+                cmd.Parameters.AddWithValue("@pName", name);
+                cmd.Parameters.AddWithValue("@pLocked", locked);
+                cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to add run {name} to DB", name);
+            }
+        }
+
+        private void DbUpdateRunLocked(string name, bool locked)
+        {
+            var app = Application.Current as App;
+            if (app == null) return;
+
+            try
+            {
+                using var conn = new SqlConnection(app.connectionString);
+                conn.Open();
+                using var cmd = new SqlCommand("kaharra.UpdateOrganizationRun", conn);
+                cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                cmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
+                cmd.Parameters.AddWithValue("@pName", name);
+                cmd.Parameters.AddWithValue("@pLocked", locked);
+                cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update run {name} in DB", name);
+            }
+        }
+
+        private void DbAddLocation(string name, string upstreamDirection)
+        {
+            var app = Application.Current as App;
+            if (app == null) return;
+
+            try
+            {
+                using var conn = new SqlConnection(app.connectionString);
+                conn.Open();
+                using var cmd = new SqlCommand("kaharra.AddOrganizationLocation", conn);
+                cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                cmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
+                cmd.Parameters.AddWithValue("@pName", name);
+                cmd.Parameters.AddWithValue("@pUpstreamDirection", upstreamDirection);
+                cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to add location {name} to DB", name);
+            }
+        }
+
+        private void DbDeleteLocation(string name)
+        {
+            var app = Application.Current as App;
+            if (app == null) return;
+
+            try
+            {
+                using var conn = new SqlConnection(app.connectionString);
+                conn.Open();
+                using var cmd = new SqlCommand("kaharra.DeleteOrganizationLocation", conn);
+                cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                cmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
+                cmd.Parameters.AddWithValue("@pName", name);
+                cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to delete location {name} from DB", name);
+            }
+        }
+
+
+
+
 
         private void PersistSettingsToJson()
         {
             string configPath = Path.Combine(_pathResolver.ResolveProjectRoot() ?? string.Empty, "appsettings.json");
             var settingsObj = new
             {
-                ConfidenceThreshold = _config.ConfidenceThreshold,
-                FastMode = _checkBoxes.FastMode,
-                HighContrastMode = _config.HighContrastMode,
-                LargeText = _config.LargeText,
-                ActiveLocation = _config.ActiveLocation,
-                ActiveRun = _config.ActiveRun,
-                Runs = _config.Runs,
-                Locations = _config.Locations
+                // Kept in JSON for now (until ActiveLocation flow is finalized in main page)
+                ActiveLocation = _config.ActiveLocation
+                // Future: SavedUsername, RememberLogin, etc. would go here
             };
 
             SaveSettingsFile(configPath, settingsObj);
-            _logger.LogInformation("Settings saved to {path}", configPath);
+            _logger.LogInformation("Settings file written to {path}", configPath);
         }
+
+        private void MigrateLegacyJsonToDatabase()
+        {
+            var app = Application.Current as App;
+            if (app == null || app.CurrentOrganizationId <= 0) return;
+
+            string configPath = Path.Combine(_pathResolver.ResolveProjectRoot() ?? string.Empty, "appsettings.json");
+            if (!File.Exists(configPath)) return;
+
+            try
+            {
+                using var stream = File.OpenRead(configPath);
+                using var doc = JsonDocument.Parse(stream);
+                var root = doc.RootElement;
+
+                // Migrate Runs
+                if (root.TryGetProperty("Runs", out var runsEl) && runsEl.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var runEl in runsEl.EnumerateArray())
+                    {
+                        if (!runEl.TryGetProperty("Name", out var nameEl)) continue;
+                        string name = nameEl.GetString();
+                        if (string.IsNullOrWhiteSpace(name)) continue;
+                        bool locked = runEl.TryGetProperty("Locked", out var lockedEl)
+                            && lockedEl.ValueKind == JsonValueKind.True;
+                        DbAddRun(name, locked);
+                    }
+                }
+
+                // Migrate Locations
+                if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var locEl in locsEl.EnumerateArray())
+                    {
+                        if (!locEl.TryGetProperty("Name", out var nameEl)) continue;
+                        string name = nameEl.GetString();
+                        if (string.IsNullOrWhiteSpace(name)) continue;
+                        string dir = locEl.TryGetProperty("UpstreamDirection", out var dirEl)
+                            ? dirEl.GetString() : "left";
+                        DbAddLocation(name, dir);
+                    }
+                }
+
+                _logger.LogInformation("Legacy JSON settings migrated to database");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to migrate legacy JSON settings");
+            }
+        }
+
+
+
+
 
         private void RefreshLocationsPanel()
         {
