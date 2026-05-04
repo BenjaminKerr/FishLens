@@ -99,61 +99,12 @@ namespace FishLens_App
                 using var doc = JsonDocument.Parse(stream);
                 var root = doc.RootElement;
 
-                if (root.TryGetProperty("ConfidenceThreshold", out var ctEl) &&
-                    ctEl.ValueKind == JsonValueKind.Number)
-                    Configuration.ConfidenceThreshold = ctEl.GetDouble();
-
-                if (root.TryGetProperty("FastMode", out var fmEl) &&
-                    (fmEl.ValueKind == JsonValueKind.True || fmEl.ValueKind == JsonValueKind.False))
-                    CheckBoxes.FastMode = fmEl.GetBoolean();
-
+       
                 if (root.TryGetProperty("ActiveLocation", out var alEl) &&
                     alEl.ValueKind == JsonValueKind.String)
                     Configuration.ActiveLocation = alEl.GetString() ?? "Unknown";
 
-                if (root.TryGetProperty("ActiveRun", out var arEl) &&
-                    arEl.ValueKind == JsonValueKind.String)
-                    Configuration.ActiveRun = arEl.GetString() ?? string.Empty;
-
-                if (root.TryGetProperty("Runs", out var runsEl) &&
-                    runsEl.ValueKind == JsonValueKind.Array)
-                {
-                    var runs = new System.Collections.Generic.List<RunEntry>();
-                    foreach (var runEl in runsEl.EnumerateArray())
-                    {
-                        string runName = runEl.TryGetProperty("Name", out var nameEl)
-                            ? nameEl.GetString() ?? string.Empty
-                            : string.Empty;
-                        bool locked = runEl.TryGetProperty("Locked", out var lockedEl) &&
-                            lockedEl.ValueKind == JsonValueKind.True;
-
-                        if (!string.IsNullOrWhiteSpace(runName))
-                            runs.Add(new RunEntry { Name = runName, Locked = locked });
-                    }
-
-                    Configuration.Runs = runs;
-                }
-
-                if (root.TryGetProperty("Locations", out var locsEl) &&
-                    locsEl.ValueKind == JsonValueKind.Array)
-                {
-                    var locations = new System.Collections.Generic.List<LocationEntry>();
-                    foreach (var locEl in locsEl.EnumerateArray())
-                    {
-                        string locName = locEl.TryGetProperty("Name", out var nameEl)
-                            ? nameEl.GetString() ?? "Unknown"
-                            : "Unknown";
-                        string upstreamDirection = locEl.TryGetProperty("UpstreamDirection", out var dirEl)
-                            ? dirEl.GetString() ?? "left"
-                            : "left";
-
-                        if (!string.IsNullOrWhiteSpace(locName))
-                            locations.Add(new LocationEntry { Name = locName, UpstreamDirection = upstreamDirection });
-                    }
-
-                    if (locations.Count > 0)
-                        Configuration.Locations = locations;
-                }
+           
             }
             catch
             {

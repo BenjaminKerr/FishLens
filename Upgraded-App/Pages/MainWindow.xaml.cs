@@ -513,10 +513,20 @@ namespace FishLens_App
         // **************************************************
         private void UpdateRunDisplay()
         {
-            string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
+            var app = Application.Current as App;
+            if (app == null) return;
+
+            // Prefer the App-level property, but fall back to Configuration if they've drifted
+            string activeRun = !string.IsNullOrWhiteSpace(app.ActiveRun)
+                ? app.ActiveRun
+                : (app.Configuration?.ActiveRun ?? string.Empty);
+
             if (runDisplayLabel != null)
                 runDisplayLabel.Text = string.IsNullOrWhiteSpace(activeRun) ? "No run selected" : activeRun;
         }
+
+
+
 
         // **************************************************
         // Function: GetUpstreamDirectionForActiveLocation
@@ -588,45 +598,37 @@ namespace FishLens_App
         {
             try
             {
-                string configPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
-                var locationNames = new List<string>();
-                string activeLocation = "Unknown";
+                var app = Application.Current as App;
+                if (app == null) return;
 
-                if (File.Exists(configPath))
-                {
-                    using var stream = File.OpenRead(configPath);
-                    using var doc = JsonDocument.Parse(stream);
-                    var root = doc.RootElement;
-
-                    if (root.TryGetProperty("ActiveLocation", out var alEl) && alEl.ValueKind == JsonValueKind.String)
-                        activeLocation = alEl.GetString() ?? "Unknown";
-
-                    if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var locEl in locsEl.EnumerateArray())
-                        {
-                            if (locEl.TryGetProperty("Name", out var nEl) && nEl.ValueKind == JsonValueKind.String)
-                                locationNames.Add(nEl.GetString());
-                        }
-                    }
-                }
+                // Read locations from the shared in-memory Configuration (populated from DB at sign-in)
+                var locationNames = app.Configuration?.Locations?
+                    .Select(l => l.Name)
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .ToList() ?? new List<string>();
 
                 if (locationNames.Count == 0)
                     locationNames.Add("Unknown");
 
+                // ActiveLocation still lives in JSON for now (per your decision)
+                string activeLocation = app.ActiveLocation;
+                if (string.IsNullOrWhiteSpace(activeLocation) || !locationNames.Contains(activeLocation))
+                    activeLocation = locationNames[0];
+
                 // Suppress SelectionChanged while populating
                 locationDropdown.SelectionChanged -= LocationDropdown_SelectionChanged;
                 locationDropdown.ItemsSource = locationNames;
-                locationDropdown.SelectedItem = locationNames.Contains(activeLocation) ? activeLocation : locationNames[0];
+                locationDropdown.SelectedItem = activeLocation;
                 locationDropdown.SelectionChanged += LocationDropdown_SelectionChanged;
 
                 // Keep App in sync
-                var app = Application.Current as App;
-                if (app != null)
-                    app.ActiveLocation = locationDropdown.SelectedItem as string ?? "Unknown";
+                app.ActiveLocation = locationDropdown.SelectedItem as string ?? "Unknown";
             }
             catch { /* non-critical */ }
         }
+
+
+
 
         // **************************************************
         // Function: LocationDropdown_SelectionChanged

@@ -5,7 +5,9 @@
 // ***************************************************************************************************************************
 
 
+using FishLens_App.Models;
 using System;
+using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Diagnostics;
 using System.Windows;
@@ -37,6 +39,7 @@ namespace FishLens_App
 
                     if (success)
                     {
+                        // 1. Look up user identity
                         string sql = @"SELECT Id, Username, RoleId, OrganizationId
                                FROM [kaharra].[FishLensUsers]
                                WHERE Username = @user";
@@ -57,7 +60,7 @@ namespace FishLens_App
                             }
                         }
 
-                        // Load this user's saved settings from DB — only on successful login
+                        // 2. Load this user's saved settings from DB
                         using (SqlCommand settingsCmd = new SqlCommand("kaharra.GetUserSettings", conn))
                         {
                             settingsCmd.CommandType = System.Data.CommandType.StoredProcedure;
@@ -67,7 +70,6 @@ namespace FishLens_App
                             {
                                 if (reader.Read())
                                 {
-                                  
                                     app.CheckBoxes.FastMode = reader.GetBoolean(0);
                                     app.Configuration.HighContrastMode = reader.GetBoolean(1);
                                     app.Configuration.LargeText = reader.GetBoolean(2);
@@ -79,10 +81,7 @@ namespace FishLens_App
                             }
                         }
 
-
-
-
-                        // Load this user's organization's shared settings (e.g., confidence threshold)
+                        // 3. Load this user's organization's shared settings
                         using (SqlCommand orgSettingsCmd = new SqlCommand("kaharra.GetOrganizationSettings", conn))
                         {
                             orgSettingsCmd.CommandType = System.Data.CommandType.StoredProcedure;
@@ -103,28 +102,83 @@ namespace FishLens_App
                                     }
                                 }
                             }
-
-
-
                         }
 
+                        // 4. Load org's locations into Configuration so MainWindow's dropdown works on first load
+                        using (SqlCommand locsCmd = new SqlCommand("kaharra.GetOrganizationLocations", conn))
+                        {
+                            locsCmd.CommandType = System.Data.CommandType.StoredProcedure;
+                            locsCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
 
+                            var locations = new List<LocationEntry>();
+                            using (SqlDataReader reader = locsCmd.ExecuteReader())
+                            {
+                                while (reader.Read())
+                                {
+                                    locations.Add(new LocationEntry
+                                    {
+                                        Name = reader.GetString(0),
+                                        UpstreamDirection = reader.GetString(1)
+                                    });
+                                }
+                            }
+                            if (locations.Count > 0)
+                                app.Configuration.Locations = locations;
+                        }
 
+                        // 5. Load org's runs so the run dropdown is populated immediately
+                        using (SqlCommand runsCmd = new SqlCommand("kaharra.GetOrganizationRuns", conn))
+                        {
+                            runsCmd.CommandType = System.Data.CommandType.StoredProcedure;
+                            runsCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
+
+                            var runs = new List<RunEntry>();
+                            using (SqlDataReader reader = runsCmd.ExecuteReader())
+                            {
+                                while (reader.Read())
+                                {
+                                    runs.Add(new RunEntry
+                                    {
+                                        Name = reader.GetString(0),
+                                        Locked = reader.GetBoolean(1)
+                                    });
+                                }
+                            }
+                            app.Configuration.Runs = runs;
+                        }
                     }
                 }
             }
-            catch (SqlException ex) { Debug.WriteLine("SQL: " + ex.Message); }
-            catch (Exception ex) { Debug.WriteLine("EX: " + ex.Message); }
+            catch (SqlException ex)
+            {
+                Debug.WriteLine("SQL: " + ex.Message);
+                SignInError.Text = "Database error during sign-in. Please try again.";
+                SignInError.Visibility = Visibility.Visible;
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("EX: " + ex.Message);
+                SignInError.Text = $"Sign-in failed: {ex.Message}";
+                SignInError.Visibility = Visibility.Visible;
+                return false;
+            }
 
             if (success)
             {
-                // After DB-backed user/org settings are loaded, refresh the JSON-backed
-                // runtime settings such as Fast Mode, active run, and active location.
+                // appsettings.json now only holds ActiveLocation (until that flow is finalized)
                 app.LoadRuntimeSettingsFromJson();
+
+                // Sync App-level passthroughs so MainWindow reads the right values
+                app.ActiveRun = app.Configuration.ActiveRun ?? string.Empty;
+                app.ActiveLocation = app.Configuration.ActiveLocation ?? "Unknown";
             }
 
             return success;
         }
+
+
+
 
 
 
