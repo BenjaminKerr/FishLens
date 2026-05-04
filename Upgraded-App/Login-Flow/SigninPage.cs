@@ -67,13 +67,20 @@ namespace FishLens_App
                             {
                                 if (reader.Read())
                                 {
-                                    // Legacy output/error columns remain in the procedure result,
-                                    // but the current UI only keeps Fast Mode locally.
-                                    app.Configuration.HighContrastMode = reader.GetBoolean(2);
-                                    app.Configuration.LargeText = reader.GetBoolean(3);
+                                  
+                                    app.CheckBoxes.FastMode = reader.GetBoolean(0);
+                                    app.Configuration.HighContrastMode = reader.GetBoolean(1);
+                                    app.Configuration.LargeText = reader.GetBoolean(2);
+
+                                    string activeRunOverride = reader.IsDBNull(3) ? null : reader.GetString(3);
+                                    if (!string.IsNullOrWhiteSpace(activeRunOverride))
+                                        app.Configuration.ActiveRun = activeRunOverride;
                                 }
                             }
                         }
+
+
+
 
                         // Load this user's organization's shared settings (e.g., confidence threshold)
                         using (SqlCommand orgSettingsCmd = new SqlCommand("kaharra.GetOrganizationSettings", conn))
@@ -86,9 +93,19 @@ namespace FishLens_App
                                 if (reader.Read())
                                 {
                                     app.Configuration.ConfidenceThreshold = reader.GetDouble(0);
+
+                                    // Org's default active run (only used if user has no override)
+                                    if (!reader.IsDBNull(1))
+                                    {
+                                        string orgActiveRun = reader.GetString(1);
+                                        if (string.IsNullOrWhiteSpace(app.Configuration.ActiveRun))
+                                            app.Configuration.ActiveRun = orgActiveRun;
+                                    }
                                 }
-                                // No row → defaults stay in place (0.7 from constructor)
                             }
+
+
+
                         }
 
 
