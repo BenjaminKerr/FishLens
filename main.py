@@ -219,7 +219,8 @@ STRICT_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DUR
 LOOSE_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_LOOSE_MIN_TRACK_DURATION_SEC", "0.45")))
 MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
 MIN_TRACK_TRAVEL_PX = max(0.0, float(os.getenv("FISHLENS_MIN_TRACK_TRAVEL_PX", "8")))
-PARALLEL_WORKERS = max(1, int(os.getenv("FISHLENS_WORKERS", "1")))
+PARALLEL_WORKERS_RAW = os.getenv("FISHLENS_WORKERS", "1").strip().lower()
+AUTO_TUNE = os.getenv("FISHLENS_AUTOTUNE", "0") == "1"
 
 # Constants--Classifier
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
@@ -429,7 +430,8 @@ def _process_video_with_retry(video_path, source_video_path):
 
     try:
         # Pass 1: strict settings
-        FRAME_STRIDE = STRICT_FRAME_STRIDE
+        strict_stride = max(1, int(os.getenv("FISHLENS_STRICT_FRAME_STRIDE", str(STRICT_FRAME_STRIDE))))
+        FRAME_STRIDE = strict_stride
         YOLO_CONFIDENCE_THRESHOLD = STRICT_YOLO_CONFIDENCE_THRESHOLD
         MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
         video_tracks = _run_pass("strict")
@@ -437,7 +439,7 @@ def _process_video_with_retry(video_path, source_video_path):
         # Pass 2: loose settings with FRAME_STRIDE=1 whenever pass 1 found no fish.
         if not video_tracks:
             print(
-                f"[INFO] No fish found with strict settings (FRAME_STRIDE={STRICT_FRAME_STRIDE}); "
+                f"[INFO] No fish found with strict settings (FRAME_STRIDE={strict_stride}); "
                 "retrying once with FRAME_STRIDE=1 and loose thresholds"
             )
             FRAME_STRIDE = 1
@@ -479,11 +481,57 @@ def _process_video_file(item_path):
 
 
 def _resolve_workers(video_count):
+    max_count = max(1, int(video_count))
+
+    # Manual override always wins when a numeric worker count is provided.
+    if PARALLEL_WORKERS_RAW not in ("", "auto"):
+        try:
+            configured = max(1, int(PARALLEL_WORKERS_RAW))
+            return max(1, min(configured, max_count))
+        except Exception:
+            return 1
+
+    gpu_count = _detect_gpu_count()
+    cpu_count = os.cpu_count() or 1
+
+    # Heuristic defaults tuned for this pipeline.
+    if gpu_count >= 2:
+        tuned = min(max_count, gpu_count)
+    elif gpu_count == 1:
+        tuned = min(max_count, 2)
+    else:
+        tuned = min(max_count, max(1, min(cpu_count - 1, 6)))
+
+    return max(1, tuned)
+
+
+def _detect_gpu_count():
     try:
-        configured = max(1, int(PARALLEL_WORKERS))
+        torch = importlib.import_module("torch")
+        if hasattr(torch, "cuda") and torch.cuda.is_available():
+            return int(torch.cuda.device_count() or 0)
     except Exception:
-        configured = 1
-    return max(1, min(configured, max(1, int(video_count))))
+        pass
+
+    try:
+        count = int(cv2.cuda.getCudaEnabledDeviceCount())
+        return max(0, count)
+    except Exception:
+        return 0
+
+
+def _resolve_tuned_strict_stride():
+    env_stride = os.getenv("FISHLENS_STRICT_FRAME_STRIDE", "").strip()
+    if env_stride:
+        try:
+            return max(1, int(env_stride))
+        except Exception:
+            return STRICT_FRAME_STRIDE
+
+    gpu_count = _detect_gpu_count()
+    if gpu_count >= 1:
+        return 3 if FAST_MODE else 2
+    return 4 if FAST_MODE else 3
 
 
 def main(input_path=None):
@@ -573,7 +621,21 @@ def main(input_path=None):
             print("[INFO] No new videos to process after skip-check.", flush=True)
             return
 
+        if AUTO_TUNE:
+            tuned_stride = _resolve_tuned_strict_stride()
+            os.environ["FISHLENS_STRICT_FRAME_STRIDE"] = str(tuned_stride)
+            print(
+                f"[INFO] Auto-tune: set FISHLENS_STRICT_FRAME_STRIDE={tuned_stride}",
+                flush=True,
+            )
+
         worker_count = _resolve_workers(pending_total)
+        if AUTO_TUNE or PARALLEL_WORKERS_RAW in ("", "auto"):
+            print(
+                f"[INFO] Auto-tune: selected workers={worker_count} "
+                f"(FISHLENS_WORKERS={PARALLEL_WORKERS_RAW or 'auto'})",
+                flush=True,
+            )
         if worker_count > 1:
             print(
                 f"[INFO] Parallel mode enabled: workers={worker_count} (set FISHLENS_WORKERS to tune).",
