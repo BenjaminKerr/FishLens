@@ -15,6 +15,7 @@ import csv
 import cv2
 import subprocess
 import importlib
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from contextlib import contextmanager
 import tempfile
 import numpy as np
@@ -218,6 +219,7 @@ STRICT_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DUR
 LOOSE_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_LOOSE_MIN_TRACK_DURATION_SEC", "0.45")))
 MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
 MIN_TRACK_TRAVEL_PX = max(0.0, float(os.getenv("FISHLENS_MIN_TRACK_TRAVEL_PX", "8")))
+PARALLEL_WORKERS = max(1, int(os.getenv("FISHLENS_WORKERS", "1")))
 
 # Constants--Classifier
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
@@ -458,6 +460,32 @@ def _process_video_with_retry(video_path, source_video_path):
         MIN_TRACK_DURATION_SEC = original_min_duration
 
 
+def _process_video_file(item_path):
+    """Process one source video and return finalized export rows."""
+    filename = os.path.basename(item_path)
+    video_path, is_temp = convert_asf_to_mp4(item_path)
+    try:
+        video_tracks = _process_video_with_retry(video_path, item_path)
+    finally:
+        if is_temp:
+            _cleanup_temp(video_path)
+
+    for track in video_tracks:
+        track["video_file"] = item_path
+        track["location"] = FISHLENS_LOCATION
+        track["run"] = _RUN_NAME
+
+    return filename, video_tracks
+
+
+def _resolve_workers(video_count):
+    try:
+        configured = max(1, int(PARALLEL_WORKERS))
+    except Exception:
+        configured = 1
+    return max(1, min(configured, max(1, int(video_count))))
+
+
 def main(input_path=None):
     if input_path is None:
         input_path = os.path.join(PROJECT_ROOT, "SavedVids")
@@ -479,19 +507,13 @@ def main(input_path=None):
     if single_video_file:
         # Process single video file
         print(f"[PROGRESS] TOTAL:1", flush=True)
-        video_path, is_temp = convert_asf_to_mp4(single_video_file)
         filename = os.path.basename(single_video_file)
         print(f"[PROGRESS] VIDEO:1/1|{filename}", flush=True)
         try:
-            video_tracks = _process_video_with_retry(video_path, single_video_file)
-        finally:
-            if is_temp:
-                _cleanup_temp(video_path)
-
-        for t in video_tracks:
-            t["video_file"] = single_video_file
-            t["location"] = FISHLENS_LOCATION
-            t["run"] = _RUN_NAME
+            _, video_tracks = _process_video_file(single_video_file)
+        except Exception as e:
+            print(f"[ERROR] Failed to process {filename}: {e}")
+            video_tracks = []
         if video_tracks:
             try:
                 _flush_tracks_to_csv(video_tracks)
@@ -538,38 +560,78 @@ def main(input_path=None):
         else:
             print("[INFO] FORCE_REANALYZE=1: skipping already-analyzed check, all videos will be re-processed.", flush=True)
 
-        for video_index, filename in enumerate(video_files, start=1):
+        pending_paths = []
+        for filename in video_files:
             item_path = os.path.join(video_folder, filename)
-            print(f"[PROGRESS] VIDEO:{video_index}/{video_count}|{filename}", flush=True)
-
             if os.path.normcase(os.path.normpath(item_path)) in already_analyzed:
                 print(f"[INFO] Skipping (already analyzed): {filename}", flush=True)
                 continue
+            pending_paths.append(item_path)
 
-            video_path, is_temp = convert_asf_to_mp4(item_path)
-            print(f"Processing: {filename}")
-            try:
-                video_tracks = _process_video_with_retry(video_path, item_path)
-            finally:
-                if is_temp:
-                    _cleanup_temp(video_path)
-            for t in video_tracks:
-                t["video_file"] = item_path
-                t["location"] = FISHLENS_LOCATION
-                t["run"] = _RUN_NAME
+        pending_total = len(pending_paths)
+        if pending_total == 0:
+            print("[INFO] No new videos to process after skip-check.", flush=True)
+            return
 
-            # Flush this video's tracks to CSV immediately so results are preserved
-            # even if the run is cancelled before all videos finish.
-            if video_tracks:
+        worker_count = _resolve_workers(pending_total)
+        if worker_count > 1:
+            print(
+                f"[INFO] Parallel mode enabled: workers={worker_count} (set FISHLENS_WORKERS to tune).",
+                flush=True,
+            )
+            completed = 0
+            with ProcessPoolExecutor(max_workers=worker_count) as executor:
+                future_to_path = {
+                    executor.submit(_process_video_file, item_path): item_path
+                    for item_path in pending_paths
+                }
+                for future in as_completed(future_to_path):
+                    item_path = future_to_path[future]
+                    filename = os.path.basename(item_path)
+                    completed += 1
+                    print(f"[PROGRESS] VIDEO:{completed}/{pending_total}|{filename}", flush=True)
+
+                    try:
+                        _, video_tracks = future.result()
+                    except Exception as e:
+                        print(f"[ERROR] Failed to process {filename}: {e}")
+                        video_tracks = []
+
+                    if video_tracks:
+                        try:
+                            _flush_tracks_to_csv(video_tracks)
+                            print(f"[SUCCESS] Exported {len(video_tracks)} fish tracks for {filename}.")
+                        except Exception as e:
+                            print(f"[ERROR] Failed to write CSV for {filename}: {e}")
+                    else:
+                        print(f"[INFO] No fish tracks to export for {filename}.")
+
+                    print(f"[PROGRESS] VIDEO_DONE:{filename}", flush=True)
+        else:
+            print("[INFO] Parallel mode disabled (workers=1). Running serial processing.", flush=True)
+            for video_index, item_path in enumerate(pending_paths, start=1):
+                filename = os.path.basename(item_path)
+                print(f"[PROGRESS] VIDEO:{video_index}/{pending_total}|{filename}", flush=True)
+                print(f"Processing: {filename}")
+
                 try:
-                    _flush_tracks_to_csv(video_tracks)
-                    print(f"[SUCCESS] Exported {len(video_tracks)} fish tracks for {filename}.")
+                    _, video_tracks = _process_video_file(item_path)
                 except Exception as e:
-                    print(f"[ERROR] Failed to write CSV for {filename}: {e}")
-            else:
-                print(f"[INFO] No fish tracks to export for {filename}.")
+                    print(f"[ERROR] Failed to process {filename}: {e}")
+                    video_tracks = []
 
-            print(f"[PROGRESS] VIDEO_DONE:{filename}", flush=True)
+                # Flush this video's tracks to CSV immediately so results are preserved
+                # even if the run is cancelled before all videos finish.
+                if video_tracks:
+                    try:
+                        _flush_tracks_to_csv(video_tracks)
+                        print(f"[SUCCESS] Exported {len(video_tracks)} fish tracks for {filename}.")
+                    except Exception as e:
+                        print(f"[ERROR] Failed to write CSV for {filename}: {e}")
+                else:
+                    print(f"[INFO] No fish tracks to export for {filename}.")
+
+                print(f"[PROGRESS] VIDEO_DONE:{filename}", flush=True)
 
 # ****************************************************************
 # Function: enhance_image
@@ -1638,16 +1700,18 @@ def classify_image(image_path):
         return ("No data", 0.0)
 
 
-# Persistent server loop: accept one folder path per line from stdin, process it, signal done.
-if CLI_INPUT_PATH:
-    try:
-        main(CLI_INPUT_PATH)
-    except Exception as e:
-        print(f"[ERROR] Unhandled exception during processing: {e}", flush=True)
-        import traceback
-        traceback.print_exc()
-    print("[PROGRESS] DONE", flush=True)
-else:
+def _run_service_loop():
+    """Persistent server loop: accept one folder path per line from stdin."""
+    if CLI_INPUT_PATH:
+        try:
+            main(CLI_INPUT_PATH)
+        except Exception as e:
+            print(f"[ERROR] Unhandled exception during processing: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+        print("[PROGRESS] DONE", flush=True)
+        return
+
     for raw_line in sys.stdin:
         input_path = raw_line.strip()
         if input_path:
@@ -1658,3 +1722,7 @@ else:
                 import traceback
                 traceback.print_exc()
             print("[PROGRESS] DONE", flush=True)
+
+
+if __name__ == "__main__":
+    _run_service_loop()
