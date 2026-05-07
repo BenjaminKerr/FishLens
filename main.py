@@ -155,11 +155,11 @@ TESSERACT_AVAILABLE = check_tesseract()
 
 # Detector configuration
 MODEL = _load_yolo_model("models/fish_detector4.pt")
-STRICT_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_YOLO_CONFIDENCE_THRESHOLD", "0.42"))
-LOOSE_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_LOOSE_YOLO_CONFIDENCE_THRESHOLD", "0.34"))
+STRICT_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_YOLO_CONFIDENCE_THRESHOLD", "0.30"))
+LOOSE_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_LOOSE_YOLO_CONFIDENCE_THRESHOLD", "0.25"))
 ENABLE_LOOSE_RETRY = os.getenv("FISHLENS_ENABLE_LOOSE_RETRY", "1") == "1"
 YOLO_CONFIDENCE_THRESHOLD = STRICT_YOLO_CONFIDENCE_THRESHOLD  # Adjustable: lower = detects more fish (but more false positives), higher = more selective
-MIN_DETECTION_BOX_AREA = max(50, int(os.getenv("FISHLENS_MIN_DETECTION_BOX_AREA", "300")))
+MIN_DETECTION_BOX_AREA = max(50, int(os.getenv("FISHLENS_MIN_DETECTION_BOX_AREA", "100")))
 NO_FISH = os.path.join(PROJECT_ROOT, "no_fish")
 
 # Corner-artifact filter: fixed IR illuminators or lens rings in camera corners produce
@@ -221,7 +221,7 @@ FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
 # Runtime tuning (primarily fed by the WPF app through environment variables)
 FISHLENS_LOCATION = os.getenv("FISHLENS_LOCATION", "Unknown").strip() or "Unknown"
 FAST_MODE = os.getenv("FISHLENS_FAST_MODE", "1") == "1"
-STRICT_FRAME_STRIDE = max(1, int(os.getenv("FISHLENS_STRICT_FRAME_STRIDE", "3")))
+STRICT_FRAME_STRIDE = max(1, int(os.getenv("FISHLENS_STRICT_FRAME_STRIDE", "1")))
 FRAME_STRIDE = STRICT_FRAME_STRIDE
 
 YOLO_IMGSZ = max(320, int(os.getenv("FISHLENS_YOLO_IMGSZ", "448" if FAST_MODE else "512")))
@@ -937,27 +937,22 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     net_dx = float(exit_x) - float(entry_x)
     min_net_dx = max(6.0, float(frame_width) * 0.02)
 
-    overall_direction = "indecisive"
-    if entry_side != exit_side:
-        # Fish crossed frame halves: use tracker vote first.
-        if upstream_count > downstream_count:
-            overall_direction = "upstream"
-        elif downstream_count > upstream_count:
-            overall_direction = "downstream"
-        elif net_dx <= -min_net_dx:
-            overall_direction = "upstream"
-        elif net_dx >= min_net_dx:
-            overall_direction = "downstream"
+    path_direction = "indecisive"
+    if travel_px >= MIN_TRACK_TRAVEL_PX and net_dx <= -min_net_dx:
+        path_direction = "upstream"
+    elif travel_px >= MIN_TRACK_TRAVEL_PX and net_dx >= min_net_dx:
+        path_direction = "downstream"
+
+    vote_direction = "indecisive"
+    if directional_votes >= 3:
+        vote_ratio = max(upstream_count, downstream_count) / max(1, directional_votes)
+        if vote_ratio >= 0.70:
+            vote_direction = "upstream" if upstream_count > downstream_count else "downstream"
+
+    if path_direction in {"upstream", "downstream"}:
+        overall_direction = path_direction
     else:
-        # Same-side tracks can still have clear direction from net movement.
-        if travel_px >= MIN_TRACK_TRAVEL_PX and net_dx <= -min_net_dx:
-            overall_direction = "upstream"
-        elif travel_px >= MIN_TRACK_TRAVEL_PX and net_dx >= min_net_dx:
-            overall_direction = "downstream"
-        elif directional_votes >= 3:
-            vote_ratio = max(upstream_count, downstream_count) / max(1, directional_votes)
-            if vote_ratio >= 0.70:
-                overall_direction = "upstream" if upstream_count > downstream_count else "downstream"
+        overall_direction = vote_direction
 
     # Reject low-motion indecisive tracks (common glare/debris false positives).
     if overall_direction == "indecisive" and travel_px < MIN_TRACK_TRAVEL_PX:

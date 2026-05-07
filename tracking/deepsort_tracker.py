@@ -17,11 +17,11 @@ from torchvision.ops import nms
 
 class DeepSortTracker:
     MIN_BOX_AREA = 100
-    MIN_CONFIDENCE = 0.62
+    MIN_CONFIDENCE = 0.5
     MIN_MOVE_THRESHOLD = 5
     MAX_TRACK_HISTORY = 50
     MIN_FRAMES_FOR_SUMMARY = 3
-    DEFAULT_NMS_IOU_THRESHOLD = 0.5
+    DEFAULT_NMS_IOU_THRESHOLD = 0.85
     MIN_POSITIONS_FOR_DIRECTION = 2
     DIRECTION_HISTORY_WINDOW = 12
     # A single fish should never occupy more than ~65% of the frame height
@@ -33,12 +33,12 @@ class DeepSortTracker:
     # discarding legitimate diagonal-swimming detections.
     MAX_BOX_HEIGHT_FRACTION = 0.65
     MAX_BOX_MERGED_ASPECT_RATIO = 2.5  # width/height; below this = suspiciously square
-    # Lowered from 10→4: fish pass through quickly; waiting 10 confirmed frames
+    # Lowered from 10→3: fish pass through quickly; waiting 10 confirmed frames
     # before track activation causes many short-duration fish to be missed entirely.
-    DEEPSORT_N_INIT = 4
-    # Lowered from 50→30: shorter retention window reduces ghost tracks from
-    # slow-moving background objects while still covering brief occlusions.
-    DEEPSORT_MAX_AGE = 30
+    DEEPSORT_N_INIT = 3
+    # Keep tracks alive through brief detection dropouts so one fish is less
+    # likely to be split into multiple exported fragments.
+    DEEPSORT_MAX_AGE = 60
     
     # ******************************
     # Function: __init__
