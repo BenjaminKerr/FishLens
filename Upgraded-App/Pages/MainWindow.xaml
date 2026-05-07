@@ -13,7 +13,6 @@
 
     <Window.Resources>
 
-
         <DataTemplate x:Key="FilledSegment">
             <Rectangle Fill ="#40842F" Height="10"/>
         </DataTemplate>
