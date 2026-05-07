@@ -221,7 +221,7 @@ FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
 # Runtime tuning (primarily fed by the WPF app through environment variables)
 FISHLENS_LOCATION = os.getenv("FISHLENS_LOCATION", "Unknown").strip() or "Unknown"
 FAST_MODE = os.getenv("FISHLENS_FAST_MODE", "1") == "1"
-STRICT_FRAME_STRIDE = max(1, int(os.getenv("FISHLENS_STRICT_FRAME_STRIDE", "1")))
+STRICT_FRAME_STRIDE = max(1, int(os.getenv("FISHLENS_STRICT_FRAME_STRIDE", "3")))
 FRAME_STRIDE = STRICT_FRAME_STRIDE
 
 YOLO_IMGSZ = max(320, int(os.getenv("FISHLENS_YOLO_IMGSZ", "448" if FAST_MODE else "512")))
@@ -234,7 +234,8 @@ LOOSE_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_LOOSE_MIN_TRAC
 MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
 MIN_TRACK_TRAVEL_PX = max(0.0, float(os.getenv("FISHLENS_MIN_TRACK_TRAVEL_PX", "24")))
 OCR_TIMESTAMP_MERGE_TOLERANCE_SEC = max(0.0, float(os.getenv("FISHLENS_OCR_TS_MERGE_TOLERANCE_SEC", "2.0")))
-TRACK_MISSING_GRACE_FRAMES = max(0, int(os.getenv("FISHLENS_TRACK_MISSING_GRACE_FRAMES", "3")))
+TRACK_MISSING_GRACE_FRAMES = max(0, int(os.getenv("FISHLENS_TRACK_MISSING_GRACE_FRAMES", "12")))
+TRACK_TIMESTAMP_SANITY_TOLERANCE_SEC = max(0.0, float(os.getenv("FISHLENS_TRACK_TS_SANITY_TOLERANCE_SEC", "5.0")))
 
 # Classifier configuration
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
@@ -1036,14 +1037,22 @@ def _track_last_seen_seconds(track_data, frameData, vidData):
 def _track_timestamp_for_start(track_data, vidData, start_sec):
     direct_ts = track_data.get("video_timestamp")
     timestamp_confidence = str(track_data.get("timestamp_confidence") or "").upper()
+    base_ts = _parse_track_timestamp(vidData.v_video_timestamp)
+
     if (
         direct_ts
         and str(direct_ts).strip().lower() != "not detected"
         and timestamp_confidence != "LOW"
     ):
-        return direct_ts
+        direct_dt = _parse_track_timestamp(direct_ts)
+        if base_ts is None or direct_dt is None:
+            return direct_ts
 
-    base_ts = _parse_track_timestamp(vidData.v_video_timestamp)
+        expected_dt = base_ts + timedelta(seconds=max(0.0, float(start_sec)))
+        if abs((direct_dt - expected_dt).total_seconds()) <= TRACK_TIMESTAMP_SANITY_TOLERANCE_SEC:
+            return direct_ts
+        track_data["timestamp_confidence"] = getattr(vidData, "v_probe_confidence", None) or "LOW"
+
     if base_ts is None:
         return direct_ts or vidData.v_video_timestamp or "Not detected"
 
@@ -1551,7 +1560,8 @@ def save_best_image(finished_tracks, filename):
             enhanced_crop = enhance_image(best_crop)
             
             # Classify the image first to determine species folder
-            temp_image_name = f"{os.path.splitext(filename)[0]}_track_{track['trackId']}.jpg"
+            start_token = _safe_path_component(str(track.get("start_time_sec", "0")).replace(".", "p"))
+            temp_image_name = f"{os.path.splitext(filename)[0]}_track_{track['trackId']}_start_{start_token}.jpg"
             temp_image_path = os.path.join(FISH_IMAGE_DIR, temp_image_name)
             write_ok = cv2.imwrite(temp_image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
             if not write_ok:
