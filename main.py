@@ -19,6 +19,7 @@ import warnings
 from collections import Counter
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import List
 
 import cv2
@@ -231,7 +232,9 @@ VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRA
 STRICT_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DURATION_SEC", "0.65")))
 LOOSE_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_LOOSE_MIN_TRACK_DURATION_SEC", "0.45")))
 MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
-MIN_TRACK_TRAVEL_PX = max(0.0, float(os.getenv("FISHLENS_MIN_TRACK_TRAVEL_PX", "8")))
+MIN_TRACK_TRAVEL_PX = max(0.0, float(os.getenv("FISHLENS_MIN_TRACK_TRAVEL_PX", "24")))
+OCR_TIMESTAMP_MERGE_TOLERANCE_SEC = max(0.0, float(os.getenv("FISHLENS_OCR_TS_MERGE_TOLERANCE_SEC", "2.0")))
+TRACK_MISSING_GRACE_FRAMES = max(0, int(os.getenv("FISHLENS_TRACK_MISSING_GRACE_FRAMES", "3")))
 
 # Classifier configuration
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
@@ -767,6 +770,10 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
             initial_x = float(obj.get("centroid", (0, 0))[0])
             vidData.v_active_tracks[trackId] = {
                 "start_frame": frameData.f_index,
+                "start_ms": frameData.f_pos_ms if frameData.f_pos_ms > 0 else None,
+                "last_seen_frame": frameData.f_index,
+                "last_seen_ms": frameData.f_pos_ms if frameData.f_pos_ms > 0 else None,
+                "missing_frames": 0,
                 "confidences": [],
                 "directions": [],
                 "entry_x": initial_x,
@@ -810,6 +817,9 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         # Update track data per-frame
         vidData.v_active_tracks[trackId]["confidences"].append(obj["confidence"])
         vidData.v_active_tracks[trackId]["directions"].append(obj["direction"])
+        vidData.v_active_tracks[trackId]["last_seen_frame"] = frameData.f_index
+        vidData.v_active_tracks[trackId]["last_seen_ms"] = frameData.f_pos_ms if frameData.f_pos_ms > 0 else None
+        vidData.v_active_tracks[trackId]["missing_frames"] = 0
 
         x1, y1, x2, y2 = obj["bbox"]
         exit_x = (x1 + x2) / 2  # Center x-position at current frame
@@ -859,6 +869,10 @@ def finalize_tracks(frameData, vidData, termination_reason):
     if termination_reason == "disappeared":         
         disappeared_ids = set(vidData.v_active_tracks.keys()) - vidData.v_current_track_ids 
         for tid in disappeared_ids:
+            track_data = vidData.v_active_tracks[tid]
+            track_data["missing_frames"] = int(track_data.get("missing_frames", 0)) + 1
+            if track_data["missing_frames"] <= TRACK_MISSING_GRACE_FRAMES:
+                continue
             track_data = vidData.v_active_tracks.pop(tid)
             track_dict = build_track_summary(tid, track_data, frameData, vidData, None, frame_width=getattr(vidData, "frame_width", 640))
             if track_dict:
@@ -872,7 +886,9 @@ def finalize_tracks(frameData, vidData, termination_reason):
 
 def build_track_summary(trackId, track_data, frameData, vidData, image_path=None, frame_width=640):
     """Build one export row for a finished track after duration/direction filtering."""
-    duration_sec = (frameData.f_index - track_data["start_frame"]) / vidData.v_fps
+    start_sec = _track_start_seconds(track_data, vidData)
+    end_sec = _track_last_seen_seconds(track_data, frameData, vidData)
+    duration_sec = max(0.0, end_sec - start_sec)
     confidences = [c for c in track_data["confidences"] if c is not None]
 
     # Calculate overall direction inputs early so duration gate can consider motion.
@@ -947,9 +963,13 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
     if overall_direction == "indecisive" and travel_px < MIN_TRACK_TRAVEL_PX:
         print(f"  [FILTER] Track {trackId} dropped: indecisive + travel_px {travel_px:.1f} < {MIN_TRACK_TRAVEL_PX:.1f}")
         return None
+
+    if overall_direction in {"upstream", "downstream"} and travel_px < MIN_TRACK_TRAVEL_PX:
+        print(f"  [FILTER] Track {trackId} dropped: low directional travel_px {travel_px:.1f} < {MIN_TRACK_TRAVEL_PX:.1f}")
+        return None
     
     # Handle timestamp with confidence flag
-    video_timestamp = track_data.get("video_timestamp") or vidData.v_video_timestamp or "Not detected"
+    video_timestamp = _track_timestamp_for_start(track_data, vidData, start_sec)
     timestamp_confidence = track_data.get("timestamp_confidence")
 
     # Add * only if timestamp is LOW confidence
@@ -961,8 +981,8 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         "likely_class": vidData.v_most_common_class,
         "confidence": f"{(best_conf_pct / 100):.4f}" if best_conf_pct > 0 else f"{(vidData.v_avg_confidence_YL / 100):.4f}",
         "avg_confidence": f"{(best_conf_pct / 100):.4f}" if best_conf_pct > 0 else f"{(avg_conf_DS / 100):.4f}",
-        "start_time_sec": f"{track_data['start_frame'] / vidData.v_fps:.2f}",
-        "end_time_sec": f"{frameData.f_index / vidData.v_fps:.2f}",
+        "start_time_sec": f"{start_sec:.2f}",
+        "end_time_sec": f"{end_sec:.2f}",
         "direction": overall_direction,
         "best_crop": track_data.get("best_crop"),
         "species": "No data",
@@ -977,10 +997,89 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         "best_conf_raw": float(best_conf_pct),
     }
 
+def _parse_track_timestamp(value):
+    text = str(value or "").replace("*", "").strip()
+    if not text or text.lower() == "not detected":
+        return None
+    try:
+        return datetime.strptime(text, "%Y/%m/%d %H:%M:%S")
+    except Exception:
+        return None
+
+def _format_track_timestamp(value):
+    return value.strftime("%Y/%m/%d %H:%M:%S")
+
+def _track_start_seconds(track_data, vidData):
+    try:
+        start_ms = track_data.get("start_ms")
+        if start_ms is not None and float(start_ms) > 0:
+            return float(start_ms) / 1000.0
+    except Exception:
+        pass
+    return float(track_data.get("start_frame", 0)) / max(1.0, float(vidData.v_fps or FPS_DEFAULT))
+
+def _track_last_seen_seconds(track_data, frameData, vidData):
+    try:
+        last_seen_ms = track_data.get("last_seen_ms")
+        if last_seen_ms is not None and float(last_seen_ms) > 0:
+            return float(last_seen_ms) / 1000.0
+    except Exception:
+        pass
+    try:
+        last_seen_frame = track_data.get("last_seen_frame")
+        if last_seen_frame is not None:
+            return float(last_seen_frame) / max(1.0, float(vidData.v_fps or FPS_DEFAULT))
+    except Exception:
+        pass
+    try:
+        if frameData.f_pos_ms and frameData.f_pos_ms > 0:
+            return float(frameData.f_pos_ms) / 1000.0
+    except Exception:
+        pass
+    return float(frameData.f_index) / max(1.0, float(vidData.v_fps or FPS_DEFAULT))
+
+def _track_timestamp_for_start(track_data, vidData, start_sec):
+    direct_ts = track_data.get("video_timestamp")
+    timestamp_confidence = str(track_data.get("timestamp_confidence") or "").upper()
+    if (
+        direct_ts
+        and str(direct_ts).strip().lower() != "not detected"
+        and timestamp_confidence != "LOW"
+    ):
+        return direct_ts
+
+    base_ts = _parse_track_timestamp(vidData.v_video_timestamp)
+    if base_ts is None:
+        return direct_ts or vidData.v_video_timestamp or "Not detected"
+
+    return _format_track_timestamp(base_ts + timedelta(seconds=max(0.0, float(start_sec))))
+
+def _timestamps_within_tolerance(a, b, tolerance_sec=OCR_TIMESTAMP_MERGE_TOLERANCE_SEC):
+    a_dt = _parse_track_timestamp(a)
+    b_dt = _parse_track_timestamp(b)
+    if a_dt is None or b_dt is None:
+        return True
+    return abs((a_dt - b_dt).total_seconds()) <= tolerance_sec
+
 def dedupe_fragmented_tracks(finished_tracks):
     """Merge likely duplicate rows created when one fish is split across tracker IDs."""
     if not finished_tracks:
         return finished_tracks
+    debug_merge = os.getenv("FISHLENS_DEBUG_MERGE", "0") == "1"
+
+    def _debug(reason):
+        if debug_merge:
+            print(f"  [MERGE-DEBUG] {reason}", flush=True)
+
+    if debug_merge:
+        for idx, track in enumerate(sorted(finished_tracks, key=lambda t: float(t.get("start_time_sec", 0.0))), start=1):
+            _debug(
+                f"raw {idx}: id={track.get('trackId')} "
+                f"{track.get('start_time_sec')}-{track.get('end_time_sec')} "
+                f"dir={track.get('direction')} ts={track.get('video_timestamp')} "
+                f"entry={track.get('entry_x')} exit={track.get('exit_x')} "
+                f"conf={track.get('confidence')}"
+            )
 
     def _pct(track):
         value = track.get("avg_confidence") or track.get("confidence") or "0%"
@@ -1034,6 +1133,9 @@ def dedupe_fragmented_tracks(finished_tracks):
         width = max(1.0, _frame_width(track))
         return max(50.0, width * 0.18)
 
+    def _travel(track):
+        return abs(_x(track, "exit_x") - _x(track, "entry_x"))
+
     def _merge_track_rows(a, b, merged_direction):
         # Keep chronology from the earlier segment and take best media/confidence
         # from whichever half saw the fish more clearly.
@@ -1061,10 +1163,10 @@ def dedupe_fragmented_tracks(finished_tracks):
                     merged[key] = second[key]
             merged["best_conf_raw"] = second.get("best_conf_raw", merged.get("best_conf_raw"))
 
-        # Prefer the more confident timestamp if they disagree.
-        first_ts_conf = str(first.get("timestamp_confidence", "")).upper()
-        second_ts_conf = str(second.get("timestamp_confidence", "")).upper()
-        if second_ts_conf == "HIGH" and first_ts_conf != "HIGH":
+        # The merged row represents one fish, so keep the timestamp from the
+        # earliest fragment: that is the fish's first detected appearance.
+        first_ts = str(first.get("video_timestamp", "")).replace("*", "").strip()
+        if not first_ts or first_ts.lower() == "not detected":
             merged["video_timestamp"] = second.get("video_timestamp", merged.get("video_timestamp"))
             merged["timestamp_confidence"] = second.get("timestamp_confidence", merged.get("timestamp_confidence"))
 
@@ -1119,6 +1221,9 @@ def dedupe_fragmented_tracks(finished_tracks):
         later_entry = _x(later, "entry_x")
         later_exit = _x(later, "exit_x")
 
+        if min(_travel(earlier), _travel(later)) < MIN_TRACK_TRAVEL_PX:
+            return False
+
         width = max(_frame_width(earlier), _frame_width(later))
         side_boundary = width / 2.0
         continuity_threshold = max(_continuity_threshold(earlier), _continuity_threshold(later))
@@ -1134,9 +1239,9 @@ def dedupe_fragmented_tracks(finished_tracks):
 
         return same_turn_point and same_outer_side and starts_and_ends_same_side
 
-    def _is_opposite_direction_fragment(a, b):
+    def _is_same_direction_fragment(a, b):
         da, db = _direction_pair(a, b)
-        if {da, db} != {"upstream", "downstream"}:
+        if da != db or da not in {"upstream", "downstream"}:
             return False
 
         if str(a.get("likely_class", "")).lower() != str(b.get("likely_class", "")).lower():
@@ -1146,16 +1251,46 @@ def dedupe_fragmented_tracks(finished_tracks):
         a_end = float(a.get("end_time_sec", 0.0))
         b_start = float(b.get("start_time_sec", 0.0))
         b_end = float(b.get("end_time_sec", 0.0))
+        if a_start <= b_start:
+            earlier, later = a, b
+            gap = max(0.0, b_start - a_end)
+        else:
+            earlier, later = b, a
+            gap = max(0.0, a_start - b_end)
+
+        if gap > 0.75:
+            return False
+
+        continuity_threshold = max(_continuity_threshold(earlier), _continuity_threshold(later))
+        return abs(_x(earlier, "exit_x") - _x(later, "entry_x")) <= continuity_threshold
+
+    def _is_opposite_direction_fragment(a, b):
+        da, db = _direction_pair(a, b)
+        if {da, db} != {"upstream", "downstream"}:
+            _debug(f"not opposite directions {da}/{db}")
+            return False
+
+        if str(a.get("likely_class", "")).lower() != str(b.get("likely_class", "")).lower():
+            _debug("class mismatch")
+            return False
+
+        a_start = float(a.get("start_time_sec", 0.0))
+        a_end = float(a.get("end_time_sec", 0.0))
+        b_start = float(b.get("start_time_sec", 0.0))
+        b_end = float(b.get("end_time_sec", 0.0))
         gap = min(abs(a_start - b_end), abs(b_start - a_end))
         if gap > 0.60:
+            _debug(f"opposite gap too large: {gap:.2f}")
             return False
 
         a_ts = str(a.get("video_timestamp", "")).replace("*", "").strip()
         b_ts = str(b.get("video_timestamp", "")).replace("*", "").strip()
-        if a_ts and b_ts and a_ts != b_ts:
+        if a_ts and b_ts and not _timestamps_within_tolerance(a_ts, b_ts):
+            _debug(f"timestamp mismatch: {a_ts} vs {b_ts}")
             return False
 
         if _is_turnaround_split(a, b):
+            _debug("turnaround split")
             return False
 
         continuity_threshold = max(_continuity_threshold(a), _continuity_threshold(b))
@@ -1169,9 +1304,21 @@ def dedupe_fragmented_tracks(finished_tracks):
             or abs(b_exit - a_entry) <= continuity_threshold
         )
         if not close_exit_to_entry:
+            _debug(
+                "not spatially continuous: "
+                f"a {a_start:.2f}-{a_end:.2f} {da} entry={a_entry:.1f} exit={a_exit:.1f}; "
+                f"b {b_start:.2f}-{b_end:.2f} {db} entry={b_entry:.1f} exit={b_exit:.1f}; "
+                f"threshold={continuity_threshold:.1f}"
+            )
             return False
 
         merged_direction = _merged_direction_from_path(a, b)
+        _debug(
+            "opposite fragment accepted: "
+            f"a {a_start:.2f}-{a_end:.2f} {da} entry={a_entry:.1f} exit={a_exit:.1f}; "
+            f"b {b_start:.2f}-{b_end:.2f} {db} entry={b_entry:.1f} exit={b_exit:.1f}; "
+            f"merged={merged_direction}"
+        )
         return merged_direction in {"upstream", "downstream"}
 
     def _is_likely_duplicate(a, b):
@@ -1183,6 +1330,11 @@ def dedupe_fragmented_tracks(finished_tracks):
             and not _is_turnaround_split(a, b)
             and not _is_opposite_direction_fragment(a, b)
         ):
+            _debug(
+                "duplicate rejected by direction gate: "
+                f"{a.get('start_time_sec')}-{a.get('end_time_sec')} {a.get('direction')} "
+                f"vs {b.get('start_time_sec')}-{b.get('end_time_sec')} {b.get('direction')}"
+            )
             return False
 
         # If OCR timestamp resolves to the same second, treat close tracks as likely split IDs.
@@ -1228,10 +1380,29 @@ def dedupe_fragmented_tracks(finished_tracks):
 
     for track in ordered:
         merged = False
+
+        # Prefer true handoff-style merges before generic duplicate cleanup. A
+        # later fragment can otherwise replace an older same-direction artifact
+        # and never get compared to the opposite-direction fragment beside it.
+        for i, existing in enumerate(kept):
+            if _is_opposite_direction_fragment(existing, track):
+                kept[i] = _merge_track_rows(existing, track, _merged_direction_from_path(existing, track))
+                merged = True
+                break
+            if _is_same_direction_fragment(existing, track):
+                kept[i] = _merge_track_rows(existing, track, str(track.get("direction", existing.get("direction", "indecisive"))).lower())
+                merged = True
+                break
+
+        if merged:
+            continue
+
         for i, existing in enumerate(kept):
             if _is_likely_duplicate(existing, track):
                 if _is_turnaround_split(existing, track):
                     kept[i] = _merge_track_rows(existing, track, "indecisive")
+                elif _is_same_direction_fragment(existing, track):
+                    kept[i] = _merge_track_rows(existing, track, str(track.get("direction", existing.get("direction", "indecisive"))).lower())
                 elif _is_opposite_direction_fragment(existing, track):
                     kept[i] = _merge_track_rows(existing, track, _merged_direction_from_path(existing, track))
                 elif _score(track) > _score(existing):
