@@ -74,6 +74,11 @@ namespace FishLens_App
                     break;
             }
         }
+
+        private void GoToForgotPassword_Click(object sender, RoutedEventArgs e)
+        {
+            ShowPanel("ForgotPanel");
+        }
     }
 }
 
