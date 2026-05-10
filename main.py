@@ -219,7 +219,7 @@ STRICT_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DUR
 LOOSE_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_LOOSE_MIN_TRACK_DURATION_SEC", "0.45")))
 MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
 MIN_TRACK_TRAVEL_PX = max(0.0, float(os.getenv("FISHLENS_MIN_TRACK_TRAVEL_PX", "8")))
-PARALLEL_WORKERS_RAW = os.getenv("FISHLENS_WORKERS", "1").strip().lower()
+PARALLEL_WORKERS_RAW = os.getenv("FISHLENS_WORKERS", "auto").strip().lower()
 AUTO_TUNE = os.getenv("FISHLENS_AUTOTUNE", "0") == "1"
 
 # Constants--Classifier
@@ -483,14 +483,6 @@ def _process_video_file(item_path):
 def _resolve_workers(video_count):
     max_count = max(1, int(video_count))
 
-    # Manual override always wins when a numeric worker count is provided.
-    if PARALLEL_WORKERS_RAW not in ("", "auto"):
-        try:
-            configured = max(1, int(PARALLEL_WORKERS_RAW))
-            return max(1, min(configured, max_count))
-        except Exception:
-            return 1
-
     gpu_count = _detect_gpu_count()
     cpu_count = os.cpu_count() or 1
 
@@ -502,7 +494,17 @@ def _resolve_workers(video_count):
     else:
         tuned = min(max_count, max(1, min(cpu_count - 1, 6)))
 
-    return max(1, tuned)
+    auto_workers = max(1, tuned)
+
+    # Manual override always wins when a numeric worker count is provided.
+    if PARALLEL_WORKERS_RAW not in ("", "auto"):
+        try:
+            configured = max(1, int(PARALLEL_WORKERS_RAW))
+            return max(1, min(configured, max_count))
+        except Exception:
+            return auto_workers
+
+    return auto_workers
 
 
 def _detect_gpu_count():
