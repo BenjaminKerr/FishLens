@@ -206,8 +206,38 @@ FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
 # Performance tuning (set via env vars when needed)
 FISHLENS_LOCATION = os.getenv("FISHLENS_LOCATION", "Unknown").strip() or "Unknown"
 FAST_MODE = os.getenv("FISHLENS_FAST_MODE", "1") == "1"
-STRICT_FRAME_STRIDE = max(1, int(os.getenv("FISHLENS_STRICT_FRAME_STRIDE", "3")))
+# Strict pass is fixed at stride 3 by policy.
+# Loose retry still drops to stride 1 when strict finds no fish.
+STRICT_FRAME_STRIDE = 3
 FRAME_STRIDE = STRICT_FRAME_STRIDE
+
+# Runtime worker count used by CPU-threaded operations.
+RUN_WORKERS = 1
+
+
+def _resolve_run_workers(input_path, video_count):
+    cpu_count = max(1, int(os.cpu_count() or 1))
+    requested = os.getenv("FISHLENS_WORKERS", "auto").strip().lower()
+
+    # Auto policy for any input directory: one worker per video up to available CPU-1.
+    auto_workers = max(1, min(max(1, int(video_count or 1)), max(1, cpu_count - 1)))
+
+    if requested in ("", "auto"):
+        return auto_workers
+
+    try:
+        return max(1, min(int(requested), cpu_count))
+    except Exception:
+        return auto_workers
+
+
+def _apply_run_workers(workers):
+    global RUN_WORKERS
+    RUN_WORKERS = max(1, int(workers))
+    try:
+        cv2.setNumThreads(RUN_WORKERS)
+    except Exception:
+        pass
 
 YOLO_IMGSZ = max(320, int(os.getenv("FISHLENS_YOLO_IMGSZ", "448" if FAST_MODE else "512")))
 SAVE_TIMESTAMP_DEBUG_FRAMES = os.getenv("FISHLENS_SAVE_TIMESTAMP_DEBUG", "0") == "1"
@@ -469,13 +499,16 @@ def main(input_path=None):
         video_folder = input_path
         single_video_file = None
 
+    run_workers = _resolve_run_workers(input_path, 1)
+    _apply_run_workers(run_workers)
+
     os.makedirs(video_folder, exist_ok=True)
 
     # Debug: Print paths
     print(f"[INFO] Processing videos from: {video_folder}")
 
     # Process all videos in folder
-    print(f"Performance: FAST_MODE={FAST_MODE}, FRAME_STRIDE={FRAME_STRIDE}, YOLO_IMGSZ={YOLO_IMGSZ}")
+    print(f"Performance: FAST_MODE={FAST_MODE}, FRAME_STRIDE={FRAME_STRIDE}, YOLO_IMGSZ={YOLO_IMGSZ}, WORKERS={RUN_WORKERS}")
     if single_video_file:
         # Process single video file
         print(f"[PROGRESS] TOTAL:1", flush=True)
@@ -518,6 +551,9 @@ def main(input_path=None):
             if os.path.isfile(os.path.join(video_folder, f)) and f.lower().endswith(video_extensions)
         ]
         video_count = len(video_files)
+        run_workers = _resolve_run_workers(input_path, video_count)
+        _apply_run_workers(run_workers)
+        print(f"[INFO] Worker policy selected RUN_WORKERS={RUN_WORKERS}")
         print(f"[PROGRESS] TOTAL:{video_count}", flush=True)
 
         # Build set of already-analyzed filenames from run_master.csv so they can be skipped.
@@ -672,6 +708,7 @@ def convert_asf_to_mp4(video_path):
             ffmpeg_path,
             "-hide_banner",
             "-loglevel", "error",
+            "-threads", str(RUN_WORKERS),
             "-y",
             "-i", video_path,
             "-an",
