@@ -179,7 +179,8 @@ namespace FishLens_App
             newLocationName.Text = string.Empty;
             newLocationDirection.SelectedIndex = 0;
             RefreshLocationsPanel();
-            MarkSettingsDirty();
+            ShowInlineActionStatus("Location added.");
+            App.RaiseLocationChanged();
         }
 
         private void DeleteLocation_Click(object sender, RoutedEventArgs e)
@@ -207,7 +208,8 @@ namespace FishLens_App
                 _config.Locations.Add(new LocationEntry { Name = "Unknown", UpstreamDirection = "left" });
 
             RefreshLocationsPanel();
-            MarkSettingsDirty();
+            ShowInlineActionStatus("Location removed.");
+            App.RaiseLocationChanged();
         }
 
         private void CreateRun_Click(object sender, RoutedEventArgs e)
@@ -255,7 +257,7 @@ namespace FishLens_App
             LoadRunsDropdown();
             UpdateRunStatusText();
             App.RaiseRunChanged();
-            UpdateSaveStatusAfterImmediateRunPersist();
+            ShowInlineActionStatus("Run created and set as active.");
         }
 
         private void SetActiveRun_Click(object sender, RoutedEventArgs e)
@@ -277,12 +279,13 @@ namespace FishLens_App
             _config.ActiveRun = selectedRun;
             if (Application.Current is App app)
                 app.ActiveRun = selectedRun;
-
+            PersistSettingsToDatabase();
             if (Application.Current is App activeRunApp)
                 activeRunApp.EnsureRunStorageInitialized();
             UpdateRunStatusText();
             App.RaiseRunChanged();
-            UpdateSaveStatusAfterImmediateRunPersist();
+            ShowInlineActionStatus($"Active run set to '{selectedRun}'.");
+
         }
 
         private void EndRun_Click(object sender, RoutedEventArgs e)
@@ -313,7 +316,6 @@ namespace FishLens_App
                     if (Application.Current is App reopenRunApp)
                         reopenRunApp.EnsureRunStorageInitialized();
                     UpdateRunStatusText();
-                    UpdateSaveStatusAfterImmediateRunPersist();
                 }
                 return;
             }
@@ -341,7 +343,7 @@ namespace FishLens_App
             if (Application.Current is App endRunApp)
                 endRunApp.EnsureRunStorageInitialized();
             UpdateRunStatusText();
-            UpdateSaveStatusAfterImmediateRunPersist();
+            ShowInlineActionStatus($"Run '{selectedRun}' ended");
         }
 
         private void ActiveRunDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
@@ -777,6 +779,34 @@ namespace FishLens_App
                 // Best effort only.
             }
         }
+
+        private void ShowInlineActionStatus(string text)
+        {
+            if (saveStatusText == null) return;
+
+            saveStatusText.Text = text;
+            saveStatusText.Foreground = System.Windows.Media.Brushes.ForestGreen;
+            saveStatusText.Visibility = Visibility.Visible;
+
+            // Auto-hide after 2 seconds
+            var timer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(2)
+            };
+            timer.Tick += (s, e) =>
+            {
+                // Only hide if we haven't been replaced by an unsaved-changes indicator
+                if (!_hasUnsavedSettingsChanges)
+                {
+                    saveStatusText.Visibility = Visibility.Collapsed;
+                    saveStatusText.Text = string.Empty;
+                }
+                timer.Stop();
+            };
+            timer.Start();
+        }
+
+
 
         private void MarkSettingsDirty()
         {
