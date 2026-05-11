@@ -68,8 +68,6 @@ namespace FishLens_App
 
             // Startup only pulls JSON-backed runtime settings. User/org visual settings
             // like High Contrast and Large Text are populated from the database at sign-in.
-            LoadRuntimeSettingsFromJson();
-
             NormalizeConfigurationState();
             ActiveLocation = Configuration.ActiveLocation;
             ActiveRun = Configuration.ActiveRun;
@@ -87,30 +85,6 @@ namespace FishLens_App
             EnsureRunStorageInitialized();
         }
 
-        public void LoadRuntimeSettingsFromJson()
-        {
-            try
-            {
-                string configPath = Path.Combine(GetProjectRoot(), "appsettings.json");
-                if (!File.Exists(configPath))
-                    return;
-
-                using var stream = File.OpenRead(configPath);
-                using var doc = JsonDocument.Parse(stream);
-                var root = doc.RootElement;
-
-       
-                if (root.TryGetProperty("ActiveLocation", out var alEl) &&
-                    alEl.ValueKind == JsonValueKind.String)
-                    Configuration.ActiveLocation = alEl.GetString() ?? "Unknown";
-
-           
-            }
-            catch
-            {
-                // Defaults stay in place if appsettings.json is missing or unreadable.
-            }
-        }
 
         // ****************************************************************
         // Function: ResetSettingsToDefaults

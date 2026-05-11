@@ -120,7 +120,6 @@ namespace FishLens_App
                 _checkBoxes.FastMode = enableFastMode.IsChecked ?? false;
 
                 PersistSettingsToDatabase();
-                PersistSettingsToJson();
 
                 var appInst = Application.Current as App;
                 if (appInst != null)
@@ -251,7 +250,6 @@ namespace FishLens_App
             if (newRunNameBox != null)
                 newRunNameBox.Text = string.Empty;
             DbAddRun(name, false);  
-            PersistRuns();
             if (Application.Current is App createRunApp)
                 createRunApp.EnsureRunStorageInitialized();
             LoadRunsDropdown();
@@ -280,7 +278,6 @@ namespace FishLens_App
             if (Application.Current is App app)
                 app.ActiveRun = selectedRun;
 
-            PersistRuns();
             if (Application.Current is App activeRunApp)
                 activeRunApp.EnsureRunStorageInitialized();
             UpdateRunStatusText();
@@ -312,7 +309,6 @@ namespace FishLens_App
                 if (MessageBox.Show($"'{selectedRun}' is already locked. Reopen it?", "Reopen Run?", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
                 {
                     runEntry.Locked = false;
-                    PersistRuns();
                     DbUpdateRunLocked(selectedRun, false);
                     if (Application.Current is App reopenRunApp)
                         reopenRunApp.EnsureRunStorageInitialized();
@@ -341,7 +337,6 @@ namespace FishLens_App
                 App.RaiseRunChanged();
             }
 
-            PersistRuns();
             DbUpdateRunLocked(selectedRun, true);
             if (Application.Current is App endRunApp)
                 endRunApp.EnsureRunStorageInitialized();
@@ -390,8 +385,6 @@ namespace FishLens_App
             try
             {
                 LoadSettingsFromDatabase();
-                MigrateLegacyJsonToDatabase();
-                LoadSettingsFromJson();
 
                 _isUpdatingConfidenceControls = true;
                 double confPercent = Math.Round((_config?.ConfidenceThreshold ?? 0.7) * 100);
@@ -515,33 +508,6 @@ namespace FishLens_App
                 _logger.LogWarning(ex, "Could not load settings from database; using in-memory/default values");
             }
         }
-
-
-
-
-        private void LoadSettingsFromJson()
-        {
-            try
-            {
-                string configPath = Path.Combine(_pathResolver.ResolveProjectRoot() ?? string.Empty, "appsettings.json");
-                if (!File.Exists(configPath))
-                    return;
-
-                using var stream = File.OpenRead(configPath);
-                using var doc = JsonDocument.Parse(stream);
-                var root = doc.RootElement;
-
-                if (root.TryGetProperty("ActiveLocation", out var alEl) && alEl.ValueKind == JsonValueKind.String)
-                {
-                    _config.ActiveLocation = alEl.GetString() ?? "Unknown";
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not parse appsettings.json; keeping current settings");
-            }
-        }
-
 
 
 
@@ -687,70 +653,6 @@ namespace FishLens_App
 
 
 
-        private void PersistSettingsToJson()
-        {
-            string configPath = Path.Combine(_pathResolver.ResolveProjectRoot() ?? string.Empty, "appsettings.json");
-            var settingsObj = new
-            {
-                // Kept in JSON for now (until ActiveLocation flow is finalized in main page)
-                ActiveLocation = _config.ActiveLocation
-                // Future: SavedUsername, RememberLogin, etc. would go here
-            };
-
-            SaveSettingsFile(configPath, settingsObj);
-            _logger.LogInformation("Settings file written to {path}", configPath);
-        }
-
-        private void MigrateLegacyJsonToDatabase()
-        {
-            var app = Application.Current as App;
-            if (app == null || app.CurrentOrganizationId <= 0) return;
-
-            string configPath = Path.Combine(_pathResolver.ResolveProjectRoot() ?? string.Empty, "appsettings.json");
-            if (!File.Exists(configPath)) return;
-
-            try
-            {
-                using var stream = File.OpenRead(configPath);
-                using var doc = JsonDocument.Parse(stream);
-                var root = doc.RootElement;
-
-                // Migrate Runs
-                if (root.TryGetProperty("Runs", out var runsEl) && runsEl.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var runEl in runsEl.EnumerateArray())
-                    {
-                        if (!runEl.TryGetProperty("Name", out var nameEl)) continue;
-                        string name = nameEl.GetString();
-                        if (string.IsNullOrWhiteSpace(name)) continue;
-                        bool locked = runEl.TryGetProperty("Locked", out var lockedEl)
-                            && lockedEl.ValueKind == JsonValueKind.True;
-                        DbAddRun(name, locked);
-                    }
-                }
-
-                // Migrate Locations
-                if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var locEl in locsEl.EnumerateArray())
-                    {
-                        if (!locEl.TryGetProperty("Name", out var nameEl)) continue;
-                        string name = nameEl.GetString();
-                        if (string.IsNullOrWhiteSpace(name)) continue;
-                        string dir = locEl.TryGetProperty("UpstreamDirection", out var dirEl)
-                            ? dirEl.GetString() : "left";
-                        DbAddLocation(name, dir);
-                    }
-                }
-
-                _logger.LogInformation("Legacy JSON settings migrated to database");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to migrate legacy JSON settings");
-            }
-        }
-
 
 
 
@@ -855,34 +757,7 @@ namespace FishLens_App
             runStatusText.Text = $"{selected} - {status}";
         }
 
-        private void PersistRuns()
-        {
-            try
-            {
-                string configPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
-                string existing = File.Exists(configPath) ? File.ReadAllText(configPath) : "{}";
-                using var doc = JsonDocument.Parse(existing);
-                var root = doc.RootElement;
-
-                var dict = new Dictionary<string, object>();
-                foreach (var prop in root.EnumerateObject())
-                    dict[prop.Name] = prop.Value.Clone();
-
-                dict["ActiveRun"] = _config.ActiveRun;
-                dict["Runs"] = _config.Runs.Select(r => new { r.Name, r.Locked }).ToList();
-                SaveSettingsFile(configPath, dict);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to persist runs");
-            }
-        }
-
-        private static void SaveSettingsFile(string configPath, object settingsObj)
-        {
-            var options = new JsonSerializerOptions { WriteIndented = true };
-            File.WriteAllText(configPath, JsonSerializer.Serialize(settingsObj, options));
-        }
+     
 
         private void ApplySettingsToMainWindow()
         {

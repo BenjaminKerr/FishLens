@@ -535,32 +535,17 @@ namespace FishLens_App
         // **************************************************
         private string GetUpstreamDirectionForActiveLocation()
         {
-            try
-            {
-                string activeLocation = (Application.Current as App)?.ActiveLocation ?? "Unknown";
-                string configPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
-                if (!File.Exists(configPath)) return "left";
+            var app = Application.Current as App;
+            string activeLocation = app?.ActiveLocation ?? "Unknown";
+            if (app?.Configuration?.Locations == null) return "left";
 
-                using var stream = File.OpenRead(configPath);
-                using var doc = JsonDocument.Parse(stream);
-                var root = doc.RootElement;
-
-                if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var locEl in locsEl.EnumerateArray())
-                    {
-                        if (locEl.TryGetProperty("Name", out var nEl) &&
-                            nEl.GetString()?.Equals(activeLocation, StringComparison.OrdinalIgnoreCase) == true &&
-                            locEl.TryGetProperty("UpstreamDirection", out var dEl))
-                        {
-                            return dEl.GetString() ?? "left";
-                        }
-                    }
-                }
-            }
-            catch { /* fall through to default */ }
-            return "left";
+            var match = app.Configuration.Locations
+                .FirstOrDefault(l => string.Equals(l.Name, activeLocation, StringComparison.OrdinalIgnoreCase));
+            return match?.UpstreamDirection ?? "left";
         }
+
+
+
 
         // **************************************************
         // Function: LoadUpstreamDirectionMap
@@ -570,25 +555,19 @@ namespace FishLens_App
         private Dictionary<string, string> LoadUpstreamDirectionMap()
         {
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            try
+            var app = Application.Current as App;
+            if (app?.Configuration?.Locations == null) return map;
+
+            foreach (var loc in app.Configuration.Locations)
             {
-                string configPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
-                if (!File.Exists(configPath)) return map;
-                using var stream = File.OpenRead(configPath);
-                using var doc = JsonDocument.Parse(stream);
-                var root = doc.RootElement;
-                if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var locEl in locsEl.EnumerateArray())
-                    {
-                        if (locEl.TryGetProperty("Name", out var nEl) && locEl.TryGetProperty("UpstreamDirection", out var dEl))
-                            map[nEl.GetString() ?? ""] = dEl.GetString() ?? "left";
-                    }
-                }
+                if (!string.IsNullOrWhiteSpace(loc.Name))
+                    map[loc.Name] = loc.UpstreamDirection ?? "left";
             }
-            catch { /* non-critical */ }
             return map;
         }
+
+
+
 
         // **************************************************
         // Function: PopulateLocationDropdown
@@ -627,6 +606,36 @@ namespace FishLens_App
             catch { /* non-critical */ }
         }
 
+        // **************************************************
+        // Function: SaveActiveLocationToDatabase
+        // Description: Saves the active location to the database
+        // **************************************************
+
+        private void SaveActiveLocationToDatabase(string location)
+        {
+            var app = Application.Current as App;
+            if (app == null || app.CurrentUserId <= 0) return;
+
+            try
+            {
+                using var conn = new System.Data.SqlClient.SqlConnection(app.connectionString);
+                conn.Open();
+                using var cmd = new System.Data.SqlClient.SqlCommand("kaharra.SaveUserActiveLocation", conn);
+                cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                cmd.Parameters.AddWithValue("@pUserId", app.CurrentUserId);
+                cmd.Parameters.AddWithValue("@pActiveLocation", location ?? "Unknown");
+                cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to save active location to DB");
+            }
+        }
+
+
+
+
+
 
 
 
@@ -639,12 +648,10 @@ namespace FishLens_App
             string selected = locationDropdown.SelectedItem as string;
             if (string.IsNullOrEmpty(selected)) return;
 
-            // Block location changes while a video batch is processing to avoid
-            // mismatching the location/direction env vars already baked into the running process.
+            // Block location changes while a video batch is processing
             bool isProcessing = _processingTcs != null && !_processingTcs.Task.IsCompleted;
             if (isProcessing)
             {
-                // Silently revert to whatever was previously committed
                 string committed = (Application.Current as App)?.ActiveLocation ?? "Unknown";
                 locationDropdown.SelectionChanged -= LocationDropdown_SelectionChanged;
                 locationDropdown.SelectedItem = locationDropdown.Items.Contains(committed) ? committed : locationDropdown.Items[0];
@@ -654,33 +661,18 @@ namespace FishLens_App
 
             var app = Application.Current as App;
             if (app != null)
-                app.ActiveLocation = selected;
-
-            // Persist to JSON so next startup remembers the choice
-            try
             {
-                string configPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
-                if (!File.Exists(configPath)) return;
-
-                string json = File.ReadAllText(configPath);
-                using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
-
-                // Rebuild the JSON with the updated ActiveLocation
-                var dict = new System.Collections.Generic.Dictionary<string, object>();
-                foreach (var prop in root.EnumerateObject())
-                {
-                    if (prop.Name == "ActiveLocation")
-                        dict[prop.Name] = selected;
-                    else
-                        dict[prop.Name] = prop.Value.Clone();
-                }
-
-                var options = new JsonSerializerOptions { WriteIndented = true };
-                File.WriteAllText(configPath, JsonSerializer.Serialize(dict, options));
+                app.ActiveLocation = selected;
+                if (app.Configuration != null)
+                    app.Configuration.ActiveLocation = selected;
             }
-            catch { /* non-critical */ }
+
+            // Persist to DB so next sign-in remembers the choice
+            SaveActiveLocationToDatabase(selected);
         }
+
+
+
 
         // **************************************************
         // Function: GetLocationCsvPaths

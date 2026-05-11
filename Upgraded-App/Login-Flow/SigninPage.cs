@@ -77,9 +77,15 @@ namespace FishLens_App
                                     string activeRunOverride = reader.IsDBNull(3) ? null : reader.GetString(3);
                                     if (!string.IsNullOrWhiteSpace(activeRunOverride))
                                         app.Configuration.ActiveRun = activeRunOverride;
+
+                                    if (!reader.IsDBNull(4))
+                                        app.Configuration.ActiveLocation = reader.GetString(4);
                                 }
                             }
                         }
+
+
+
 
                         // 3. Load this user's organization's shared settings
                         using (SqlCommand orgSettingsCmd = new SqlCommand("kaharra.GetOrganizationSettings", conn))
@@ -166,9 +172,6 @@ namespace FishLens_App
 
             if (success)
             {
-                // appsettings.json now only holds ActiveLocation (until that flow is finalized)
-                app.LoadRuntimeSettingsFromJson();
-
                 // Sync App-level passthroughs so MainWindow reads the right values
                 app.ActiveRun = app.Configuration.ActiveRun ?? string.Empty;
                 app.ActiveLocation = app.Configuration.ActiveLocation ?? "Unknown";
