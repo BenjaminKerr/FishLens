@@ -21,6 +21,9 @@ import tensorflow as tf
 from keras import layers, callbacks, Model, Sequential
 from keras.optimizers import Adam
 from keras.applications import MobileNetV2
+from keras.models import load_model
+
+from test_model import VAL_DIR, evaluate_model_on_validation, print_evaluation_summary
 
 # ========================================================================
 # CONFIGURATION AND CONSTANTS
@@ -41,17 +44,17 @@ FINE_TUNE_EPOCHS = 20  # Then fine-tune part of the base model
 SHUFFLE_BUFFER = 1000
 
 # Augmentation Constants
-ROTATION = 0.08
+ROTATION = 0.10
 ZOOM = 0.10
-WIDTH_SHIFT = 0.08
-HEIGHT_SHIFT = 0.08
+WIDTH_SHIFT = 0.10
+HEIGHT_SHIFT = 0.10
 RANDOM_BRIGHTNESS = 0.15
-RANDOM_CONTRAST = 0.08
+RANDOM_CONTRAST = 0.10
 
 # Model / Training Constants
-HEAD_DROPOUT_RATE = 0.30
-INITIAL_LEARNING_RATE = 1e-4
-FINE_TUNE_LEARNING_RATE = 1e-5
+HEAD_DROPOUT_RATE = 0.40
+INITIAL_LEARNING_RATE = 3e-5
+FINE_TUNE_LEARNING_RATE = 4e-6
 PATIENCE = 6
 FINE_TUNE_AT = 20  # Unfreeze the last N layers of MobileNetV2
 
@@ -227,8 +230,16 @@ model.compile(
 
 # ******************************
 # Function: Configure Initial Training Callbacks
-# Description: Stops early if validation loss stops improving and gently
-#   reduces the learning rate when validation performance plateaus.
+# Description: Saves the best validation model, stops early if validation loss
+#   stops improving, and gently reduces the learning rate when performance plateaus.
+best_model_checkpoint = callbacks.ModelCheckpoint(
+    filepath=EXPORT_PATH,
+    monitor="val_loss",
+    save_best_only=True,
+    save_weights_only=False,
+    verbose=1
+)
+
 early_stop = callbacks.EarlyStopping(
     monitor="val_loss",
     patience=PATIENCE,
@@ -250,7 +261,7 @@ history_initial = model.fit(
     train_dataset,
     epochs=INITIAL_EPOCHS,
     validation_data=validation_dataset,
-    callbacks=[early_stop, reduce_lr]
+    callbacks=[best_model_checkpoint, early_stop, reduce_lr]
 )
 
 
@@ -286,7 +297,7 @@ history_fine = model.fit(
     epochs=INITIAL_EPOCHS + FINE_TUNE_EPOCHS,
     initial_epoch=len(history_initial.history["loss"]),
     validation_data=validation_dataset,
-    callbacks=[early_stop, reduce_lr]
+    callbacks=[best_model_checkpoint, early_stop, reduce_lr]
 )
 
 
@@ -296,7 +307,8 @@ history_fine = model.fit(
 
 # ******************************
 # Function: Save Final Model
-# Description: Saves the trained model to disk in native Keras format for later use.
-model.save(EXPORT_PATH)
+# Description: Reloads the best validation checkpoint from disk and reports metrics from it.
+best_model = load_model(EXPORT_PATH, compile=False)
 print("Model saved successfully as fish_classifier_model.keras")
-print_confusion_matrix(model, validation_dataset, class_names)
+summary = evaluate_model_on_validation(best_model, VAL_DIR)
+print_evaluation_summary(EXPORT_PATH, summary)
