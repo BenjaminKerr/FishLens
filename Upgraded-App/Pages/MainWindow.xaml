@@ -13,12 +13,18 @@
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name ="SidebarColumn" Width="Auto"/>
+            <ColumnDefinition x:Name="SidebarColumn" Width="320"/>
             <ColumnDefinition Width="*"/>
+            <!-- etc -->
         </Grid.ColumnDefinitions>
         <Frame x:Name="MainFrame" NavigationUIVisibility="Hidden" Grid.Column="1" Panel.ZIndex="1" Navigated="MainFrame_Navigated"/>
         <!--Sidebar: Media Selector-->
-        <Border x:Name="SideBar" Width="320" Grid.Column="0" Background="{DynamicResource AccentBrush}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource HeaderBackground}">
+        <Border x:Name="SideBar" Grid.Column="0"
+        CacheMode="BitmapCache"
+        Background="{DynamicResource AccentBrush}"
+        BorderThickness="0,0,1,0"
+        BorderBrush="{DynamicResource HeaderBackground}">
+            <!-- rest of your content unchanged -->
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>

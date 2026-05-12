@@ -7,6 +7,7 @@
 // ***********************************
 // **************************************************
 
+using FishLens_App.Helper_Classes;
 using FishLens_App.Interfaces;
 using FishLens_App.Models;
 using FishLens_App.Services;
@@ -26,6 +27,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
 namespace FishLens_App
@@ -2343,70 +2345,32 @@ namespace FishLens_App
 
         #region UI Display
 
-        private void CollapseSidebar()
-        {
-            var animation = new System.Windows.Media.Animation.DoubleAnimation
-            {
-                To = 106,
-                Duration = TimeSpan.FromMilliseconds(250),
-                EasingFunction = new System.Windows.Media.Animation.CubicEase()
-            };
-
-            SideBar.BeginAnimation(Border.WidthProperty, animation);
-
-            videoList.Visibility = Visibility.Collapsed;
-            deleteSelectedVideos.Visibility = Visibility.Collapsed;
-            changeLocationForSelected.Visibility = Visibility.Collapsed;
-            undoLastDelete.Visibility = Visibility.Collapsed;
-            sidebarSeperator.Visibility = Visibility.Collapsed;
-            videoLibraryTitle.Visibility = Visibility.Collapsed;
-            // Only hide the progress UI - do NOT raise AnalysisStateChanged(false) here
-            // because analysis may still be running in the background.
-            analysisProgressArea.Visibility = Visibility.Collapsed;
-
-            ButtonGrid.RowDefinitions.Clear();
-            ButtonGrid.ColumnDefinitions.Clear();
-            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-
-            Grid.SetRow(Home, 0);
-            Grid.SetColumn(Home, 0);
-            Grid.SetRow(History, 1);
-            Grid.SetColumn(History, 0);
-            Grid.SetRow(Settings, 2);
-            Grid.SetColumn(Settings, 0);
-            Grid.SetRow(AccountSettingsButton, 3);
-            Grid.SetColumn(AccountSettingsButton, 0);
-        }
-
         private void ExpandSidebar()
         {
-            var animation = new System.Windows.Media.Animation.DoubleAnimation
+            SideBar.RenderTransform = Transform.Identity;
+
+            // Fade in videoLibraryTitle
+            videoLibraryTitle.Opacity = 0;
+            videoLibraryTitle.Visibility = Visibility.Visible;
+            var titleFadeIn = new DoubleAnimation
             {
-                To = 320,
-                Duration = TimeSpan.FromMilliseconds(250),
-                EasingFunction = new System.Windows.Media.Animation.CubicEase()
+                From = 0,
+                To = 1,
+                BeginTime = TimeSpan.FromMilliseconds(150),
+                Duration = TimeSpan.FromMilliseconds(150),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
             };
+            videoLibraryTitle.BeginAnimation(UIElement.OpacityProperty, titleFadeIn);
 
-            SideBar.BeginAnimation(Border.WidthProperty, animation);
-
-            // Show video list
             videoList.Visibility = Visibility.Visible;
             deleteSelectedVideos.Visibility = Visibility.Visible;
             changeLocationForSelected.Visibility = Visibility.Visible;
             undoLastDelete.Visibility = Visibility.Visible;
             sidebarSeperator.Visibility = Visibility.Visible;
-            videoLibraryTitle.Visibility = Visibility.Visible;
 
-            // If analysis is still running, re-show the progress area so the user
-            // can see progress after navigating back to the main window.
             if (App.IsAnalyzing)
                 analysisProgressArea.Visibility = Visibility.Visible;
 
-            // Restore horizontal button layout
             ButtonGrid.RowDefinitions.Clear();
             ButtonGrid.ColumnDefinitions.Clear();
             ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -2414,15 +2378,70 @@ namespace FishLens_App
             ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
+            Grid.SetRow(Home, 0); Grid.SetColumn(Home, 0);
+            Grid.SetRow(History, 0); Grid.SetColumn(History, 1);
+            Grid.SetRow(Settings, 0); Grid.SetColumn(Settings, 2);
+            Grid.SetRow(AccountSettingsButton, 0); Grid.SetColumn(AccountSettingsButton, 3);
 
-            Grid.SetRow(Home, 0);
-            Grid.SetColumn(Home, 0);
-            Grid.SetRow(History, 0);
-            Grid.SetColumn(History, 1);
-            Grid.SetRow(Settings, 0);
-            Grid.SetColumn(Settings, 2);
-            Grid.SetRow(AccountSettingsButton, 0);
-            Grid.SetColumn(AccountSettingsButton, 3);
+            var expandAnim = new GridLengthAnimation
+            {
+                From = new GridLength(SidebarColumn.ActualWidth),
+                To = new GridLength(320),
+                Duration = TimeSpan.FromMilliseconds(280),
+                EasingMode = EasingMode.EaseOut,
+                FillBehavior = FillBehavior.Stop
+            };
+            expandAnim.Completed += (s, e) => SidebarColumn.Width = new GridLength(320);
+            SidebarColumn.BeginAnimation(ColumnDefinition.WidthProperty, expandAnim);
+        }
+
+        private void CollapseSidebar()
+        {
+            // Fade out videoLibraryTitle before/during collapse
+            var titleFadeOut = new DoubleAnimation
+            {
+                From = 1,
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(100),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+            };
+            titleFadeOut.Completed += (s, e) => videoLibraryTitle.Visibility = Visibility.Collapsed;
+            videoLibraryTitle.BeginAnimation(UIElement.OpacityProperty, titleFadeOut);
+
+            var collapseAnim = new GridLengthAnimation
+            {
+                From = new GridLength(SidebarColumn.ActualWidth),
+                To = new GridLength(106),
+                Duration = TimeSpan.FromMilliseconds(250),
+                EasingMode = EasingMode.EaseInOut,
+                FillBehavior = FillBehavior.Stop
+            };
+
+            collapseAnim.Completed += (s, e) =>
+            {
+                SidebarColumn.Width = new GridLength(106);
+
+                videoList.Visibility = Visibility.Collapsed;
+                deleteSelectedVideos.Visibility = Visibility.Collapsed;
+                changeLocationForSelected.Visibility = Visibility.Collapsed;
+                undoLastDelete.Visibility = Visibility.Collapsed;
+                sidebarSeperator.Visibility = Visibility.Collapsed;
+                analysisProgressArea.Visibility = Visibility.Collapsed;
+
+                ButtonGrid.RowDefinitions.Clear();
+                ButtonGrid.ColumnDefinitions.Clear();
+                ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+                Grid.SetRow(Home, 0); Grid.SetColumn(Home, 0);
+                Grid.SetRow(History, 1); Grid.SetColumn(History, 0);
+                Grid.SetRow(Settings, 2); Grid.SetColumn(Settings, 0);
+                Grid.SetRow(AccountSettingsButton, 3); Grid.SetColumn(AccountSettingsButton, 0);
+            };
+
+            SidebarColumn.BeginAnimation(ColumnDefinition.WidthProperty, collapseAnim);
         }
 
         // **************************************************
