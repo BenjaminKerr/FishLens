@@ -13,6 +13,7 @@
                 <ResourceDictionary Source="Themes/VideoButtonStyles.xaml"/>
                 <ResourceDictionary Source="Themes/Controls/ComboBoxStyles.xaml"/>
                 <ResourceDictionary Source="Themes/Controls/ScrollBarStyles.xaml"/>
+                <ResourceDictionary Source="Themes/Icons/IconAssets.xaml"/>
             </ResourceDictionary.MergedDictionaries>
 
             <!-- Base font sizes -->

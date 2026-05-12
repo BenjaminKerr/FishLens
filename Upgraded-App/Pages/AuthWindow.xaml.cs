@@ -42,35 +42,26 @@ namespace FishLens_App
             ForgotPanel.Visibility = Visibility.Collapsed;
             ResetPanel.Visibility = Visibility.Collapsed;
 
-            SignInFooter.Visibility = Visibility.Collapsed;
-            SignUpFooter.Visibility = Visibility.Collapsed;
-            ForgotFooter.Visibility = Visibility.Collapsed;
-
             switch (panelName)
             {
                 case "SignInPanel":
                     SignInPanel.Visibility = Visibility.Visible;
-                    SignInFooter.Visibility = Visibility.Visible;
                     break;
 
                 case "SignUpPanel":
                     SignUpPanel.Visibility = Visibility.Visible;
-                    SignUpFooter.Visibility = Visibility.Visible;
                     break;
 
                 case "VerifyEmailPanel":
                     VerifyEmailPanel.Visibility = Visibility.Visible;
-                    SignUpFooter.Visibility = Visibility.Visible;
                     break;
 
                 case "ForgotPanel":
                     ForgotPanel.Visibility = Visibility.Visible;
-                    ForgotFooter.Visibility = Visibility.Visible;
                     break;
 
                 case "ResetPanel":
                     ResetPanel.Visibility = Visibility.Visible;
-                    ForgotFooter.Visibility = Visibility.Visible;
                     break;
             }
         }
