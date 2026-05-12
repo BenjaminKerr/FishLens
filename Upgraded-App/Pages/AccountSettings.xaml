@@ -43,7 +43,7 @@
                     </StackPanel>
                 </Border>
 
-                <TextBlock Text="Analysis" 
+                <TextBlock Text="Create User" 
                            FontSize="{DynamicResource LargeHeaderFontSize}"
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource PrimaryText}"
@@ -297,7 +297,7 @@
 
                     <StackPanel>
 
-                        <TextBlock Text="Edit username or role for existing accounts, then click Save Changes."
+                        <TextBlock Text="Click on a user to edit their username, email, or role for existing accounts, then click Save Changes."
                                    FontSize="{DynamicResource BaseFontSize}"
                                    Foreground="{DynamicResource SecondaryText}"
                                    Margin="0,0,0,15"
