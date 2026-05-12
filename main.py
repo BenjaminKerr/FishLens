@@ -10,6 +10,7 @@ import sys
 print("[PROGRESS] STARTUP", flush=True)
 
 import csv
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import importlib
 import os
 import shutil
@@ -153,7 +154,7 @@ NO_FISH_CSV_KEYS = ["video_file", "location", "video_timestamp"]
 TESSERACT_AVAILABLE = check_tesseract()
 
 # Detector configuration
-MODEL = _load_yolo_model("models/fish_detector4.pt")
+MODEL = _load_yolo_model("models/fish_detector5.pt")
 STRICT_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_YOLO_CONFIDENCE_THRESHOLD", "0.42"))
 LOOSE_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_LOOSE_YOLO_CONFIDENCE_THRESHOLD", "0.34"))
 ENABLE_LOOSE_RETRY = os.getenv("FISHLENS_ENABLE_LOOSE_RETRY", "1") == "1"
@@ -220,8 +221,38 @@ FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
 # Runtime tuning (primarily fed by the WPF app through environment variables)
 FISHLENS_LOCATION = os.getenv("FISHLENS_LOCATION", "Unknown").strip() or "Unknown"
 FAST_MODE = os.getenv("FISHLENS_FAST_MODE", "1") == "1"
-STRICT_FRAME_STRIDE = max(1, int(os.getenv("FISHLENS_STRICT_FRAME_STRIDE", "3")))
+# Strict pass is fixed at stride 3 by policy.
+# Loose retry still drops to stride 1 when strict finds no fish.
+STRICT_FRAME_STRIDE = 3
 FRAME_STRIDE = STRICT_FRAME_STRIDE
+
+# Runtime worker count used by CPU-threaded operations.
+RUN_WORKERS = 1
+
+
+def _resolve_run_workers(input_path, video_count):
+    cpu_count = max(1, int(os.cpu_count() or 1))
+    requested = os.getenv("FISHLENS_WORKERS", "auto").strip().lower()
+
+    # Auto policy for any input directory: one worker per video up to available CPU-1.
+    auto_workers = max(1, min(max(1, int(video_count or 1)), max(1, cpu_count - 1)))
+
+    if requested in ("", "auto"):
+        return auto_workers
+
+    try:
+        return max(1, min(int(requested), cpu_count))
+    except Exception:
+        return auto_workers
+
+
+def _apply_run_workers(workers):
+    global RUN_WORKERS
+    RUN_WORKERS = max(1, int(workers))
+    try:
+        cv2.setNumThreads(RUN_WORKERS)
+    except Exception:
+        pass
 
 YOLO_IMGSZ = max(320, int(os.getenv("FISHLENS_YOLO_IMGSZ", "448" if FAST_MODE else "512")))
 SAVE_TIMESTAMP_DEBUG_FRAMES = os.getenv("FISHLENS_SAVE_TIMESTAMP_DEBUG", "0") == "1"
@@ -436,6 +467,10 @@ def _enrich_tracks_with_duration(video_tracks, processed_video_path, source_vide
 # IMAGE, CSV, AND CONVERSION HELPERS
 # ========================================================================
 
+# ****************************************************************
+# Function: enhance_image
+# Description: Enhance image quality through upscaling and sharpening.
+# Notes: N/A
 def enhance_image(crop):
     """Upscale and sharpen a crop before classifier inference and image export."""
     if crop is None or crop.size == 0:
@@ -526,6 +561,7 @@ def convert_asf_to_mp4(video_path):
             ffmpeg_path,
             "-hide_banner",
             "-loglevel", "error",
+            "-threads", str(RUN_WORKERS),
             "-y",
             "-i", video_path,
             "-an",
@@ -708,6 +744,45 @@ def process_yolo_results(frameData, vidData, model):
         if vidData.v_confidence_count > 0:
             vidData.v_avg_confidence_YL = (vidData.v_confidence_sum / vidData.v_confidence_count) * 100
 
+def _score_species_crop(frame_shape, bbox, conf, track_age_frames):
+    """Score a candidate species screenshot, preferring centered, fully visible fish."""
+    frame_h, frame_w = frame_shape[:2]
+    x1, y1, x2, y2 = bbox
+    box_w = max(1.0, float(x2 - x1))
+    box_h = max(1.0, float(y2 - y1))
+
+    cx = (float(x1) + float(x2)) / 2.0
+    cy = (float(y1) + float(y2)) / 2.0
+    frame_cx = frame_w / 2.0
+    frame_cy = frame_h / 2.0
+
+    # Favor fish whose center is nearer the middle of the frame.
+    dx = abs(cx - frame_cx) / max(1.0, frame_cx)
+    dy = abs(cy - frame_cy) / max(1.0, frame_cy)
+    center_distance = min(1.0, np.hypot(dx, dy) / np.hypot(1.0, 1.0))
+    center_score = 1.0 - center_distance
+
+    # Penalize fish that are leaving the frame or clipped against an edge.
+    min_edge_distance = min(float(x1), float(y1), float(frame_w - x2), float(frame_h - y2))
+    edge_clearance_target = max(12.0, min(frame_w, frame_h) * 0.08)
+    edge_score = max(0.0, min(1.0, min_edge_distance / edge_clearance_target))
+
+    # Prefer reasonably large, readable fish, but cap the benefit.
+    area_fraction = (box_w * box_h) / max(1.0, float(frame_w * frame_h))
+    area_score = min(1.0, np.sqrt(max(0.0, area_fraction) / 0.12))
+
+    # Slightly prefer frames after the track has stabilized for a few detections.
+    maturity_score = min(1.0, max(0, int(track_age_frames)) / 4.0)
+
+    conf_score = max(0.0, min(1.0, float(conf)))
+    return (
+        conf_score * 0.35
+        + center_score * 0.30
+        + edge_score * 0.20
+        + area_score * 0.10
+        + maturity_score * 0.05
+    )
+
 def deepsort_analysis(tracker, frame, frameData, vidData):
     """Advance DeepSort tracks for the current frame and maintain per-track state."""
 
@@ -733,6 +808,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                 "entry_x": initial_x,
                 "last_x": initial_x,
                 "best_conf": -1.0,
+                "best_crop_score": -1.0,
                 "best_crop": None,
                 "video_timestamp": vidData.v_video_timestamp or "Not detected",
                 "timestamp_confidence": initial_conf,
@@ -789,8 +865,24 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
         conf = obj["confidence"]
 
         if crop is not None and crop.size > 0:
-            if conf > vidData.v_active_tracks[trackId]["best_conf"]:
+            track_age_frames = len(vidData.v_active_tracks[trackId]["confidences"])
+            crop_score = _score_species_crop(frame.shape, (x1, y1, x2, y2), conf, track_age_frames)
+            previous_best_conf = vidData.v_active_tracks[trackId].get("best_conf", -1.0)
+            best_crop_score = vidData.v_active_tracks[trackId].get("best_crop_score", -1.0)
+
+            if conf > previous_best_conf:
                 vidData.v_active_tracks[trackId]["best_conf"] = conf
+
+            should_replace_crop = (
+                crop_score > best_crop_score
+                or (
+                    abs(crop_score - best_crop_score) <= 1e-6
+                    and conf > previous_best_conf
+                )
+            )
+
+            if should_replace_crop:
+                vidData.v_active_tracks[trackId]["best_crop_score"] = crop_score
                 vidData.v_active_tracks[trackId]["best_crop"] = crop.copy()
                 vidData.v_active_tracks[trackId]["best_frame"] = frame.copy()
 
@@ -1014,6 +1106,27 @@ def dedupe_fragmented_tracks(finished_tracks):
 
         return merged
 
+    def _merged_direction_from_path(a, b):
+        try:
+            a_start = float(a.get("start_time_sec", 0.0))
+            b_start = float(b.get("start_time_sec", 0.0))
+        except Exception:
+            a_start = 0.0
+            b_start = 0.0
+
+        first, second = (a, b) if a_start <= b_start else (b, a)
+        entry_x = _x(first, "entry_x")
+        exit_x = _x(second, "exit_x")
+        width = max(_frame_width(first), _frame_width(second))
+        min_net_dx = max(6.0, width * 0.02)
+        net_dx = exit_x - entry_x
+
+        if net_dx <= -min_net_dx:
+            return "upstream"
+        if net_dx >= min_net_dx:
+            return "downstream"
+        return "indecisive"
+
     def _is_turnaround_split(a, b):
         da, db = _direction_pair(a, b)
         if {da, db} != {"upstream", "downstream"}:
@@ -1057,11 +1170,55 @@ def dedupe_fragmented_tracks(finished_tracks):
 
         return same_turn_point and same_outer_side and starts_and_ends_same_side
 
+    def _is_opposite_direction_fragment(a, b):
+        da, db = _direction_pair(a, b)
+        if {da, db} != {"upstream", "downstream"}:
+            return False
+
+        if str(a.get("likely_class", "")).lower() != str(b.get("likely_class", "")).lower():
+            return False
+
+        a_start = float(a.get("start_time_sec", 0.0))
+        a_end = float(a.get("end_time_sec", 0.0))
+        b_start = float(b.get("start_time_sec", 0.0))
+        b_end = float(b.get("end_time_sec", 0.0))
+        gap = min(abs(a_start - b_end), abs(b_start - a_end))
+        if gap > 0.60:
+            return False
+
+        a_ts = str(a.get("video_timestamp", "")).replace("*", "").strip()
+        b_ts = str(b.get("video_timestamp", "")).replace("*", "").strip()
+        if a_ts and b_ts and a_ts != b_ts:
+            return False
+
+        if _is_turnaround_split(a, b):
+            return False
+
+        continuity_threshold = max(_continuity_threshold(a), _continuity_threshold(b))
+        a_entry = _x(a, "entry_x")
+        a_exit = _x(a, "exit_x")
+        b_entry = _x(b, "entry_x")
+        b_exit = _x(b, "exit_x")
+
+        close_exit_to_entry = (
+            abs(a_exit - b_entry) <= continuity_threshold
+            or abs(b_exit - a_entry) <= continuity_threshold
+        )
+        if not close_exit_to_entry:
+            return False
+
+        merged_direction = _merged_direction_from_path(a, b)
+        return merged_direction in {"upstream", "downstream"}
+
     def _is_likely_duplicate(a, b):
         # Must be same class and either compatible direction or a clear turnaround split.
         if str(a.get("likely_class", "")).lower() != str(b.get("likely_class", "")).lower():
             return False
-        if not _same_or_unknown_direction(a, b) and not _is_turnaround_split(a, b):
+        if (
+            not _same_or_unknown_direction(a, b)
+            and not _is_turnaround_split(a, b)
+            and not _is_opposite_direction_fragment(a, b)
+        ):
             return False
 
         # If OCR timestamp resolves to the same second, treat close tracks as likely split IDs.
@@ -1111,6 +1268,8 @@ def dedupe_fragmented_tracks(finished_tracks):
             if _is_likely_duplicate(existing, track):
                 if _is_turnaround_split(existing, track):
                     kept[i] = _merge_track_rows(existing, track, "indecisive")
+                elif _is_opposite_direction_fragment(existing, track):
+                    kept[i] = _merge_track_rows(existing, track, _merged_direction_from_path(existing, track))
                 elif _score(track) > _score(existing):
                     kept[i] = track
                 merged = True
@@ -1536,7 +1695,7 @@ def run_video_tracker(video_path, source_video_path=None):
     print(f"[INFO] After dedupe/cap: {len(vidData.v_finished_tracks)} fish tracks")
 
     # Save the best image from each video for analysis.
-    save_best_image(vidData.v_finished_tracks, os.path.basename(source_video_path))
+    save_best_image(vidData.v_finished_tracks, source_video_path)
     
     # Save frames for uncertain timestamps
     save_uncertain_timestamp_frames(vidData.v_finished_tracks, source_video_path)
@@ -1597,6 +1756,24 @@ def _process_video_with_retry(video_path, source_video_path):
         YOLO_CONFIDENCE_THRESHOLD = original_yolo_conf
         MIN_TRACK_DURATION_SEC = original_min_duration
 
+
+def _process_video_file(item_path):
+    """Process one source video and return the export rows for that file."""
+    filename = os.path.basename(item_path)
+    video_path, is_temp = convert_asf_to_mp4(item_path)
+    try:
+        video_tracks = _process_video_with_retry(video_path, item_path)
+    finally:
+        if is_temp:
+            _cleanup_temp(video_path)
+
+    for track in video_tracks:
+        track["video_file"] = item_path
+        track["location"] = FISHLENS_LOCATION
+        track["run"] = _RUN_NAME
+
+    return filename, video_tracks
+
 def main(input_path=None):
     """Process either one video or every video in a folder and flush results per video."""
     if input_path is None:
@@ -1609,29 +1786,27 @@ def main(input_path=None):
         video_folder = input_path
         single_video_file = None
 
+    run_workers = _resolve_run_workers(input_path, 1)
+    _apply_run_workers(run_workers)
+
     os.makedirs(video_folder, exist_ok=True)
 
     # Debug: Print paths
     print(f"[INFO] Processing videos from: {video_folder}")
 
     # Process all videos in folder
-    print(f"Performance: FAST_MODE={FAST_MODE}, FRAME_STRIDE={FRAME_STRIDE}, YOLO_IMGSZ={YOLO_IMGSZ}")
+    print(f"Performance: FAST_MODE={FAST_MODE}, FRAME_STRIDE={FRAME_STRIDE}, YOLO_IMGSZ={YOLO_IMGSZ}, WORKERS={RUN_WORKERS}")
     if single_video_file:
         # Process single video file
         print(f"[PROGRESS] TOTAL:1", flush=True)
-        video_path, is_temp = convert_asf_to_mp4(single_video_file)
         filename = os.path.basename(single_video_file)
         print(f"[PROGRESS] VIDEO:1/1|{filename}", flush=True)
         try:
-            video_tracks = _process_video_with_retry(video_path, single_video_file)
-        finally:
-            if is_temp:
-                _cleanup_temp(video_path)
+            _, video_tracks = _process_video_file(single_video_file)
+        except Exception as e:
+            print(f"[ERROR] Failed to process {filename}: {e}")
+            video_tracks = []
 
-        for t in video_tracks:
-            t["video_file"] = single_video_file
-            t["location"] = FISHLENS_LOCATION
-            t["run"] = _RUN_NAME
         if video_tracks:
             try:
                 _flush_tracks_to_csv(video_tracks)
@@ -1658,6 +1833,9 @@ def main(input_path=None):
             if os.path.isfile(os.path.join(video_folder, f)) and f.lower().endswith(video_extensions)
         ]
         video_count = len(video_files)
+        run_workers = _resolve_run_workers(input_path, video_count)
+        _apply_run_workers(run_workers)
+        print(f"[INFO] Worker policy selected RUN_WORKERS={RUN_WORKERS}")
         print(f"[PROGRESS] TOTAL:{video_count}", flush=True)
 
         # Build set of already-analyzed filenames from run_master.csv so they can be skipped.
@@ -1672,31 +1850,73 @@ def main(input_path=None):
                         for row in csv.DictReader(_f):
                             stored = row.get("video_file", "")
                             if stored:
-                                already_analyzed.add(os.path.basename(stored))
+                                already_analyzed.add(os.path.normcase(os.path.normpath(stored)))
                 except Exception as _e:
                     print(f"[WARNING] Could not read master CSV for skip-check: {_e}")
         else:
             print("[INFO] FORCE_REANALYZE=1: skipping already-analyzed check, all videos will be re-processed.", flush=True)
 
-        for video_index, filename in enumerate(video_files, start=1):
+        pending_paths = []
+        for filename in video_files:
             item_path = os.path.join(video_folder, filename)
-            print(f"[PROGRESS] VIDEO:{video_index}/{video_count}|{filename}", flush=True)
-
-            if filename in already_analyzed:
+            normalized_path = os.path.normcase(os.path.normpath(item_path))
+            if normalized_path in already_analyzed:
                 print(f"[INFO] Skipping (already analyzed): {filename}", flush=True)
                 continue
 
-            video_path, is_temp = convert_asf_to_mp4(item_path)
+            pending_paths.append(item_path)
+
+        pending_total = len(pending_paths)
+        if pending_total == 0:
+            print("[INFO] No new videos to process after skip-check.", flush=True)
+            return
+
+        run_workers = _resolve_run_workers(input_path, pending_total)
+        _apply_run_workers(run_workers)
+        print(f"[INFO] Worker policy selected RUN_WORKERS={RUN_WORKERS}")
+
+        if run_workers > 1:
+            with ProcessPoolExecutor(max_workers=run_workers) as executor:
+                future_to_path = {
+                    executor.submit(_process_video_file, item_path): item_path
+                    for item_path in pending_paths
+                }
+
+                completed = 0
+                for future in as_completed(future_to_path):
+                    item_path = future_to_path[future]
+                    filename = os.path.basename(item_path)
+                    completed += 1
+                    print(f"[PROGRESS] VIDEO:{completed}/{pending_total}|{filename}", flush=True)
+
+                    try:
+                        _, video_tracks = future.result()
+                    except Exception as e:
+                        print(f"[ERROR] Failed to process {filename}: {e}")
+                        video_tracks = []
+
+                    if video_tracks:
+                        try:
+                            _flush_tracks_to_csv(video_tracks)
+                            print(f"[SUCCESS] Exported {len(video_tracks)} fish tracks for {filename}.")
+                        except Exception as e:
+                            print(f"[ERROR] Failed to write CSV for {filename}: {e}")
+                    else:
+                        print(f"[INFO] No fish tracks to export for {filename}.")
+
+                    print(f"[PROGRESS] VIDEO_DONE:{filename}", flush=True)
+            return
+
+        for video_index, item_path in enumerate(pending_paths, start=1):
+            filename = os.path.basename(item_path)
+            print(f"[PROGRESS] VIDEO:{video_index}/{pending_total}|{filename}", flush=True)
+
             print(f"Processing: {filename}")
             try:
-                video_tracks = _process_video_with_retry(video_path, item_path)
-            finally:
-                if is_temp:
-                    _cleanup_temp(video_path)
-            for t in video_tracks:
-                t["video_file"] = item_path
-                t["location"] = FISHLENS_LOCATION
-                t["run"] = _RUN_NAME
+                _, video_tracks = _process_video_file(item_path)
+            except Exception as e:
+                print(f"[ERROR] Failed to process {filename}: {e}")
+                video_tracks = []
 
             # Flush this video's tracks to CSV immediately so results are preserved
             # even if the run is cancelled before all videos finish.
@@ -1711,23 +1931,24 @@ def main(input_path=None):
 
             print(f"[PROGRESS] VIDEO_DONE:{filename}", flush=True)
 
-# Persistent server loop: accept one folder path per line from stdin, process it, signal done.
-if CLI_INPUT_PATH:
-    try:
-        main(CLI_INPUT_PATH)
-    except Exception as e:
-        print(f"[ERROR] Unhandled exception during processing: {e}", flush=True)
-        import traceback
-        traceback.print_exc()
-    print("[PROGRESS] DONE", flush=True)
-else:
-    for raw_line in sys.stdin:
-        input_path = raw_line.strip()
-        if input_path:
-            try:
-                main(input_path)
-            except Exception as e:
-                print(f"[ERROR] Unhandled exception during processing: {e}", flush=True)
-                import traceback
-                traceback.print_exc()
-            print("[PROGRESS] DONE", flush=True)
+if __name__ == "__main__":
+    # Persistent server loop: accept one folder path per line from stdin, process it, signal done.
+    if CLI_INPUT_PATH:
+        try:
+            main(CLI_INPUT_PATH)
+        except Exception as e:
+            print(f"[ERROR] Unhandled exception during processing: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+        print("[PROGRESS] DONE", flush=True)
+    else:
+        for raw_line in sys.stdin:
+            input_path = raw_line.strip()
+            if input_path:
+                try:
+                    main(input_path)
+                except Exception as e:
+                    print(f"[ERROR] Unhandled exception during processing: {e}", flush=True)
+                    import traceback
+                    traceback.print_exc()
+                print("[PROGRESS] DONE", flush=True)

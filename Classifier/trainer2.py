@@ -23,6 +23,8 @@ from keras.optimizers import Adam
 from keras.applications import MobileNetV2
 from keras.models import load_model
 
+from test_model import VAL_DIR, evaluate_model_on_validation, print_evaluation_summary
+
 # ========================================================================
 # CONFIGURATION AND CONSTANTS
 # ========================================================================
@@ -42,17 +44,17 @@ FINE_TUNE_EPOCHS = 20  # Then fine-tune part of the base model
 SHUFFLE_BUFFER = 1000
 
 # Augmentation Constants
-ROTATION = 0.08
+ROTATION = 0.10
 ZOOM = 0.10
-WIDTH_SHIFT = 0.08
-HEIGHT_SHIFT = 0.08
+WIDTH_SHIFT = 0.10
+HEIGHT_SHIFT = 0.10
 RANDOM_BRIGHTNESS = 0.15
-RANDOM_CONTRAST = 0.08
+RANDOM_CONTRAST = 0.10
 
 # Model / Training Constants
-HEAD_DROPOUT_RATE = 0.30
-INITIAL_LEARNING_RATE = 1e-4
-FINE_TUNE_LEARNING_RATE = 1e-5
+HEAD_DROPOUT_RATE = 0.40
+INITIAL_LEARNING_RATE = 3e-5
+FINE_TUNE_LEARNING_RATE = 4e-6
 PATIENCE = 6
 FINE_TUNE_AT = 20  # Unfreeze the last N layers of MobileNetV2
 
@@ -308,4 +310,5 @@ history_fine = model.fit(
 # Description: Reloads the best validation checkpoint from disk and reports metrics from it.
 best_model = load_model(EXPORT_PATH, compile=False)
 print("Model saved successfully as fish_classifier_model.keras")
-print_confusion_matrix(best_model, validation_dataset, class_names)
+summary = evaluate_model_on_validation(best_model, VAL_DIR)
+print_evaluation_summary(EXPORT_PATH, summary)

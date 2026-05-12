@@ -23,6 +23,7 @@ class DeepSortTracker:
     MIN_FRAMES_FOR_SUMMARY = 3
     DEFAULT_NMS_IOU_THRESHOLD = 0.5
     MIN_POSITIONS_FOR_DIRECTION = 2
+    DIRECTION_HISTORY_WINDOW = 12
     # A single fish should never occupy more than ~65% of the frame height
     # while also being nearly square. A diagonally-swimming fish will produce
     # a taller axis-aligned box than a horizontal fish, but it will still be
@@ -45,9 +46,10 @@ class DeepSortTracker:
     #              and tracking state containers.
 
     def __init__(self) -> None:
-        n_init = max(1, int(os.getenv("FISHLENS_DEEPSORT_N_INIT", "3")))
+        n_init = max(1, int(os.getenv("FISHLENS_DEEPSORT_N_INIT", str(self.DEEPSORT_N_INIT))))
+        max_age = max(1, int(os.getenv("FISHLENS_DEEPSORT_MAX_AGE", str(self.DEEPSORT_MAX_AGE))))
         self.tracker = DeepSort(
-            max_age=60,
+            max_age=max_age,
             n_init=n_init,
             max_iou_distance=0.7,
             max_cosine_distance=0.4
@@ -104,15 +106,19 @@ class DeepSortTracker:
         # Store centroid history list for this track
         positions = self.trackPositions.get(trackId, [])
         positions.append(centroid)
+        if len(positions) > self.DIRECTION_HISTORY_WINDOW:
+            positions = positions[-self.DIRECTION_HISTORY_WINDOW:]
         self.trackPositions[trackId] = positions
 
         # Need at least 2 positions to determine direction
         if len(positions) < self.MIN_POSITIONS_FOR_DIRECTION:
             return "unknown"
 
-        # Measure horizontal displacement from first position to current
+        # Measure horizontal displacement across a recent window instead of the entire
+        # lifetime of the track. This is more stable for fragmented tracks and real
+        # turnarounds, where "first point to current point" can become misleading.
         dx = positions[-1][0] - positions[0][0]
-        
+
         # If object moved less than threshold, considered stationary
         if abs(dx) < self.MIN_MOVE_THRESHOLD:
             return "stationary"

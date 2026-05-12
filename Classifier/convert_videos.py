@@ -6,7 +6,8 @@ directly for crop extraction.
 """
 
 import os
-import cv2
+import shutil
+import subprocess
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -14,7 +15,6 @@ INPUT_DIR = os.path.join(BASE_DIR, "toPull")
 OUTPUT_DIR = os.path.join(BASE_DIR, "converted")
 
 SUPPORTED_EXTENSIONS = {".asf", ".avi", ".mp4", ".mov", ".mkv", ".wmv"}
-OUTPUT_FPS_FALLBACK = 30.0
 
 
 def iter_source_videos(input_dir):
@@ -26,60 +26,52 @@ def iter_source_videos(input_dir):
         _, ext = os.path.splitext(name)
         if ext.lower() in SUPPORTED_EXTENSIONS:
             yield path
-
-
 def convert_video(source_path, output_dir):
     base_name = os.path.splitext(os.path.basename(source_path))[0]
     output_path = os.path.join(output_dir, f"{base_name}.mp4")
 
-    capture = cv2.VideoCapture(source_path)
-    if not capture.isOpened():
-        print(f"[skip] Could not open: {source_path}")
+    ffmpeg_path = shutil.which("ffmpeg")
+    if not ffmpeg_path:
+        print("[skip] ffmpeg was not found on PATH. Install ffmpeg to use this converter.")
         return False
 
-    width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)) or 0
-    height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 0
-    fps = float(capture.get(cv2.CAP_PROP_FPS) or 0.0)
-
-    if width <= 0 or height <= 0:
-        print(f"[skip] Invalid video size: {source_path}")
-        capture.release()
-        return False
-
-    if fps <= 1.0:
-        fps = OUTPUT_FPS_FALLBACK
-
-    writer = cv2.VideoWriter(
+    ffmpeg_cmd = [
+        ffmpeg_path,
+        "-hide_banner",
+        "-loglevel", "warning",
+        "-y",
+        "-fflags", "+genpts+discardcorrupt",
+        "-err_detect", "ignore_err",
+        "-i", source_path,
+        "-map", "0:v:0",
+        "-an",
+        "-avoid_negative_ts", "make_zero",
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-crf", "23",
+        "-movflags", "+faststart",
         output_path,
-        cv2.VideoWriter_fourcc(*"mp4v"),
-        fps,
-        (width, height),
-    )
+    ]
 
-    if not writer.isOpened():
-        print(f"[skip] Could not create output: {output_path}")
-        capture.release()
+    try:
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, check=False)
+    except Exception as exc:
+        print(f"[skip] ffmpeg invocation failed for {os.path.basename(source_path)}: {exc}")
         return False
 
-    frames_written = 0
-    while True:
-        success, frame = capture.read()
-        if not success:
-            break
-        writer.write(frame)
-        frames_written += 1
+    if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+        print(f"[ok] {os.path.basename(source_path)} -> {os.path.basename(output_path)} (ffmpeg)")
+        return True
 
-    capture.release()
-    writer.release()
+    if os.path.exists(output_path) and os.path.getsize(output_path) == 0:
+        os.remove(output_path)
 
-    if frames_written == 0:
-        if os.path.exists(output_path):
-            os.remove(output_path)
-        print(f"[skip] No frames written: {source_path}")
-        return False
-
-    print(f"[ok] {os.path.basename(source_path)} -> {os.path.basename(output_path)} ({frames_written} frames)")
-    return True
+    stderr_tail = (result.stderr or "").strip()
+    if stderr_tail:
+        print(f"[skip] ffmpeg failed for {os.path.basename(source_path)}: {stderr_tail}")
+    else:
+        print(f"[skip] ffmpeg failed for {os.path.basename(source_path)}")
+    return False
 
 
 def main():

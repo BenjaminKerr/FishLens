@@ -7,6 +7,7 @@
 // ***********************************
 // **************************************************
 
+using FishLens_App.Helper_Classes;
 using FishLens_App.Interfaces;
 using FishLens_App.Models;
 using FishLens_App.Services;
@@ -26,6 +27,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
 namespace FishLens_App
@@ -582,10 +584,20 @@ namespace FishLens_App
         // **************************************************
         private void UpdateRunDisplay()
         {
-            string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
+            var app = Application.Current as App;
+            if (app == null) return;
+
+            // Prefer the App-level property, but fall back to Configuration if they've drifted
+            string activeRun = !string.IsNullOrWhiteSpace(app.ActiveRun)
+                ? app.ActiveRun
+                : (app.Configuration?.ActiveRun ?? string.Empty);
+
             if (runDisplayLabel != null)
                 runDisplayLabel.Text = string.IsNullOrWhiteSpace(activeRun) ? "No run selected" : activeRun;
         }
+
+
+
 
         // **************************************************
         // Function: GetUpstreamDirectionForActiveLocation
@@ -594,32 +606,17 @@ namespace FishLens_App
         // **************************************************
         private string GetUpstreamDirectionForActiveLocation()
         {
-            try
-            {
-                string activeLocation = (Application.Current as App)?.ActiveLocation ?? "Unknown";
-                string configPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
-                if (!File.Exists(configPath)) return "left";
+            var app = Application.Current as App;
+            string activeLocation = app?.ActiveLocation ?? "Unknown";
+            if (app?.Configuration?.Locations == null) return "left";
 
-                using var stream = File.OpenRead(configPath);
-                using var doc = JsonDocument.Parse(stream);
-                var root = doc.RootElement;
-
-                if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var locEl in locsEl.EnumerateArray())
-                    {
-                        if (locEl.TryGetProperty("Name", out var nEl) &&
-                            nEl.GetString()?.Equals(activeLocation, StringComparison.OrdinalIgnoreCase) == true &&
-                            locEl.TryGetProperty("UpstreamDirection", out var dEl))
-                        {
-                            return dEl.GetString() ?? "left";
-                        }
-                    }
-                }
-            }
-            catch { /* fall through to default */ }
-            return "left";
+            var match = app.Configuration.Locations
+                .FirstOrDefault(l => string.Equals(l.Name, activeLocation, StringComparison.OrdinalIgnoreCase));
+            return match?.UpstreamDirection ?? "left";
         }
+
+
+
 
         // **************************************************
         // Function: LoadUpstreamDirectionMap
@@ -629,25 +626,19 @@ namespace FishLens_App
         private Dictionary<string, string> LoadUpstreamDirectionMap()
         {
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            try
+            var app = Application.Current as App;
+            if (app?.Configuration?.Locations == null) return map;
+
+            foreach (var loc in app.Configuration.Locations)
             {
-                string configPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
-                if (!File.Exists(configPath)) return map;
-                using var stream = File.OpenRead(configPath);
-                using var doc = JsonDocument.Parse(stream);
-                var root = doc.RootElement;
-                if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var locEl in locsEl.EnumerateArray())
-                    {
-                        if (locEl.TryGetProperty("Name", out var nEl) && locEl.TryGetProperty("UpstreamDirection", out var dEl))
-                            map[nEl.GetString() ?? ""] = dEl.GetString() ?? "left";
-                    }
-                }
+                if (!string.IsNullOrWhiteSpace(loc.Name))
+                    map[loc.Name] = loc.UpstreamDirection ?? "left";
             }
-            catch { /* non-critical */ }
             return map;
         }
+
+
+
 
         // **************************************************
         // Function: PopulateLocationDropdown
@@ -657,45 +648,67 @@ namespace FishLens_App
         {
             try
             {
-                string configPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
-                var locationNames = new List<string>();
-                string activeLocation = "Unknown";
+                var app = Application.Current as App;
+                if (app == null) return;
 
-                if (File.Exists(configPath))
-                {
-                    using var stream = File.OpenRead(configPath);
-                    using var doc = JsonDocument.Parse(stream);
-                    var root = doc.RootElement;
-
-                    if (root.TryGetProperty("ActiveLocation", out var alEl) && alEl.ValueKind == JsonValueKind.String)
-                        activeLocation = alEl.GetString() ?? "Unknown";
-
-                    if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var locEl in locsEl.EnumerateArray())
-                        {
-                            if (locEl.TryGetProperty("Name", out var nEl) && nEl.ValueKind == JsonValueKind.String)
-                                locationNames.Add(nEl.GetString());
-                        }
-                    }
-                }
+                // Read locations from the shared in-memory Configuration (populated from DB at sign-in)
+                var locationNames = app.Configuration?.Locations?
+                    .Select(l => l.Name)
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .ToList() ?? new List<string>();
 
                 if (locationNames.Count == 0)
                     locationNames.Add("Unknown");
 
+                // ActiveLocation still lives in JSON for now (per your decision)
+                string activeLocation = app.ActiveLocation;
+                if (string.IsNullOrWhiteSpace(activeLocation) || !locationNames.Contains(activeLocation))
+                    activeLocation = locationNames[0];
+
                 // Suppress SelectionChanged while populating
                 locationDropdown.SelectionChanged -= LocationDropdown_SelectionChanged;
                 locationDropdown.ItemsSource = locationNames;
-                locationDropdown.SelectedItem = locationNames.Contains(activeLocation) ? activeLocation : locationNames[0];
+                locationDropdown.SelectedItem = activeLocation;
                 locationDropdown.SelectionChanged += LocationDropdown_SelectionChanged;
 
                 // Keep App in sync
-                var app = Application.Current as App;
-                if (app != null)
-                    app.ActiveLocation = locationDropdown.SelectedItem as string ?? "Unknown";
+                app.ActiveLocation = locationDropdown.SelectedItem as string ?? "Unknown";
             }
             catch { /* non-critical */ }
         }
+
+        // **************************************************
+        // Function: SaveActiveLocationToDatabase
+        // Description: Saves the active location to the database
+        // **************************************************
+
+        private void SaveActiveLocationToDatabase(string location)
+        {
+            var app = Application.Current as App;
+            if (app == null || app.CurrentUserId <= 0) return;
+
+            try
+            {
+                using var conn = new System.Data.SqlClient.SqlConnection(app.connectionString);
+                conn.Open();
+                using var cmd = new System.Data.SqlClient.SqlCommand("kaharra.SaveUserActiveLocation", conn);
+                cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                cmd.Parameters.AddWithValue("@pUserId", app.CurrentUserId);
+                cmd.Parameters.AddWithValue("@pActiveLocation", location ?? "Unknown");
+                cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to save active location to DB");
+            }
+        }
+
+
+
+
+
+
+
 
         // **************************************************
         // Function: LocationDropdown_SelectionChanged
@@ -706,12 +719,10 @@ namespace FishLens_App
             string selected = locationDropdown.SelectedItem as string;
             if (string.IsNullOrEmpty(selected)) return;
 
-            // Block location changes while a video batch is processing to avoid
-            // mismatching the location/direction env vars already baked into the running process.
+            // Block location changes while a video batch is processing
             bool isProcessing = _processingTcs != null && !_processingTcs.Task.IsCompleted;
             if (isProcessing)
             {
-                // Silently revert to whatever was previously committed
                 string committed = (Application.Current as App)?.ActiveLocation ?? "Unknown";
                 locationDropdown.SelectionChanged -= LocationDropdown_SelectionChanged;
                 locationDropdown.SelectedItem = locationDropdown.Items.Contains(committed) ? committed : locationDropdown.Items[0];
@@ -721,33 +732,18 @@ namespace FishLens_App
 
             var app = Application.Current as App;
             if (app != null)
-                app.ActiveLocation = selected;
-
-            // Persist to JSON so next startup remembers the choice
-            try
             {
-                string configPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
-                if (!File.Exists(configPath)) return;
-
-                string json = File.ReadAllText(configPath);
-                using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
-
-                // Rebuild the JSON with the updated ActiveLocation
-                var dict = new System.Collections.Generic.Dictionary<string, object>();
-                foreach (var prop in root.EnumerateObject())
-                {
-                    if (prop.Name == "ActiveLocation")
-                        dict[prop.Name] = selected;
-                    else
-                        dict[prop.Name] = prop.Value.Clone();
-                }
-
-                var options = new JsonSerializerOptions { WriteIndented = true };
-                File.WriteAllText(configPath, JsonSerializer.Serialize(dict, options));
+                app.ActiveLocation = selected;
+                if (app.Configuration != null)
+                    app.Configuration.ActiveLocation = selected;
             }
-            catch { /* non-critical */ }
+
+            // Persist to DB so next sign-in remembers the choice
+            SaveActiveLocationToDatabase(selected);
         }
+
+
+
 
         // **************************************************
         // Function: GetLocationCsvPaths
@@ -2412,70 +2408,32 @@ namespace FishLens_App
 
         #region UI Display
 
-        private void CollapseSidebar()
-        {
-            var animation = new System.Windows.Media.Animation.DoubleAnimation
-            {
-                To = 106,
-                Duration = TimeSpan.FromMilliseconds(250),
-                EasingFunction = new System.Windows.Media.Animation.CubicEase()
-            };
-
-            SideBar.BeginAnimation(Border.WidthProperty, animation);
-
-            videoList.Visibility = Visibility.Collapsed;
-            deleteSelectedVideos.Visibility = Visibility.Collapsed;
-            changeLocationForSelected.Visibility = Visibility.Collapsed;
-            undoLastDelete.Visibility = Visibility.Collapsed;
-            sidebarSeperator.Visibility = Visibility.Collapsed;
-            videoLibraryTitle.Visibility = Visibility.Collapsed;
-            // Only hide the progress UI - do NOT raise AnalysisStateChanged(false) here
-            // because analysis may still be running in the background.
-            analysisProgressArea.Visibility = Visibility.Collapsed;
-
-            ButtonGrid.RowDefinitions.Clear();
-            ButtonGrid.ColumnDefinitions.Clear();
-            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-
-            Grid.SetRow(Home, 0);
-            Grid.SetColumn(Home, 0);
-            Grid.SetRow(History, 1);
-            Grid.SetColumn(History, 0);
-            Grid.SetRow(Settings, 2);
-            Grid.SetColumn(Settings, 0);
-            Grid.SetRow(AccountSettingsButton, 3);
-            Grid.SetColumn(AccountSettingsButton, 0);
-        }
-
         private void ExpandSidebar()
         {
-            var animation = new System.Windows.Media.Animation.DoubleAnimation
+            SideBar.RenderTransform = Transform.Identity;
+
+            // Fade in videoLibraryTitle
+            videoLibraryTitle.Opacity = 0;
+            videoLibraryTitle.Visibility = Visibility.Visible;
+            var titleFadeIn = new DoubleAnimation
             {
-                To = 320,
-                Duration = TimeSpan.FromMilliseconds(250),
-                EasingFunction = new System.Windows.Media.Animation.CubicEase()
+                From = 0,
+                To = 1,
+                BeginTime = TimeSpan.FromMilliseconds(150),
+                Duration = TimeSpan.FromMilliseconds(150),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
             };
+            videoLibraryTitle.BeginAnimation(UIElement.OpacityProperty, titleFadeIn);
 
-            SideBar.BeginAnimation(Border.WidthProperty, animation);
-
-            // Show video list
             videoList.Visibility = Visibility.Visible;
             deleteSelectedVideos.Visibility = Visibility.Visible;
             changeLocationForSelected.Visibility = Visibility.Visible;
             undoLastDelete.Visibility = Visibility.Visible;
             sidebarSeperator.Visibility = Visibility.Visible;
-            videoLibraryTitle.Visibility = Visibility.Visible;
 
-            // If analysis is still running, re-show the progress area so the user
-            // can see progress after navigating back to the main window.
             if (App.IsAnalyzing)
                 analysisProgressArea.Visibility = Visibility.Visible;
 
-            // Restore horizontal button layout
             ButtonGrid.RowDefinitions.Clear();
             ButtonGrid.ColumnDefinitions.Clear();
             ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -2483,15 +2441,70 @@ namespace FishLens_App
             ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
+            Grid.SetRow(Home, 0); Grid.SetColumn(Home, 0);
+            Grid.SetRow(History, 0); Grid.SetColumn(History, 1);
+            Grid.SetRow(Settings, 0); Grid.SetColumn(Settings, 2);
+            Grid.SetRow(AccountSettingsButton, 0); Grid.SetColumn(AccountSettingsButton, 3);
 
-            Grid.SetRow(Home, 0);
-            Grid.SetColumn(Home, 0);
-            Grid.SetRow(History, 0);
-            Grid.SetColumn(History, 1);
-            Grid.SetRow(Settings, 0);
-            Grid.SetColumn(Settings, 2);
-            Grid.SetRow(AccountSettingsButton, 0);
-            Grid.SetColumn(AccountSettingsButton, 3);
+            var expandAnim = new GridLengthAnimation
+            {
+                From = new GridLength(SidebarColumn.ActualWidth),
+                To = new GridLength(320),
+                Duration = TimeSpan.FromMilliseconds(280),
+                EasingMode = EasingMode.EaseOut,
+                FillBehavior = FillBehavior.Stop
+            };
+            expandAnim.Completed += (s, e) => SidebarColumn.Width = new GridLength(320);
+            SidebarColumn.BeginAnimation(ColumnDefinition.WidthProperty, expandAnim);
+        }
+
+        private void CollapseSidebar()
+        {
+            // Fade out videoLibraryTitle before/during collapse
+            var titleFadeOut = new DoubleAnimation
+            {
+                From = 1,
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(100),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+            };
+            titleFadeOut.Completed += (s, e) => videoLibraryTitle.Visibility = Visibility.Collapsed;
+            videoLibraryTitle.BeginAnimation(UIElement.OpacityProperty, titleFadeOut);
+
+            var collapseAnim = new GridLengthAnimation
+            {
+                From = new GridLength(SidebarColumn.ActualWidth),
+                To = new GridLength(106),
+                Duration = TimeSpan.FromMilliseconds(250),
+                EasingMode = EasingMode.EaseInOut,
+                FillBehavior = FillBehavior.Stop
+            };
+
+            collapseAnim.Completed += (s, e) =>
+            {
+                SidebarColumn.Width = new GridLength(106);
+
+                videoList.Visibility = Visibility.Collapsed;
+                deleteSelectedVideos.Visibility = Visibility.Collapsed;
+                changeLocationForSelected.Visibility = Visibility.Collapsed;
+                undoLastDelete.Visibility = Visibility.Collapsed;
+                sidebarSeperator.Visibility = Visibility.Collapsed;
+                analysisProgressArea.Visibility = Visibility.Collapsed;
+
+                ButtonGrid.RowDefinitions.Clear();
+                ButtonGrid.ColumnDefinitions.Clear();
+                ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+                Grid.SetRow(Home, 0); Grid.SetColumn(Home, 0);
+                Grid.SetRow(History, 1); Grid.SetColumn(History, 0);
+                Grid.SetRow(Settings, 2); Grid.SetColumn(Settings, 0);
+                Grid.SetRow(AccountSettingsButton, 3); Grid.SetColumn(AccountSettingsButton, 0);
+            };
+
+            SidebarColumn.BeginAnimation(ColumnDefinition.WidthProperty, collapseAnim);
         }
 
         // **************************************************
