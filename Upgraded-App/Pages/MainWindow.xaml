@@ -14,7 +14,7 @@
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="SidebarColumn" Width="Auto"/>
+            <ColumnDefinition x:Name="SidebarColumn" Width="320"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
@@ -28,11 +28,11 @@
              SIDEBAR
         ════════════════════════════════════════════════════ -->
         <Border x:Name="SideBar"
-                Width="300"
-                Grid.Column="0"
-                Background="{DynamicResource AccentBrush}"
-                BorderThickness="0,0,1,0"
-                BorderBrush="{DynamicResource SidebarBorder}">
+        Grid.Column="0"
+        CacheMode="BitmapCache"
+        Background="{DynamicResource AccentBrush}"
+        BorderThickness="0,0,1,0"
+        BorderBrush="{DynamicResource SidebarBorder}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
