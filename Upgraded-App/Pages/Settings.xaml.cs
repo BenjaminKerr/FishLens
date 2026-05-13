@@ -119,8 +119,7 @@ namespace FishLens_App
                 _config.LargeText = largeText.IsChecked ?? false;
                 _checkBoxes.FastMode = enableFastMode.IsChecked ?? false;
 
-                TryPersistSettingsToDatabase();
-                PersistSettingsToJson();
+                PersistSettingsToDatabase();
 
                 var appInst = Application.Current as App;
                 if (appInst != null)
@@ -509,18 +508,6 @@ namespace FishLens_App
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Could not load settings from database; using in-memory/default values");
-            }
-        }
-
-        private void TryPersistSettingsToDatabase()
-        {
-            try
-            {
-                PersistSettingsToDatabase();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not save settings to database; local settings were still saved");
             }
         }
 

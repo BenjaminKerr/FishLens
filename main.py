@@ -1587,8 +1587,11 @@ def _append_no_fish_row(video_file_path, video_timestamp):
     except Exception as e:
         print(f"[ERROR] Failed to write no-fish row: {e}")
 
-def save_best_image(finished_tracks, filename):
+def save_best_image(finished_tracks, video_path):
     """Save each track's best crop, classify it, and move it into a species subfolder."""
+    video_stem = os.path.splitext(os.path.basename(video_path))[0]
+    safe_video_stem = _safe_path_component(video_stem, default="unknown_video")
+
     for track in finished_tracks:
         best_crop = track.get("best_crop")
 
@@ -1597,7 +1600,8 @@ def save_best_image(finished_tracks, filename):
             
             # Classify the image first to determine species folder
             start_token = _safe_path_component(str(track.get("start_time_sec", "0")).replace(".", "p"))
-            temp_image_name = f"{os.path.splitext(filename)[0]}_track_{track['trackId']}_start_{start_token}.jpg"
+            track_token = _safe_path_component(track.get("trackId"), default="unknown_track")
+            temp_image_name = f"{safe_video_stem}_track_{track_token}_start_{start_token}.jpg"
             temp_image_path = os.path.join(FISH_IMAGE_DIR, temp_image_name)
             write_ok = cv2.imwrite(temp_image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
             if not write_ok:
