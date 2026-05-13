@@ -2507,6 +2507,32 @@ namespace FishLens_App
             SidebarColumn.BeginAnimation(ColumnDefinition.WidthProperty, collapseAnim);
         }
 
+        /// <summary>
+        /// Updates a ring arc Path to represent <paramref name="confidence"/> (0–100).
+        /// The arc sits on a circle of radius 17 centred at (22,22).
+        /// </summary>
+        private static void SetRingArc(System.Windows.Shapes.Path arc, double confidence)
+        {
+            if (confidence <= 0) { arc.Data = Geometry.Empty; return; }
+
+            double pct = Math.Min(confidence / 100.0, 0.9999); // avoid full-circle edge case
+            double angle = pct * 360.0 - 90.0;                   // start from 12 o'clock
+            double rad = angle * Math.PI / 180.0;
+            double cx = 22, cy = 22, r = 17;
+            double ex = cx + r * Math.Cos(rad);
+            double ey = cy + r * Math.Sin(rad);
+            int large = pct >= 0.5 ? 1 : 0;
+
+            arc.Data = Geometry.Parse(
+                $"M {cx},{cy - r} A {r},{r},0,{large},1,{ex:F2},{ey:F2}");
+        }
+
+        // Call this wherever you populate the analysis fields, e.g.:
+        // SetRingArc(fishPresentRingArc,  fishPresentConfidenceValue);   // 0–100
+        // SetRingArc(fishSpeciesRingArc,  fishSpeciesConfidenceValue);
+        // fishPresentConfidence.Text  = $"{fishPresentConfidenceValue:0}%";
+        // fishSpeciesConfidence.Text  = $"{fishSpeciesConfidenceValue:0}%";
+
         // **************************************************
         // Function: VideoButtonClick
         // Description: Displays selected video and its data

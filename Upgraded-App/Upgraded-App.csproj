@@ -49,4 +49,13 @@
 	<ItemGroup>
 	  <Folder Include="Themes\Controls\" />
 	</ItemGroup>
+	<ItemGroup>
+		<Resource Include="Fonts\PlusJakartaSans-Regular.ttf"/>
+		<Resource Include="Fonts\PlusJakartaSans-Medium.ttf"/>
+		<Resource Include="Fonts\PlusJakartaSans-SemiBold.ttf"/>
+		<Resource Include="Fonts\PlusJakartaSans-Bold.ttf"/>
+		<Resource Include="Fonts\DMSans-Regular.ttf"/>
+		<Resource Include="Fonts\DMSans-Medium.ttf"/>
+		<Resource Include="Fonts\DMSans-SemiBold.ttf"/>
+	</ItemGroup>
 </Project>

@@ -173,23 +173,18 @@
                 Padding="40,18">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
 
-                <!-- Logo mark (fish/lens SVG via Viewbox) -->
                 <Viewbox Width="32" Height="32" Margin="0,0,12,0">
                     <Canvas Width="38" Height="38">
                         <!-- Magnifying Glass Lens -->
                         <Ellipse Canvas.Left="1" Canvas.Top="1"
-                 Width="36" Height="36"
-                 Stroke="#2D7A64" StrokeThickness="1"
-                 Fill="#0F3E30"/>
+       Width="36" Height="36"
+       Stroke="{DynamicResource WhiteBrush}" StrokeThickness="1"
+       Fill="{DynamicResource AccentBrush}"/>
 
                         <!-- Handle -->
                         <Path Data="M 27,27 L 35,35"
-          Stroke="#2D7A64" StrokeThickness="2.5"
-          StrokeStartLineCap="Round" StrokeEndLineCap="Round" Canvas.Left="4.947" Canvas.Top="4.75"/>
-
-                        <!-- fish body -->
-                        <!-- eye -->
-                        <!-- tail fins -->
+Stroke="{DynamicResource WhiteBrush}" StrokeThickness="2.5"
+StrokeStartLineCap="Round" StrokeEndLineCap="Round" Canvas.Left="4.947" Canvas.Top="4.75"/>
                     </Canvas>
                 </Viewbox>
 
@@ -238,7 +233,7 @@
                             </Grid.ColumnDefinitions>
 
                             <Border Grid.Column="0" Style="{StaticResource ActiveTabPill}">
-                                <TextBlock Text="Sign In"
+                                <TextBlock Text="Returning Users"
                                            FontSize="13"
                                            FontWeight="SemiBold"
                                            Foreground="{DynamicResource OnAccentForeground}"
@@ -247,7 +242,7 @@
                             </Border>
 
                             <TextBlock Grid.Column="1"
-                                       Text="Create Account"
+                                       Text="New Users"
                                        FontSize="13"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"
@@ -495,13 +490,6 @@
                                HorizontalAlignment="Left"
                                Margin="0,0,0,20"
                                MouseLeftButtonUp="BackToSignInFromForgot_Click"/>
-
-                    <TextBlock Text="ACCOUNT RECOVERY"
-                               FontSize="10"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource SecondaryText}"
-                               HorizontalAlignment="Center"
-                               Margin="0,0,0,4"/>
 
                     <TextBlock Text="Reset your password"
                                FontFamily="Georgia"

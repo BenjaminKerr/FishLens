@@ -8,7 +8,8 @@
         <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="12,8"/>
-        <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}"/>
+		<Setter Property="FontSize"   Value="{DynamicResource BaseFontSize}"/>
+		<Setter Property="FontFamily" Value="{DynamicResource BodyFont}"/>
         <Setter Property="MinHeight" Value="38"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
@@ -175,7 +176,8 @@
     <Style TargetType="ComboBoxItem">
 
         <Setter Property="Padding" Value="10,6"/>
-        <Setter Property="Foreground" Value="{DynamicResource OnAccentForeground}"/>
+		<Setter Property="Foreground"  Value="{DynamicResource OnAccentForeground}"/>
+		<Setter Property="FontFamily"  Value="{DynamicResource BodyFont}"/>
         <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
         <Setter Property="HorizontalContentAlignment" Value="Left"/>
 
