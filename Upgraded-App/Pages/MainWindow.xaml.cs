@@ -347,19 +347,8 @@ namespace FishLens_App
         // **************************************************
         private void HistoryButtonClick(object sender, RoutedEventArgs e)
         {
-            if (IsCurrentPageSettings())
-            {
-                //if (CheckForUnsavedChanges())
-                //{
-                    CollapseSidebar();
-                    NavigateToPage(new History(_pathResolver, _fileSystemManager, _logger), "History");
-                //}
-            }
-            else
-            {
-                CollapseSidebar();
-                NavigateToPage(new History(_pathResolver, _fileSystemManager, _logger), "History");
-            }
+            CollapseSidebar();
+            NavigateToPage(new History(_pathResolver, _fileSystemManager, _logger), "History");
         }
 
         // **************************************************
@@ -374,9 +363,6 @@ namespace FishLens_App
 
         private void AccountSettingsButtonClick(object sender, RoutedEventArgs e)
         {
-            if (IsCurrentPageSettings() /*&& !CheckForUnsavedChanges()*/)
-                return;
-
             CollapseSidebar();
             NavigateToPage(new AccountSettings(), "AccountSettings");
         }
@@ -1496,7 +1482,7 @@ namespace FishLens_App
             if (selected.Count == 0)
             {
                 MessageBox.Show("No videos selected. Use the checkboxes to select one or more videos first.",
-                    "Change Location", MessageBoxButton.OK, MessageBoxImage.Information);
+                    "Change Location", MessageBoxButton.OK);
                 return;
             }
 
@@ -1509,7 +1495,7 @@ namespace FishLens_App
 
             MessageBox.Show(
                 $"Location updated to \"{newLocation}\" for {selected.Count} video(s).",
-                "Location Updated", MessageBoxButton.OK, MessageBoxImage.Information);
+                "Location Updated", MessageBoxButton.OK);
         }
 
         // **************************************************
@@ -1575,22 +1561,16 @@ namespace FishLens_App
             {
                 if (child is Grid g)
                 {
-                    CheckBox cb = null;
-                    Button btn = null;
-                    FishLens_App.Models.Video video = null;
-                    foreach (var elem in g.Children)
-                    {
-                        if (elem is CheckBox c) cb = c;
-                        if (elem is Button b)
-                        {
-                            btn = b;
-                            video = b.DataContext as FishLens_App.Models.Video;
-                        }
-                    }
+                    Button btn = g.Children.OfType<Button>().FirstOrDefault();
+                    if (btn == null) continue;
 
-                    if (cb != null && cb.IsChecked == true && btn != null && btn.Tag is string path)
+                    var innerGrid = btn.Content as Grid;
+                    var cb = innerGrid?.Children.OfType<CheckBox>()
+                                                .FirstOrDefault(c => c.Tag as string == "selectionCheck");
+
+                    if (cb != null && cb.IsChecked == true && btn.Tag is string path)
                     {
-                        result.Add((g, path, video));
+                        result.Add((g, path, btn.DataContext as FishLens_App.Models.Video));
                     }
                 }
             }
@@ -2152,8 +2132,8 @@ namespace FishLens_App
             string location = _currentTracks.Count > 0
                 ? _currentTracks[_currentTrackIndex].Location
                 : (locationDropdown.SelectedItem as string ?? "--");
-            sessionRunText.Text = $"Run: {(string.IsNullOrWhiteSpace(sourceRun) ? "--" : sourceRun)}";
-            sessionLocationText.Text = $"Location: {location}";
+            sessionRunText.Text = $"{(string.IsNullOrWhiteSpace(sourceRun) ? "--" : sourceRun)}";
+            sessionLocationText.Text = $"{(string.IsNullOrWhiteSpace(location) ? "--" : location)}";
 
             string csvPath = string.IsNullOrWhiteSpace(sourceRun)
                 ? _pathResolver.ResolveCsvScriptPath()
@@ -2521,25 +2501,28 @@ namespace FishLens_App
             }
         }
 
-        /// <summary>
-        /// Updates a ring arc Path to represent <paramref name="confidence"/> (0–100).
-        /// The arc sits on a circle of radius 17 centred at (22,22).
-        /// </summary>
-        private static void SetRingArc(System.Windows.Shapes.Path arc, double confidence)
-        {
-            if (confidence <= 0) { arc.Data = Geometry.Empty; return; }
+private static void SetRingArc(System.Windows.Shapes.Path arc, TextBlock label, double confidence)
+{
+    var color = confidence >= 75 ? Color.FromRgb(0x0F, 0x6E, 0x56)  // green
+              : confidence >= 45 ? Color.FromRgb(0xBA, 0x75, 0x17)  // amber
+                                 : Color.FromRgb(0xC0, 0x39, 0x2B); // red
+    var brush = new SolidColorBrush(color);
+    arc.Stroke = brush;
+    label.Foreground = brush;
 
-            double pct = Math.Min(confidence / 100.0, 0.9999); // avoid full-circle edge case
-            double angle = pct * 360.0 - 90.0;                   // start from 12 o'clock
-            double rad = angle * Math.PI / 180.0;
-            double cx = 22, cy = 22, r = 17;
-            double ex = cx + r * Math.Cos(rad);
-            double ey = cy + r * Math.Sin(rad);
-            int large = pct >= 0.5 ? 1 : 0;
+    if (confidence <= 0) { arc.Data = Geometry.Empty; return; }
 
-            arc.Data = Geometry.Parse(
-                $"M {cx},{cy - r} A {r},{r},0,{large},1,{ex:F2},{ey:F2}");
-        }
+    double pct = Math.Min(confidence / 100.0, 0.9999);
+    double angle = pct * 360.0 - 90.0;
+    double rad = angle * Math.PI / 180.0;
+    double cx = 22, cy = 22, r = 17;
+    double ex = cx + r * Math.Cos(rad);
+    double ey = cy + r * Math.Sin(rad);
+    int large = pct >= 0.5 ? 1 : 0;
+
+    arc.Data = Geometry.Parse(
+        $"M {cx},{cy - r} A {r},{r},0,{large},1,{ex:F2},{ey:F2}");
+}
 
         // Call this wherever you populate the analysis fields, e.g.:
         // SetRingArc(fishPresentRingArc,  fishPresentConfidenceValue);   // 0–100
@@ -2957,7 +2940,6 @@ namespace FishLens_App
         // **************************************************
         private void DisplayTrackInUi(FishLens_App.Models.Video vid)
         {
-            // Location fallback for no-fish rows (no-fish CSVs don't appear in run_master)
             string location = vid.Location;
             if (string.IsNullOrWhiteSpace(location))
             {
@@ -2971,17 +2953,20 @@ namespace FishLens_App
             videoName.Text = vid.Name;
             videoLocation.Text = string.IsNullOrWhiteSpace(location) ? "--" : location;
             videoDateTime.Text = $"Duration: {vid.StartTime}s - {vid.EndTime}s";
-            // likely_class can be "fish", a species name ("chinook"), "not_fish", or "no_fish".
-            // Anything other than not_fish/no_fish means a fish was detected.
+
             bool fishPresent = vid.LikelyClass != "not_fish" && vid.LikelyClass != "no_fish";
             fishPresentStatus.SelectedIndex = fishPresent ? 0 : 1;
             fishPresentConfidence.Text = $"{Math.Round(vid.AvgConfidence * 100)}%";
+            SetRingArc(fishPresentRingArc, fishPresentConfidence, vid.AvgConfidence * 100);
+
             string dirLower = (vid.Direction ?? string.Empty).ToLower().Trim();
             fishTravelDirection.SelectedIndex = dirLower == "upstream" ? 0 : dirLower == "downstream" ? 1 : 2;
-            fishSpecies.Text = CapitalizeFirstLetter(vid.Species);
-            fishSpeciesConfidence.Text = vid.SpeciesConfidence > 0 ? $"{vid.SpeciesConfidence * 100:F2}%" : "--";
 
-            // Refresh all track markers on the scrubber (opacity highlights the active one)
+            fishSpecies.Text = CapitalizeFirstLetter(vid.Species);
+            double speciesPct = vid.SpeciesConfidence * 100;
+            fishSpeciesConfidence.Text = vid.SpeciesConfidence > 0 ? $"{speciesPct:F2}%" : "--";
+            SetRingArc(fishSpeciesRingArc, fishSpeciesConfidence, speciesPct);
+
             UpdateFishMarkers();
         }
 
@@ -3116,13 +3101,11 @@ namespace FishLens_App
                 {
                     if (child is Grid g && g.Tag is string t && t == thisSectionKey)
                     {
-                        foreach (var elem in g.Children)
-                        {
-                            if (elem is CheckBox cb)
-                            {
-                                cb.IsChecked = true;
-                            }
-                        }
+                        var btn = g.Children.OfType<Button>().FirstOrDefault();
+                        var innerGrid = btn?.Content as Grid;
+                        var cb = innerGrid?.Children.OfType<CheckBox>()
+                                                    .FirstOrDefault(c => c.Tag as string == "selectionCheck");
+                        if (cb != null) cb.IsChecked = true;
                     }
                 }
                 UpdateActionButtonState();
@@ -3134,13 +3117,11 @@ namespace FishLens_App
                 {
                     if (child is Grid g && g.Tag is string t && t == thisSectionKey)
                     {
-                        foreach (var elem in g.Children)
-                        {
-                            if (elem is CheckBox cb)
-                            {
-                                cb.IsChecked = false;
-                            }
-                        }
+                        var btn = g.Children.OfType<Button>().FirstOrDefault();
+                        var innerGrid = btn?.Content as Grid;
+                        var cb = innerGrid?.Children.OfType<CheckBox>()
+                                                    .FirstOrDefault(c => c.Tag as string == "selectionCheck");
+                        if (cb != null) cb.IsChecked = false;
                     }
                 }
                 UpdateActionButtonState();
