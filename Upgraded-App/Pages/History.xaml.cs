@@ -44,6 +44,7 @@ namespace FishLens_App
         private string _currentReportStyle = "Standard Report";
         private Dictionary<string, string[]> _lastGroupedLinesByRun = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         private bool _isUpdatingConfidenceControls;
+        private bool _isHistoryLoaded;
 
         // Frozen brush cache avoids creating new SolidColorBrush objects on every report render.
         private static readonly Dictionary<string, SolidColorBrush> _brushCache = new();
@@ -86,9 +87,12 @@ namespace FishLens_App
                 App.AnalysisStateChanged += OnAnalysisStateChanged;
                 // Apply immediately in case analysis was already running when user navigated here
                 ApplyAnalysisLock(App.IsAnalyzing);
+                _isHistoryLoaded = true;
+                GenerateReportClick(this, new RoutedEventArgs());
             };
             Unloaded += (s, e) =>
             {
+                _isHistoryLoaded = false;
                 App.LocationChanged -= OnLocationChanged;
                 App.RunChanged -= OnRunChanged;
                 App.AnalysisStateChanged -= OnAnalysisStateChanged;
@@ -103,8 +107,10 @@ namespace FishLens_App
 
         private void ApplyAnalysisLock(bool isAnalyzing)
         {
-            generateReportButton.IsEnabled = !isAnalyzing;
-            historyAnalysisBanner.Visibility = isAnalyzing ? Visibility.Visible : Visibility.Collapsed;
+            if (generateReportButton != null)
+                generateReportButton.IsEnabled = !isAnalyzing;
+            if (historyAnalysisBanner != null)
+                historyAnalysisBanner.Visibility = isAnalyzing ? Visibility.Visible : Visibility.Collapsed;
         }
 
         #endregion
@@ -134,7 +140,7 @@ namespace FishLens_App
 
                 if (dataLines.Length == 0)
                 {
-                    ShowNoDataMessage();
+                    ShowBlankReportState();
                     return;
                 }
 
@@ -143,7 +149,7 @@ namespace FishLens_App
 
                 if (filteredLines.Length == 0)
                 {
-                    ShowNoMatchingDataMessage();
+                    ShowBlankReportState();
                     return;
                 }
 
@@ -266,15 +272,11 @@ namespace FishLens_App
 
         // **************************************************
         // Function: ApplyFiltersClick
-        // Description: Saves current UI filter selections. If a report is already displayed,
-        //              regenerates it immediately with the new filters. If no report exists yet,
-        //              only saves the filters; the user must click Generate Report.
+        // Description: Saves current UI filter selections and regenerates the report.
         public void ApplyFiltersClick(object sender, RoutedEventArgs e)
         {
             UpdateFiltersFromUI();
-
-            if (!string.IsNullOrEmpty(_currentReportText))
-                GenerateReportClick(sender, e);
+            GenerateReportClick(sender, e);
         }
 
         // **************************************************
@@ -307,6 +309,7 @@ namespace FishLens_App
         public void ClearFiltersClick(object sender, RoutedEventArgs e)
         {
             ResetFiltersToDefaults();
+            GenerateReportClick(sender, e);
         }
 
         // **************************************************
@@ -340,6 +343,9 @@ namespace FishLens_App
         {
             if (reportTypeCombo?.SelectedItem is ComboBoxItem item)
                 _currentReportStyle = item.Content?.ToString() ?? "Standard Report";
+
+            if (_isHistoryLoaded)
+                GenerateReportClick(sender, new RoutedEventArgs());
         }
 
         // **************************************************
@@ -876,67 +882,63 @@ namespace FishLens_App
                 "Current Session"  => "CurrentSession",
                 _                  => selectedRun
             };
-            ConstrainDatePickersForRun(selectedRun);
+            ConstrainDatePickersForRun(_filterRun);
+
+            if (_isHistoryLoaded)
+                GenerateReportClick(sender, new RoutedEventArgs());
         }
 
         // **************************************************
         // Function: ConstrainDatePickersForRun
         // Description: Reads the CSV for a run to find min/max dates and sets picker bounds
-        private void ConstrainDatePickersForRun(string runName)
+        private void ConstrainDatePickersForRun(string filterRun)
         {
-            // Both pickers selectable up to today; the right (To) calendar should open at today.
-            if (endDatePicker != null)
-            {
-                endDatePicker.DisplayDateEnd = DateTime.Today;
-                endDatePicker.DisplayDate    = DateTime.Today;
-            }
-
-            if (string.IsNullOrWhiteSpace(runName) || runName == "All History") return;
-
-            // Resolve the CSV to scan for min/max dates.
-            string csvPath;
-            if (runName == "Current Session")
-            {
-                string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
-                csvPath = string.IsNullOrWhiteSpace(activeRun)
-                    ? string.Empty
-                    : _pathResolver.ResolveSessionCsvPath(activeRun);
-            }
-            else
-            {
-                csvPath = _pathResolver.ResolveRunCsvPath(runName);
-            }
-
             try
             {
-                if (!File.Exists(csvPath)) return;
-
                 DateTime? minDate = null;
+                DateTime? maxDate = null;
 
-                foreach (string line in File.ReadLines(csvPath).Skip(1))
+                foreach (string line in ReadAllDataLines(filterRun))
                 {
                     var cols = line.Split(',');
                     if (cols.Length > 9 && DateTime.TryParse(cols[9].Trim(), out DateTime ts))
                     {
                         if (!minDate.HasValue || ts < minDate.Value) minDate = ts;
+                        if (!maxDate.HasValue || ts > maxDate.Value) maxDate = ts;
                     }
                 }
 
-                if (minDate.HasValue && startDatePicker != null)
-                {
-                    startDatePicker.DisplayDateStart = minDate.Value.Date;
-                    startDatePicker.DisplayDateEnd   = DateTime.Today;
-                    startDatePicker.DisplayDate      = minDate.Value.Date;
-                }
-                if (endDatePicker != null)
-                {
-                    if (minDate.HasValue)
-                        endDatePicker.DisplayDateStart = minDate.Value.Date;
-                    endDatePicker.DisplayDateEnd = DateTime.Today;
-                    endDatePicker.DisplayDate    = DateTime.Today;
-                }
+                ApplyDatePickerBounds(minDate?.Date, maxDate?.Date);
             }
             catch { /* non-critical */ }
+        }
+
+        private void ApplyDatePickerBounds(DateTime? minDate, DateTime? maxDate)
+        {
+            DateTime start = minDate ?? DateTime.Today;
+            DateTime end = maxDate ?? start;
+            if (end < start)
+                end = start;
+
+            if (startDatePicker != null)
+            {
+                startDatePicker.DisplayDateStart = start;
+                startDatePicker.DisplayDateEnd = end;
+                startDatePicker.DisplayDate = start;
+                if (startDatePicker.SelectedDate.HasValue &&
+                    (startDatePicker.SelectedDate.Value.Date < start || startDatePicker.SelectedDate.Value.Date > end))
+                    startDatePicker.SelectedDate = null;
+            }
+
+            if (endDatePicker != null)
+            {
+                endDatePicker.DisplayDateStart = start;
+                endDatePicker.DisplayDateEnd = end;
+                endDatePicker.DisplayDate = end;
+                if (endDatePicker.SelectedDate.HasValue &&
+                    (endDatePicker.SelectedDate.Value.Date < start || endDatePicker.SelectedDate.Value.Date > end))
+                    endDatePicker.SelectedDate = null;
+            }
         }
 
         // **************************************************
@@ -1831,6 +1833,21 @@ namespace FishLens_App
         private void ClearPreviousReport()
         {
             reportPanel.Children.Clear();
+        }
+
+        private void ShowBlankReportState()
+        {
+            _lastFilteredLines = Array.Empty<string>();
+            _lastGroupedLinesByRun.Clear();
+            _lastStats = null;
+            _currentReportText = null;
+
+            ClearPreviousReport();
+            reportScrollViewer.Visibility = Visibility.Collapsed;
+            reportControls.Visibility = Visibility.Collapsed;
+            videoPlayer.Visibility = Visibility.Collapsed;
+            placeholderPanel.Visibility = Visibility.Visible;
+            viewTitle.Text = "Analysis Report";
         }
 
         #endregion

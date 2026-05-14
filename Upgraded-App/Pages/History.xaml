@@ -8,7 +8,6 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0" 
@@ -295,7 +294,7 @@
                                 FontWeight="SemiBold"
                                 Padding="0,10"
                                 Cursor="Hand"
-                                Margin="0,0,0,25">
+                                Margin="0,0,0,10">
                             <Button.Style>
                                 <Style TargetType="Button">
                                     <Setter Property="Template">
@@ -320,6 +319,58 @@
                                 </Style>
                             </Button.Style>
                         </Button>
+
+                        <Button x:Name="generateReportButton"
+                                Content="Generate Report" 
+                                Click="GenerateReportClick"
+                                Visibility="Collapsed"
+                                Background="{DynamicResource PrimaryColorBrush}"
+                                Foreground="White"
+                                FontSize="{DynamicResource BaseFontSize}"
+                                FontWeight="SemiBold"
+                                Padding="0,10"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                Margin="0,0,0,12">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}"
+                                                        CornerRadius="6"
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+
+                        <Border x:Name="historyAnalysisBanner"
+                                Background="#FFF3E0"
+                                BorderBrush="#FF9800"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12,8"
+                                Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#x26A0;" FontSize="14" Foreground="#E65100" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Analysis in progress - report data may be incomplete."
+                                           FontSize="12"
+                                           Foreground="#E65100"
+                                           VerticalAlignment="Center"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </Border>
@@ -386,7 +437,7 @@
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    HorizontalAlignment="Center"
                                    Margin="0,20,0,0"/>
-                        <TextBlock Text="Configure your filters and click the button below" 
+                        <TextBlock Text="Configure your filters or choose a report type" 
                                    FontSize="{DynamicResource BaseFontSize}"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    HorizontalAlignment="Center"
@@ -490,8 +541,7 @@
                 </Grid>
             </Border>
         </Grid>
-
-        <Border Grid.Row="2" 
+        <Border Grid.Row="1" Visibility="Collapsed"
                 Background="{DynamicResource SecondaryBackgroundBrush}" 
                 BorderBrush="{DynamicResource BorderColorBrush}" 
                 BorderThickness="0,1,0,0"
@@ -499,7 +549,7 @@
             <Grid>
                 <StackPanel Orientation="Horizontal" 
                             HorizontalAlignment="Right">
-                    <Button x:Name="generateReportButton"
+                    <Button
                             Content="Generate Report" 
                             Click="GenerateReportClick"
                             Background="{DynamicResource PrimaryColorBrush}"
@@ -534,7 +584,7 @@
                 </StackPanel>
 
                 <!-- Shown while analysis is running -->
-                <Border x:Name="historyAnalysisBanner"
+                <Border
                         Background="#FFF3E0"
                         BorderBrush="#FF9800"
                         BorderThickness="1"
