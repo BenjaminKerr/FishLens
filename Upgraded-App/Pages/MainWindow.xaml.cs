@@ -67,6 +67,9 @@ namespace FishLens_App
         private readonly CheckBoxToggle _checkBoxes;
         // Stack of deletion batches for undo support
         private readonly Stack<DeletionBatch> _deletionHistory = new Stack<DeletionBatch>();
+        private static readonly Color COLOR_HIGH = Color.FromRgb(0x5D, 0xCA, 0xA5);
+        private static readonly Color COLOR_MID = Color.FromRgb(0xEF, 0x9F, 0x27);
+        private static readonly Color COLOR_LOW = Color.FromRgb(0xE2, 0x4B, 0x4A);
 
         // Persistent Python process - models stay loaded between runs
         private Process _yoloProcess;
@@ -90,6 +93,9 @@ namespace FishLens_App
         private int _suppressTimerTicks = 0;
         private string _playbackTempPath = null; // temp MP4 created from ASF for accurate scrubbing
         private bool _processingComplete = false;
+
+        // Sidebar state
+        private bool _sidebarCollapsed = false;
 
         // Multi-track state - all tracks for the currently displayed video
         private List<FishLens_App.Models.Video> _currentTracks = new List<FishLens_App.Models.Video>();
@@ -143,8 +149,9 @@ namespace FishLens_App
             Loaded += MainWindow_Loaded;
             Closed += MainWindow_Closed;
 
-           AccountSettingsButton.Visibility = app.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
-        
+            AccountSettingsButton.Visibility = app.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
+            if (!app.IsAdmin)
+                ButtonGrid.ColumnDefinitions[3].Width = new GridLength(0);
         }
 
         // **************************************************
@@ -361,16 +368,8 @@ namespace FishLens_App
         // **************************************************
         private void SettingsButtonClick(object sender, RoutedEventArgs e)
         {
-            if (IsCurrentPageSettings())
-            {
-                //if (CheckForUnsavedChanges())
-                    NavigateToPage(new Settings(_pathResolver, _fileSystemManager, _logger), "Settings");
-            }
-            else
-            {
-                CollapseSidebar();
-                NavigateToPage(new Settings(_pathResolver, _fileSystemManager, _logger), "Settings");
-            }
+            CollapseSidebar();
+            NavigateToPage(new Settings(_pathResolver, _fileSystemManager, _logger), "Settings");
         }
 
         private void AccountSettingsButtonClick(object sender, RoutedEventArgs e)
@@ -2410,6 +2409,9 @@ namespace FishLens_App
 
         private void ExpandSidebar()
         {
+            _sidebarCollapsed = false;
+            // Kill any in-progress animation first
+            SidebarColumn.BeginAnimation(ColumnDefinition.WidthProperty, null);
             SideBar.RenderTransform = Transform.Identity;
 
             // Fade in videoLibraryTitle
@@ -2425,11 +2427,11 @@ namespace FishLens_App
             };
             videoLibraryTitle.BeginAnimation(UIElement.OpacityProperty, titleFadeIn);
 
+            SidebarDivider.Visibility = Visibility.Visible;
             videoList.Visibility = Visibility.Visible;
             deleteSelectedVideos.Visibility = Visibility.Visible;
             changeLocationForSelected.Visibility = Visibility.Visible;
             undoLastDelete.Visibility = Visibility.Visible;
-            sidebarSeperator.Visibility = Visibility.Visible;
 
             if (App.IsAnalyzing)
                 analysisProgressArea.Visibility = Visibility.Visible;
@@ -2460,51 +2462,63 @@ namespace FishLens_App
 
         private void CollapseSidebar()
         {
-            // Fade out videoLibraryTitle before/during collapse
-            var titleFadeOut = new DoubleAnimation
+            if (!_sidebarCollapsed)
             {
-                From = 1,
-                To = 0,
-                Duration = TimeSpan.FromMilliseconds(100),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
-            };
-            titleFadeOut.Completed += (s, e) => videoLibraryTitle.Visibility = Visibility.Collapsed;
-            videoLibraryTitle.BeginAnimation(UIElement.OpacityProperty, titleFadeOut);
+                _sidebarCollapsed = true;
+                // Fade out videoLibraryTitle before/during collapse
+                var titleFadeOut = new DoubleAnimation
+                {
+                    From = 1,
+                    To = 0,
+                    Duration = TimeSpan.FromMilliseconds(100),
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+                };
+                titleFadeOut.Completed += (s, e) => videoLibraryTitle.Visibility = Visibility.Collapsed;
+                videoLibraryTitle.BeginAnimation(UIElement.OpacityProperty, titleFadeOut);
 
-            var collapseAnim = new GridLengthAnimation
-            {
-                From = new GridLength(SidebarColumn.ActualWidth),
-                To = new GridLength(106),
-                Duration = TimeSpan.FromMilliseconds(250),
-                EasingMode = EasingMode.EaseInOut,
-                FillBehavior = FillBehavior.Stop
-            };
+                // Kill any in-progress animation first
+                SidebarColumn.BeginAnimation(ColumnDefinition.WidthProperty, null);
 
-            collapseAnim.Completed += (s, e) =>
-            {
-                SidebarColumn.Width = new GridLength(106);
+                var collapseAnim = new GridLengthAnimation
+                {
+                    From = new GridLength(SidebarColumn.ActualWidth),
+                    To = new GridLength(106),
+                    Duration = TimeSpan.FromMilliseconds(250),
+                    EasingMode = EasingMode.EaseInOut,
+                    FillBehavior = FillBehavior.HoldEnd   // hold until we set the hard value
+                };
 
-                videoList.Visibility = Visibility.Collapsed;
-                deleteSelectedVideos.Visibility = Visibility.Collapsed;
-                changeLocationForSelected.Visibility = Visibility.Collapsed;
-                undoLastDelete.Visibility = Visibility.Collapsed;
-                sidebarSeperator.Visibility = Visibility.Collapsed;
-                analysisProgressArea.Visibility = Visibility.Collapsed;
+                collapseAnim.Completed += (s, e) =>
+                {
+                    // Remove animation and set hard value in one step
+                    SidebarColumn.BeginAnimation(ColumnDefinition.WidthProperty, null);
+                    SidebarColumn.Width = new GridLength(106);
 
-                ButtonGrid.RowDefinitions.Clear();
-                ButtonGrid.ColumnDefinitions.Clear();
-                ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                    videoList.Visibility = Visibility.Collapsed;
+                    deleteSelectedVideos.Visibility = Visibility.Collapsed;
+                    changeLocationForSelected.Visibility = Visibility.Collapsed;
+                    undoLastDelete.Visibility = Visibility.Collapsed;
+                    analysisProgressArea.Visibility = Visibility.Collapsed;
+                    SidebarDivider.Visibility = Visibility.Collapsed;
 
-                Grid.SetRow(Home, 0); Grid.SetColumn(Home, 0);
-                Grid.SetRow(History, 1); Grid.SetColumn(History, 0);
-                Grid.SetRow(Settings, 2); Grid.SetColumn(Settings, 0);
-                Grid.SetRow(AccountSettingsButton, 3); Grid.SetColumn(AccountSettingsButton, 0);
-            };
+                    ButtonGrid.HorizontalAlignment = HorizontalAlignment.Center;
+                    ButtonGrid.Width = double.NaN;
 
-            SidebarColumn.BeginAnimation(ColumnDefinition.WidthProperty, collapseAnim);
+                    ButtonGrid.RowDefinitions.Clear();
+                    ButtonGrid.ColumnDefinitions.Clear();
+                    ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                    ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                    ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                    ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+                    Grid.SetRow(Home, 0); Grid.SetColumn(Home, 0);
+                    Grid.SetRow(History, 1); Grid.SetColumn(History, 0);
+                    Grid.SetRow(Settings, 2); Grid.SetColumn(Settings, 0);
+                    Grid.SetRow(AccountSettingsButton, 3); Grid.SetColumn(AccountSettingsButton, 0);
+                };
+
+                SidebarColumn.BeginAnimation(ColumnDefinition.WidthProperty, collapseAnim);
+            }
         }
 
         /// <summary>
@@ -2961,7 +2975,7 @@ namespace FishLens_App
             // Anything other than not_fish/no_fish means a fish was detected.
             bool fishPresent = vid.LikelyClass != "not_fish" && vid.LikelyClass != "no_fish";
             fishPresentStatus.SelectedIndex = fishPresent ? 0 : 1;
-            fishPresentConfidence.Text = $"{vid.AvgConfidence * 100:F2}%";
+            fishPresentConfidence.Text = $"{Math.Round(vid.AvgConfidence * 100)}%";
             string dirLower = (vid.Direction ?? string.Empty).ToLower().Trim();
             fishTravelDirection.SelectedIndex = dirLower == "upstream" ? 0 : dirLower == "downstream" ? 1 : 2;
             fishSpecies.Text = CapitalizeFirstLetter(vid.Species);
@@ -3144,10 +3158,6 @@ namespace FishLens_App
             videoList.Children.Add(separator);
         }
 
-        // **************************************************
-        // Function: CreateVideoButtons
-        // Description: Creates individual video buttons with checkboxes
-        // **************************************************
         private void CreateVideoButtons(List<(FileInfo videoFile, FishLens_App.Models.Video videoData)> videoDataList, LibrarySectionContext sectionContext)
         {
             foreach (var (videoFile, videoData) in videoDataList)
@@ -3157,56 +3167,148 @@ namespace FishLens_App
                 grid.DataContext = sectionContext;
                 grid.HorizontalAlignment = HorizontalAlignment.Stretch;
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-                // Video button
                 Button button = CreateSingleVideoButton(videoFile, videoData);
                 button.Click += VideoButtonClick;
+
+                var internalCheckBox = button.Content is Grid g
+                    ? g.Children.OfType<CheckBox>().FirstOrDefault(c => c.Tag as string == "selectionCheck")
+                    : null;
+
+                if (internalCheckBox != null)
+                {
+                    button.MouseEnter += (s, e) => internalCheckBox.Opacity = 1;
+                    button.MouseLeave += (s, e) => { if (internalCheckBox.IsChecked != true) internalCheckBox.Opacity = 0; };
+                    internalCheckBox.Checked += (s, e) => { internalCheckBox.Opacity = 1; UpdateActionButtonState(); };
+                    internalCheckBox.Unchecked += (s, e) => { internalCheckBox.Opacity = 0; UpdateActionButtonState(); };
+                }
+
                 Grid.SetColumn(button, 0);
-
-                // Video deletion checkbox
-                CheckBox checkBox = new CheckBox();
-                checkBox.Padding = new Thickness(5);
-                checkBox.VerticalAlignment = VerticalAlignment.Center;
-                checkBox.Checked += (s, e) => UpdateActionButtonState();
-                checkBox.Unchecked += (s, e) => UpdateActionButtonState();
-                Grid.SetColumn(checkBox, 1);
-
                 grid.Children.Add(button);
-                grid.Children.Add(checkBox);
                 videoList.Children.Add(grid);
             }
         }
 
-        // **************************************************
-        // Function: CreateSingleVideoButton
-        // Description: Creates styled button for a single video
-        // Notes: Helper function for CreateVideoButtonsList
-        // **************************************************
         private Button CreateSingleVideoButton(FileInfo videoFile, FishLens_App.Models.Video videoData)
         {
-            bool isLowConfidence = IsLowConfidence(videoData.AvgConfidence);
-            if (string.IsNullOrWhiteSpace(videoData.VideoFilePath))
-                videoData.VideoFilePath = videoFile.FullName;
-            if (string.IsNullOrWhiteSpace(videoData.Run))
-                videoData.Run = (Application.Current as App)?.ActiveRun ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(videoData.Name))
-                videoData.Name = videoFile.Name;
+            if (string.IsNullOrWhiteSpace(videoData.VideoFilePath)) videoData.VideoFilePath = videoFile.FullName;
+            if (string.IsNullOrWhiteSpace(videoData.Run)) videoData.Run = (Application.Current as App)?.ActiveRun ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(videoData.Name)) videoData.Name = videoFile.Name;
+
+            var tierColor = GetTierColor(videoData.AvgConfidence);
+            bool isLow = tierColor == COLOR_LOW;
+            var tierBrush = new SolidColorBrush(tierColor);
+
+            // ── Column layout: stripe(3) | gap(8) | text(*) | pct(Auto) | checkbox(Auto) | gap(6) ──
+            var grid = new Grid { Margin = new Thickness(0) };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
+
+            // ── Col 0: left stripe ──
+            var stripe = new Border
+            {
+                Tag = "stripe",
+                Background = tierBrush,
+                CornerRadius = new CornerRadius(0),
+                VerticalAlignment = VerticalAlignment.Stretch,
+            };
+            Grid.SetColumn(stripe, 0);
+            grid.Children.Add(stripe);
+
+            // ── Col 2: filename + meta ──
+            string dirText = (videoData.Direction ?? string.Empty).ToLower() switch
+            {
+                "upstream" => "Upstream",
+                "downstream" => "Downstream",
+                _ => "Indecisive",
+            };
+            bool fishPresent = videoData.LikelyClass != "not_fish" && videoData.LikelyClass != "no_fish";
+            string metaText = fishPresent
+                ? $"{dirText} · {CapitalizeFirstLetter(videoData.Species ?? string.Empty)}"
+                : "Not Present";
+
+            var textStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            textStack.Children.Add(new TextBlock
+            {
+                Text = videoFile.Name,
+                FontSize = 12.5,
+                FontWeight = FontWeights.Medium,
+                Foreground = (Brush)Application.Current.Resources["OnAccentForeground"],
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            });
+            textStack.Children.Add(new TextBlock
+            {
+                Text = metaText,
+                FontSize = 11,
+                Foreground = new SolidColorBrush(Color.FromArgb(180, 255, 255, 255)),
+                Margin = new Thickness(0, 1, 0, 0),
+            });
+            Grid.SetColumn(textStack, 2);
+            grid.Children.Add(textStack);
+
+            // ── Col 3: confidence % ──
+            var pctBlock = new TextBlock
+            {
+                Tag = "pct",
+                Text = $"{videoData.AvgConfidence * 100:0}%",
+                FontSize = 11,
+                FontWeight = FontWeights.Medium,
+                Foreground = tierBrush,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(8, 0, 8, 0),
+            };
+            Grid.SetColumn(pctBlock, 3);
+            grid.Children.Add(pctBlock);
+
+            // ── Col 4: selection checkbox (hidden until hover or checked) ──
+            var checkBox = new CheckBox
+            {
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 6, 0),
+                Opacity = 0,
+                Tag = "selectionCheck",
+            };
+            Grid.SetColumn(checkBox, 4);
+            grid.Children.Add(checkBox);
+
+            // ── Button shell ──
+            var borderFactory = new FrameworkElementFactory(typeof(Border));
+            borderFactory.Name = "bd";
+            borderFactory.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
+            borderFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(BUTTON_CORNER_RADIUS));
+            borderFactory.SetValue(Border.ClipToBoundsProperty, true);
+            var cp = new FrameworkElementFactory(typeof(ContentPresenter));
+            cp.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Stretch);
+            borderFactory.AppendChild(cp);
+
+            var hoverTrigger = new Trigger { Property = Button.IsMouseOverProperty, Value = true };
+            hoverTrigger.Setters.Add(new Setter(Button.BackgroundProperty,
+                new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)), "bd"));
+
+            var template = new ControlTemplate(typeof(Button));
+            template.VisualTree = borderFactory;
+            template.Triggers.Add(hoverTrigger);
 
             return new Button
             {
-                Content = videoFile.Name,
-                Margin = new Thickness(BUTTON_MARGIN),
-                Padding = new Thickness(BUTTON_PADDING_HORIZONTAL, BUTTON_PADDING_VERTICAL,
-                    BUTTON_PADDING_HORIZONTAL, BUTTON_PADDING_VERTICAL),
+                Content = grid,
                 Height = BUTTON_HEIGHT,
                 Tag = videoFile.FullName,
                 DataContext = videoData,
-                HorizontalContentAlignment = HorizontalAlignment.Left,
-                FontSize = BUTTON_FONT_SIZE,
+                Background = isLow
+                    ? new SolidColorBrush(Color.FromArgb(30, 0xE2, 0x4B, 0x4A))
+                    : Brushes.Transparent,
                 BorderThickness = new Thickness(0),
                 Cursor = Cursors.Hand,
-                Style = CreateButtonStyle(isLowConfidence)
+                Margin = new Thickness(BUTTON_MARGIN),
+                Padding = new Thickness(0),
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                VerticalContentAlignment = VerticalAlignment.Stretch,
+                Template = template,
             };
         }
 
@@ -3226,13 +3328,29 @@ namespace FishLens_App
         {
             foreach (var child in videoList.Children)
             {
-                if (child is not Grid rowGrid)
-                    continue;
-
+                if (child is not Grid rowGrid) continue;
                 foreach (var button in rowGrid.Children.OfType<Button>())
                 {
-                    if (button.DataContext is FishLens_App.Models.Video video)
-                        button.Style = CreateButtonStyle(IsLowConfidence(video.AvgConfidence));
+                    if (button.DataContext is not FishLens_App.Models.Video video) continue;
+                    var tierColor = GetTierColor(video.AvgConfidence);
+                    var tierBrush = new SolidColorBrush(tierColor);
+                    bool isLow = tierColor == COLOR_LOW;
+
+                    if (button.Content is Grid g)
+                    {
+                        foreach (UIElement el in g.Children)
+                        {
+                            if (el is Border b && "stripe".Equals(b.Tag))
+                                b.Background = tierBrush;
+                            if (el is System.Windows.Shapes.Ellipse e && "dot".Equals(e.Tag))
+                                e.Fill = tierBrush;
+                            if (el is TextBlock tb && "pct".Equals(tb.Tag))
+                                tb.Foreground = tierBrush;
+                        }
+                    }
+                    button.Background = isLow
+                        ? new SolidColorBrush(Color.FromArgb(30, 0xE2, 0x4B, 0x4A))
+                        : Brushes.Transparent;
                 }
             }
         }
@@ -3241,140 +3359,20 @@ namespace FishLens_App
 
         #region Button Styling
 
-        // **************************************************
-        // Function: CreateButtonStyle
-        // Description: Creates styled button with hover effects and appropriate colors
-        // **************************************************
+        private Color GetTierColor(double confidence)
+        {
+            double threshold = (Application.Current as App)?.Configuration?.ConfidenceThreshold
+                ?? _config?.ConfidenceThreshold
+                ?? DEFAULT_CONFIDENCE_THRESHOLD;
+            if (confidence >= threshold) return COLOR_HIGH;
+            if (confidence >= threshold * 0.6) return COLOR_MID;
+            return COLOR_LOW;
+        }
+
         private Style CreateButtonStyle(bool isLowConfidence)
         {
-            var style = new Style(typeof(Button));
-
-            SetButtonDefaultAppearance(style, isLowConfidence);
-
-            var template = CreateButtonControlTemplate(isLowConfidence);
-            style.Setters.Add(new Setter(Button.TemplateProperty, template));
-
-            return style;
-        }
-
-        // **************************************************
-        // Function: SetButtonDefaultAppearance
-        // Description: Sets default colors and properties for button
-        // **************************************************
-        private void SetButtonDefaultAppearance(Style style, bool isLowConfidence)
-        {
-            style.Setters.Add(new Setter(Button.BackgroundProperty,
-                isLowConfidence
-                    ? new SolidColorBrush(Color.FromRgb(254, 242, 242))
-                    : new SolidColorBrush(Color.FromRgb(249, 250, 251))));
-
-            style.Setters.Add(new Setter(Button.ForegroundProperty,
-                isLowConfidence
-                    ? new SolidColorBrush(Color.FromRgb(185, 28, 28))
-                    : new SolidColorBrush(Color.FromRgb(55, 65, 81))));
-
-            style.Setters.Add(new Setter(Button.BorderBrushProperty,
-                new SolidColorBrush(Color.FromRgb(229, 231, 235))));
-        }
-
-        // **************************************************
-        // Function: CreateButtonControlTemplate
-        // Description: Creates control template with rounded corners and triggers
-        // **************************************************
-        private ControlTemplate CreateButtonControlTemplate(bool isLowConfidence)
-        {
-            var template = new ControlTemplate(typeof(Button));
-
-            var border = CreateButtonBorder();
-            template.VisualTree = border;
-
-            AddButtonTriggers(template, isLowConfidence);
-
-            return template;
-        }
-
-        // **************************************************
-        // Function: CreateButtonBorder
-        // Description: Creates border element for button template
-        // **************************************************
-        private FrameworkElementFactory CreateButtonBorder()
-        {
-            var border = new FrameworkElementFactory(typeof(Border));
-            border.Name = "border";
-            border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
-            border.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
-            border.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
-            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(BUTTON_CORNER_RADIUS));
-
-            var contentPresenter = CreateContentPresenter();
-            border.AppendChild(contentPresenter);
-
-            return border;
-        }
-
-        // **************************************************
-        // Function: CreateContentPresenter
-        // Description: Creates content presenter for button template
-        // **************************************************
-        private FrameworkElementFactory CreateContentPresenter()
-        {
-            var contentPresenter = new FrameworkElementFactory(typeof(ContentPresenter));
-            contentPresenter.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Left);
-            contentPresenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
-            contentPresenter.SetValue(ContentPresenter.MarginProperty,
-                new Thickness(CONTENT_PRESENTER_MARGIN, 0, CONTENT_PRESENTER_MARGIN, 0));
-
-            return contentPresenter;
-        }
-
-        // **************************************************
-        // Function: AddButtonTriggers
-        // Description: Adds hover and pressed triggers to button template
-        // **************************************************
-        private void AddButtonTriggers(ControlTemplate template, bool isLowConfidence)
-        {
-            var hoverTrigger = CreateHoverTrigger(isLowConfidence);
-            template.Triggers.Add(hoverTrigger);
-
-            var pressedTrigger = CreatePressedTrigger(isLowConfidence);
-            template.Triggers.Add(pressedTrigger);
-        }
-
-        // **************************************************
-        // Function: CreateHoverTrigger
-        // Description: Creates mouse-over trigger for button
-        // **************************************************
-        private Trigger CreateHoverTrigger(bool isLowConfidence)
-        {
-            var trigger = new Trigger { Property = Button.IsMouseOverProperty, Value = true };
-
-            trigger.Setters.Add(new Setter(Button.BackgroundProperty,
-                isLowConfidence
-                    ? new SolidColorBrush(Color.FromRgb(239, 68, 68))
-                    : new SolidColorBrush(Color.FromRgb(243, 244, 246)), "border"));
-
-            trigger.Setters.Add(new Setter(Button.ForegroundProperty,
-                isLowConfidence
-                    ? new SolidColorBrush(Colors.White)
-                    : new SolidColorBrush(Color.FromRgb(17, 24, 39))));
-
-            return trigger;
-        }
-
-        // **************************************************
-        // Function: CreatePressedTrigger
-        // Description: Creates button pressed trigger
-        // **************************************************
-        private Trigger CreatePressedTrigger(bool isLowConfidence)
-        {
-            var trigger = new Trigger { Property = Button.IsPressedProperty, Value = true };
-
-            trigger.Setters.Add(new Setter(Button.BackgroundProperty,
-                isLowConfidence
-                    ? new SolidColorBrush(Color.FromRgb(220, 38, 38))
-                    : new SolidColorBrush(Color.FromRgb(229, 231, 235)), "border"));
-
-            return trigger;
+            // No longer used — styling is built directly into CreateSingleVideoButton
+            return new Style(typeof(Button));
         }
 
         #endregion

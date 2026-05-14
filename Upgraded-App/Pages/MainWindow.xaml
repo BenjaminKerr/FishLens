@@ -150,51 +150,62 @@
 
                         <!-- ── Account Settings ── -->
                         <Button x:Name="AccountSettingsButton"
-            Grid.Column="3"
-            Style="{StaticResource NavButton}"
-            Click="AccountSettingsButtonClick"
-            Visibility="Collapsed"
-            ToolTip="Account Settings">
-                            <Viewbox Width="20" Height="20">
-                                <!-- Lucide "circle-user": circle + head + shoulders arc -->
-                                <Canvas Width="24" Height="24">
-                                    <Ellipse Canvas.Left="2" Canvas.Top="2" Width="20" Height="20"
-                         Stroke="{DynamicResource OnAccentForeground}"
-                         StrokeThickness="1.75"
-                         Fill="Transparent"/>
-                                    <!-- head -->
-                                    <Ellipse Canvas.Left="9" Canvas.Top="7" Width="6" Height="6"
-                         Stroke="{DynamicResource OnAccentForeground}"
-                         StrokeThickness="1.75"
-                         Fill="Transparent"/>
-                                    <!-- shoulders arc — clipped at circle edge -->
-                                    <Path Data="M6.17 18.57A6 6 0 0 1 12 15a6 6 0 0 1 5.83 3.57"
-                      Stroke="{DynamicResource OnAccentForeground}"
-                      StrokeThickness="1.75"
+        Grid.Column="3"
+        Style="{StaticResource NavButton}"
+        Click="AccountSettingsButtonClick"
+        Visibility="Collapsed"
+        ToolTip="Account Settings">
+                            <Viewbox Width="30" Height="30">
+                                <Canvas Width="30" Height="30">
+                                    <Ellipse Width="30" Height="30"
+                     Canvas.Left="0" Canvas.Top="0"
+                     Fill="{DynamicResource OnAccentForeground}"/>
+                                    <Canvas Width="18" Height="18"
+                    Canvas.Left="6" Canvas.Top="6">
+                                        <!-- head -->
+                                        <Ellipse Canvas.Left="5.5" Canvas.Top="4.5" Width="7" Height="7"
+         Stroke="{DynamicResource AccentBrush}"
+         StrokeThickness="1.4"
+         Fill="Transparent"/>
+                                        <!-- shoulders arc -->
+                                        <Path Data="M4.63 13.93A4.5 4.5 0 0 1 9 11.25a4.5 4.5 0 0 1 4.37 2.68"
+                      Stroke="{DynamicResource AccentBrush}"
+                      StrokeThickness="1.4"
                       StrokeStartLineCap="Round"
                       StrokeEndLineCap="Round"
                       Fill="Transparent"/>
+                                    </Canvas>
                                 </Canvas>
                             </Viewbox>
                         </Button>
                     </Grid>
 
-                    <!-- Divider -->
-                    <Rectangle x:Name="sidebarSeperator"
-                               Height="1"
-                               Fill="{DynamicResource SidebarBorder}"
-                               Margin="0,16,0,14"
-                               Opacity="0.6"/>
-
-                    <TextBlock x:Name="videoLibraryTitle"
-                               Text="Video Library"
-                                FontFamily="{DynamicResource DisplayFont}"
-                               FontSize="11"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource OnAccentForeground}"
-                               Opacity="0.55"
-                               HorizontalAlignment="Left"
-                               Margin="4,0,0,0"/>
+                    <!-- Divider with label -->
+                    <Grid x:Name="SidebarDivider" Margin="0,16,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Rectangle Grid.Column="0" Height="1"
+               Fill="{DynamicResource WhiteBrush}"
+               Opacity="0.55"
+               VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1"
+               x:Name="videoLibraryTitle"
+               Text="Video Library"
+               FontFamily="{DynamicResource DisplayFont}"
+               FontSize="11"
+               FontWeight="SemiBold"
+               Foreground="{DynamicResource OnAccentForeground}"
+               Opacity="0.55"
+               VerticalAlignment="Center"
+               Margin="8,0"/>
+                        <Rectangle Grid.Column="2" Height="1"
+               Fill="{DynamicResource WhiteBrush}"
+               Opacity="0.55"
+               VerticalAlignment="Center"/>
+                    </Grid>
                 </StackPanel>
 
                 <!-- Analysis progress -->
@@ -259,23 +270,38 @@
                 <!-- Action buttons -->
                 <StackPanel Grid.Row="3" Margin="12,0,12,20" Orientation="Vertical">
                     <Button x:Name="deleteSelectedVideos"
-                            Style="{StaticResource AccentActionButton}"
-                            Click="DeleteSelectedVideosClick"
-                            IsEnabled="False"
-                            Margin="0,0,0,6">
+        Style="{StaticResource AccentActionButton}"
+        Click="DeleteSelectedVideosClick"
+        IsEnabled="False"
+        Margin="0,0,0,6">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="8"/>
+                            </Style>
+                        </Button.Resources>
                         Delete Selected Videos
                     </Button>
                     <Button x:Name="changeLocationForSelected"
-                            Style="{StaticResource NeutralActionButton}"
-                            Click="ChangeLocationForSelectedClick"
-                            IsEnabled="False"
-                            Margin="0,0,0,6">
+        Style="{StaticResource NeutralActionButton}"
+        Click="ChangeLocationForSelectedClick"
+        IsEnabled="False"
+        Margin="0,0,0,6">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="8"/>
+                            </Style>
+                        </Button.Resources>
                         Change Location for Selected
                     </Button>
                     <Button x:Name="undoLastDelete"
-                            Style="{StaticResource NeutralActionButton}"
-                            Click="UndoLastDeleteClick"
-                            IsEnabled="False">
+        Style="{StaticResource NeutralActionButton}"
+        Click="UndoLastDeleteClick"
+        IsEnabled="False">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="8"/>
+                            </Style>
+                        </Button.Resources>
                         Undo Last Delete
                     </Button>
                 </StackPanel>
