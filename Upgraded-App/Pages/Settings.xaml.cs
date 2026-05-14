@@ -769,7 +769,7 @@ namespace FishLens_App
                 {
                     main.Dispatcher.Invoke(() =>
                     {
-                        ThemeHelper.ApplyHighContrastMode(_config.HighContrastMode);
+                        ThemeHelper.ThemeSwap(_config.HighContrastMode);
                         main.RefreshLibraryConfidenceStyles();
                     });
                 }

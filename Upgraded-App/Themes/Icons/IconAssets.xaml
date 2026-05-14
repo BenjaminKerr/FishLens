@@ -1,0 +1,31 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- FishLens Logo -->
+	<Viewbox x:Key="FishLensLogo" Stretch="Uniform">
+		<Canvas Width="60" Height="60">
+
+			<!-- LENS -->
+			<Ellipse Width="60"
+					 Height="60"
+					 Fill="#91A3B0"
+					 Stroke="#2D7A8F"
+					 StrokeThickness="3"/>
+
+			<!-- HANDLE (shifted down + right so it attaches properly) -->
+			<Path Data="M2.01274 0C1.34183 0.741534 0.670912 1.48307 0 2.22461C0.275453 2.62367 0.553392 3.01998 0.833816 3.41355C4.75975 8.92348 9.17272 13.8951 14.0727 18.3284C15.4727 19.5951 17.2305 20.4663 19.3462 20.942C19.8751 21.0609 20.4264 21.1551 21 21.2246C21.6709 20.4831 22.3418 19.7415 23.0127 19C22.8864 18.4362 22.7376 17.897 22.5666 17.3826C21.8822 15.325 20.84 13.6628 19.44 12.3962C14.54 7.96283 9.15299 4.06779 3.27892 0.711059C2.85935 0.471292 2.43729 0.234272 2.01274 0Z"
+				  Fill="#2D7A8F"
+				  RenderTransformOrigin="0.5,0.5">
+
+				<Path.RenderTransform>
+					<!-- THIS is the key fix -->
+					<TranslateTransform X="50" Y="50"/>
+				</Path.RenderTransform>
+
+			</Path>
+
+		</Canvas>
+	</Viewbox>
+
+</ResourceDictionary>

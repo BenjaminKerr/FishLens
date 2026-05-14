@@ -333,16 +333,6 @@ namespace FishLens_App
         }
 
         // **************************************************
-        // Function: ReportType_SelectionChanged
-        // Description: Stores the selected report style — report only rebuilds when the user
-        //              explicitly clicks Apply Filters or Generate Report.
-        public void ReportType_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (reportTypeCombo?.SelectedItem is ComboBoxItem item)
-                _currentReportStyle = item.Content?.ToString() ?? "Standard Report";
-        }
-
-        // **************************************************
         // Function: PrintReportClick
         // Description: Prints the current report via the system print dialog (includes Print to PDF)
         public void PrintReportClick(object sender, RoutedEventArgs e)
@@ -494,19 +484,6 @@ namespace FishLens_App
             // only actual detection events, not videos where nothing was seen.
             stats.TotalDetections -= stats.NoFishCount;
             stats.TotalVideoCount  = uniqueVideos.Count;
-
-            stats.AverageConfidence = CalculateAverageConfidence(totalConfidence, stats.TotalDetections);
-            stats.AverageCorrectness = correctnessCount > 0 ? totalCorrectness / correctnessCount : 0;
-
-            // Calculate fish per day
-            stats.FishPerDay = uniqueDates.Count > 0 ? (double)stats.FishCount / uniqueDates.Count : 0;
-
-            // Estimate upstream count (using direction ratio and total)
-            stats.EstimatedUpstreamCount = CalculateEstimatedUpstreamCount(stats);
-
-            // Placeholder for average length
-            stats.AverageLengthCm = 0; // To be implemented when length data is available
-
             return stats;
         }
 

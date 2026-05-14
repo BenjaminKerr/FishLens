@@ -309,8 +309,19 @@ namespace FishLens_App
         // **************************************************
         private void HomeButtonClick(object sender, RoutedEventArgs e)
         {
-            ExpandSidebar();
-            MainFrame.Visibility = Visibility.Collapsed;
+            if (IsCurrentPageSettings())
+            {
+                //if (CheckForUnsavedChanges())
+                //{
+                    ExpandSidebar();
+                    MainFrame.Visibility = Visibility.Collapsed;
+                //}
+            }
+            else
+            {
+                ExpandSidebar();
+                MainFrame.Visibility = Visibility.Collapsed;
+            }
         }
 
         // **************************************************
@@ -319,19 +330,34 @@ namespace FishLens_App
         // **************************************************
         private void SignOutButtonClick(object sender, RoutedEventArgs e)
         {
+            if (IsCurrentPageSettings() /*&& !CheckForUnsavedChanges()*/)
+                return;
+
             ((App)Application.Current).ResetSettingsToDefaults();
             AuthWindow signin = new AuthWindow();
             signin.Show();
             this.Close();
         }
+
         // **************************************************
         // Function: HistoryButtonClick
         // Description: Navigates to the history page
         // **************************************************
         private void HistoryButtonClick(object sender, RoutedEventArgs e)
         {
-            CollapseSidebar();
-            NavigateToPage(new History(_pathResolver, _fileSystemManager, _logger), "History");
+            if (IsCurrentPageSettings())
+            {
+                //if (CheckForUnsavedChanges())
+                //{
+                    CollapseSidebar();
+                    NavigateToPage(new History(_pathResolver, _fileSystemManager, _logger), "History");
+                //}
+            }
+            else
+            {
+                CollapseSidebar();
+                NavigateToPage(new History(_pathResolver, _fileSystemManager, _logger), "History");
+            }
         }
 
         // **************************************************
@@ -340,23 +366,67 @@ namespace FishLens_App
         // **************************************************
         private void SettingsButtonClick(object sender, RoutedEventArgs e)
         {
-            CollapseSidebar();
-            NavigateToPage(new Settings(_pathResolver, _fileSystemManager, _logger), "Settings");
+            if (IsCurrentPageSettings())
+            {
+                //if (CheckForUnsavedChanges())
+                    NavigateToPage(new Settings(_pathResolver, _fileSystemManager, _logger), "Settings");
+            }
+            else
+            {
+                CollapseSidebar();
+                NavigateToPage(new Settings(_pathResolver, _fileSystemManager, _logger), "Settings");
+            }
         }
+
         private void AccountSettingsButtonClick(object sender, RoutedEventArgs e)
         {
+            if (IsCurrentPageSettings() /*&& !CheckForUnsavedChanges()*/)
+                return;
+
             CollapseSidebar();
             NavigateToPage(new AccountSettings(), "AccountSettings");
         }
 
+        // **************************************************
+        // Function: IsCurrentPageSettings
+        // Description: Returns true if the current frame content is the Settings page
+        // **************************************************
+        public bool IsCurrentPageSettings() => MainFrame.Content is Settings;
 
+        // **************************************************
+        // Function: CheckForUnsavedChanges
+        // Description: Prompts the user if there are unsaved settings changes before navigating away
+        // **************************************************
+        //public bool CheckForUnsavedChanges()
+        //{
+        //    var page = MainFrame.Content as Settings;
+        //    if (page == null)
+        //        return true;
 
+        //    var (confidence, hideOutput, hideErrors, highContrast, largeText) = page.GetCurrentValues();
 
+        //    var saved = App.Settings;
 
+        //    bool hasUnsavedChanges =
+        //        confidence != (saved.ConfidenceThreshold * 100.0) ||
+        //        hideOutput != saved.OutputBox ||
+        //        hideErrors != saved.ErrorBox ||
+        //        highContrast != saved.HighContrastMode ||
+        //        largeText != saved.LargeText;
 
+        //    if (hasUnsavedChanges)
+        //    {
+        //        var result = MessageBox.Show(
+        //            "Unsaved settings changes. Do you want to leave the page?",
+        //            "Settings",
+        //            MessageBoxButton.YesNo,
+        //            MessageBoxImage.Warning);
 
+        //        return result == MessageBoxResult.Yes;
+        //    }
 
-
+        //    return true;
+        //}
 
         // **************************************************
         // Function: NavigateToPage
@@ -370,7 +440,6 @@ namespace FishLens_App
             try
             {
                 MainFrame.Navigate(page);
-
             }
             catch (Exception ex)
             {
@@ -2458,6 +2527,32 @@ namespace FishLens_App
             Grid.SetRow(AccountSettingsButton, 0);
             Grid.SetColumn(AccountSettingsButton, 3);
         }
+
+        /// <summary>
+        /// Updates a ring arc Path to represent <paramref name="confidence"/> (0–100).
+        /// The arc sits on a circle of radius 17 centred at (22,22).
+        /// </summary>
+        private static void SetRingArc(System.Windows.Shapes.Path arc, double confidence)
+        {
+            if (confidence <= 0) { arc.Data = Geometry.Empty; return; }
+
+            double pct = Math.Min(confidence / 100.0, 0.9999); // avoid full-circle edge case
+            double angle = pct * 360.0 - 90.0;                   // start from 12 o'clock
+            double rad = angle * Math.PI / 180.0;
+            double cx = 22, cy = 22, r = 17;
+            double ex = cx + r * Math.Cos(rad);
+            double ey = cy + r * Math.Sin(rad);
+            int large = pct >= 0.5 ? 1 : 0;
+
+            arc.Data = Geometry.Parse(
+                $"M {cx},{cy - r} A {r},{r},0,{large},1,{ex:F2},{ey:F2}");
+        }
+
+        // Call this wherever you populate the analysis fields, e.g.:
+        // SetRingArc(fishPresentRingArc,  fishPresentConfidenceValue);   // 0–100
+        // SetRingArc(fishSpeciesRingArc,  fishSpeciesConfidenceValue);
+        // fishPresentConfidence.Text  = $"{fishPresentConfidenceValue:0}%";
+        // fishSpeciesConfidence.Text  = $"{fishSpeciesConfidenceValue:0}%";
 
         // **************************************************
         // Function: VideoButtonClick

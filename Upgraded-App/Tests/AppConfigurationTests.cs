@@ -9,7 +9,7 @@ namespace FishLens.Tests
         [Fact]
         public void Defaults_AreSet()
         {
-            var cfg = new AppConfiguration();
+            var cfg = new UserSettings();
             Assert.Equal(0.7, cfg.ConfidenceThreshold);
             Assert.False(cfg.HighContrastMode);
             Assert.False(cfg.LargeText);
