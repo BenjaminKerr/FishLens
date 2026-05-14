@@ -2455,6 +2455,7 @@ namespace FishLens_App
                 EasingFunction = new System.Windows.Media.Animation.CubicEase()
             };
 
+            SideBar.Width = SideBar.ActualWidth;
             SideBar.BeginAnimation(Border.WidthProperty, animation);
 
             videoList.Visibility = Visibility.Collapsed;
