@@ -2140,7 +2140,7 @@ namespace FishLens_App
                 : _pathResolver.ResolveRunCsvPath(sourceRun);
             if (!File.Exists(csvPath))
             {
-                sessionNetUpstreamText.Text = "Net Upstream: --";
+                sessionNetUpstreamText.Text = "--";
                 return;
             }
 
@@ -2161,7 +2161,7 @@ namespace FishLens_App
             }
 
             int net = upstreamCount - downstreamCount;
-            sessionNetUpstreamText.Text = $"Net Upstream: {net}";
+            sessionNetUpstreamText.Text = $"{net}";
         }
 
         // **************************************************

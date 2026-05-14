@@ -1378,7 +1378,7 @@
                                            FontSize="12"
                                            Foreground="{DynamicResource OnAccentForeground}"
                                            Opacity="0.65"
-                                           Width="72"/>
+                                           Width="90"/>
                                 <TextBlock x:Name="sessionRunText"
                                            Grid.Column="1"
                                            Text="--"
@@ -1396,7 +1396,7 @@
                                            FontSize="12"
                                            Foreground="{DynamicResource OnAccentForeground}"
                                            Opacity="0.65"
-                                           Width="72"/>
+                                           Width="90"/>
                                 <TextBlock x:Name="sessionLocationText"
                                            Grid.Column="1"
                                            Text="--"
@@ -1410,11 +1410,11 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0"
-                                           Text="Net ↑"
+                                           Text="Net Upstream"
                                            FontSize="12"
                                            Foreground="{DynamicResource OnAccentForeground}"
                                            Opacity="0.65"
-                                           Width="72"/>
+                                           Width="90"/>
                                 <TextBlock x:Name="sessionNetUpstreamText"
                                            Grid.Column="1"
                                            Text="--"

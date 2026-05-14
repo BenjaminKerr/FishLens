@@ -10,9 +10,6 @@
     <Compile Update="Pages\AuthWindow.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Update="Pages\CustomMessageBox.xaml.cs">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Update="Pages\History.xaml.cs">
       <SubType>Code</SubType>
     </Compile>

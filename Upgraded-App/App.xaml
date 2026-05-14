@@ -16,6 +16,7 @@
                 <ResourceDictionary Source="Themes/Controls/ScrollBarStyles.xaml"/>
                 <ResourceDictionary Source="Themes/Icons/IconAssets.xaml"/>
                 <ResourceDictionary Source="Themes/Controls/CheckBoxStyles.xaml"/>
+                <ResourceDictionary Source="Themes/Controls/DatePickerStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
 
             <!-- Base font sizes -->
