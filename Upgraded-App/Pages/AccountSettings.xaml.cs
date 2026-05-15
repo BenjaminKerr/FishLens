@@ -113,6 +113,54 @@ namespace FishLens_App
         }
 
         // ****************************************************************
+        // Function: DeleteUser_Click
+        // Description: Handler for the Delete button on each user row.
+        // Notes: Confirms via username retype, then calls DeleteUserInDb. Refreshes the
+        //        list on success or shows an error message inline on failure.
+        private void DeleteUser_Click(object sender, RoutedEventArgs e)
+        {
+            SaveUsersError.Visibility = Visibility.Collapsed;
+            SaveUsersSuccess.Visibility = Visibility.Collapsed;
+
+            if (sender is not Button btn || btn.DataContext is not User user)
+                return;
+
+            var app = Application.Current as App;
+            if (app == null)
+            {
+                SaveUsersError.Text = "Not signed in.";
+                SaveUsersError.Visibility = Visibility.Visible;
+                return;
+            }
+
+            // Defense in depth — UI hides the button, but double-check here.
+            if (user.Id == app.CurrentUserId)
+            {
+                SaveUsersError.Text = "You cannot delete your own account.";
+                SaveUsersError.Visibility = Visibility.Visible;
+                return;
+            }
+
+            if (!ConfirmDeleteUser(user.Username))
+                return;  // user cancelled
+
+            if (DeleteUserInDb(user.Id, out string error))
+            {
+                SaveUsersSuccess.Text = $"Successfully deleted '{user.Username}'.";
+                SaveUsersSuccess.Visibility = Visibility.Visible;
+                LoadUsers();  // refresh the list
+            }
+            else
+            {
+                SaveUsersError.Text = $"Could not delete '{user.Username}': {error}";
+                SaveUsersError.Visibility = Visibility.Visible;
+            }
+        }
+
+
+
+
+        // ****************************************************************
         // Function: SaveUserChanges_Click
         // Description: Persists edited users to the database after validation.
         // Notes: Detects changed rows, validates them, updates DB and reports success or errors inline.
@@ -281,6 +329,147 @@ namespace FishLens_App
                 return false;
             }
         }
+
+        private bool DeleteUserInDb(int targetUserId, out string errorMessage)
+        {
+            errorMessage = null;
+            var app = Application.Current as App;
+            if (app == null || app.CurrentUserId <= 0)
+            {
+                errorMessage = "Not signed in.";
+                return false;
+            }
+
+            try
+            {
+                using var conn = new System.Data.SqlClient.SqlConnection(app.connectionString);
+                conn.Open();
+                using var cmd = new System.Data.SqlClient.SqlCommand("kaharra.DeleteUser", conn);
+                cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                cmd.Parameters.AddWithValue("@pUserId", targetUserId);
+                cmd.Parameters.AddWithValue("@pRequestingUserId", app.CurrentUserId);
+                cmd.ExecuteNonQuery();
+                return true;
+            }
+            catch (System.Data.SqlClient.SqlException ex)
+            {
+                // Our proc's RAISERROR messages land here as readable strings
+                errorMessage = ex.Message;
+                return false;
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Unexpected error: {ex.Message}";
+                return false;
+            }
+        }
+
+
+        private bool ConfirmDeleteUser(string username)
+        {
+            var dlg = new Window
+            {
+                Title = "Confirm Delete",
+                Width = 420,
+                Height = 240,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = Window.GetWindow(this),
+                ResizeMode = ResizeMode.NoResize,
+                Background = (System.Windows.Media.Brush)Application.Current.Resources["WindowBackground"]
+            };
+
+            var panel = new StackPanel { Margin = new Thickness(24) };
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = $"Delete user '{username}'?",
+                FontSize = 16,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = (System.Windows.Media.Brush)Application.Current.Resources["PrimaryText"],
+                Margin = new Thickness(0, 0, 0, 8),
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = "This action cannot be undone. The user's account and settings will be permanently removed.",
+                FontSize = 12,
+                Foreground = (System.Windows.Media.Brush)Application.Current.Resources["SecondaryText"],
+                Margin = new Thickness(0, 0, 0, 14),
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = $"Type '{username}' to confirm:",
+                FontSize = 12,
+                Foreground = (System.Windows.Media.Brush)Application.Current.Resources["PrimaryText"],
+                Margin = new Thickness(0, 0, 0, 6)
+            });
+
+            var confirmBox = new TextBox
+            {
+                FontSize = 14,
+                Padding = new Thickness(8, 6, 8, 6),
+                Margin = new Thickness(0, 0, 0, 16),
+                Background = (System.Windows.Media.Brush)Application.Current.Resources["CardBackground"],
+                Foreground = (System.Windows.Media.Brush)Application.Current.Resources["PrimaryText"],
+                BorderBrush = (System.Windows.Media.Brush)Application.Current.Resources["BorderBrush"]
+            };
+            panel.Children.Add(confirmBox);
+
+            var btnRow = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+
+            var cancelBtn = new Button
+            {
+                Content = "Cancel",
+                Width = 90,
+                Height = 32,
+                Margin = new Thickness(0, 0, 8, 0),
+                IsCancel = true,
+                Background = (System.Windows.Media.Brush)Application.Current.Resources["CardBackground"],
+                Foreground = (System.Windows.Media.Brush)Application.Current.Resources["PrimaryText"],
+                BorderBrush = (System.Windows.Media.Brush)Application.Current.Resources["BorderBrush"]
+            };
+
+            var deleteBtn = new Button
+            {
+                Content = "Delete User",
+                Width = 110,
+                Height = 32,
+                IsEnabled = false,
+                Background = System.Windows.Media.Brushes.IndianRed,
+                Foreground = System.Windows.Media.Brushes.White,
+                BorderThickness = new Thickness(0),
+                FontWeight = FontWeights.SemiBold
+            };
+
+            confirmBox.TextChanged += (s, e) =>
+            {
+                deleteBtn.IsEnabled = string.Equals(confirmBox.Text, username, StringComparison.Ordinal);
+            };
+
+            bool confirmed = false;
+            deleteBtn.Click += (s, e) => { confirmed = true; dlg.DialogResult = true; };
+            cancelBtn.Click += (s, e) => { dlg.DialogResult = false; };
+
+            btnRow.Children.Add(cancelBtn);
+            btnRow.Children.Add(deleteBtn);
+            panel.Children.Add(btnRow);
+
+            dlg.Content = panel;
+            dlg.Loaded += (s, e) => confirmBox.Focus();
+            dlg.ShowDialog();
+
+            return confirmed;
+        }
+
+
+
 
         // ****************************************************************
         // Function: LoadUsers

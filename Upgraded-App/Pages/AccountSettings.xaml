@@ -559,9 +559,26 @@
                                     </DataGridTemplateColumn.CellEditingTemplate>
                                 </DataGridTemplateColumn>
 
-
+                                <DataGridTemplateColumn Header="" Width="100">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Content="Delete"
+                                                Click="DeleteUser_Click"
+                                                Margin="6,3,6,3"
+                                                Padding="8,4,8,4"
+                                                Background="IndianRed"
+                                                Foreground="White"
+                                                BorderThickness="0"
+                                                FontWeight="SemiBold"
+                                                Cursor="Hand" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
 
                             </DataGrid.Columns>
+
+
+
 
                         </DataGrid>
 
