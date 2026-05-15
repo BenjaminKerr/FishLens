@@ -371,12 +371,15 @@ namespace FishLens_App
             {
                 Title = "Confirm Delete",
                 Width = 420,
-                Height = 240,
+                SizeToContent = SizeToContent.Height,   
+                MinHeight = 260,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Owner = Window.GetWindow(this),
                 ResizeMode = ResizeMode.NoResize,
                 Background = (System.Windows.Media.Brush)Application.Current.Resources["WindowBackground"]
             };
+
+
 
             var panel = new StackPanel { Margin = new Thickness(24) };
 
