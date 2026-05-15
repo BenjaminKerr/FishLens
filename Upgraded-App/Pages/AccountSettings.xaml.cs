@@ -353,7 +353,6 @@ namespace FishLens_App
             }
             catch (System.Data.SqlClient.SqlException ex)
             {
-                // Our proc's RAISERROR messages land here as readable strings
                 errorMessage = ex.Message;
                 return false;
             }
@@ -369,87 +368,120 @@ namespace FishLens_App
         {
             var dlg = new Window
             {
-                Title = "Confirm Delete",
-                Width = 420,
-                SizeToContent = SizeToContent.Height,   
-                MinHeight = 260,
+                Width = 460,
+                SizeToContent = SizeToContent.Height,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Owner = Window.GetWindow(this),
                 ResizeMode = ResizeMode.NoResize,
-                Background = (System.Windows.Media.Brush)Application.Current.Resources["WindowBackground"]
+                WindowStyle = WindowStyle.None,           // remove default title bar
+                AllowsTransparency = true,                 // required for transparent background
+                Background = System.Windows.Media.Brushes.Transparent,
+                ShowInTaskbar = false
             };
 
+            var cardBorder = new Border
+            {
+                Background = (System.Windows.Media.Brush)Application.Current.Resources["CardBackground"],
+                BorderBrush = (System.Windows.Media.Brush)Application.Current.Resources["BorderBrush"],
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Margin = new Thickness(0),  // gives room for shadow
+             
+            };
 
+            var rootGrid = new Grid();
+            rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });  // header
+            rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });  // body
 
-            var panel = new StackPanel { Margin = new Thickness(24) };
+            var headerBorder = new Border
+            {
+                Background = (System.Windows.Media.Brush)Application.Current.Resources["HeaderBackground"],
+                CornerRadius = new CornerRadius(8, 8, 0, 0),  // round only top corners
+                Padding = new Thickness(24, 16, 24, 16)
+            };
+            headerBorder.Child = new TextBlock
+            {
+                Text = "Confirm Delete",
+                FontSize = 18,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = (System.Windows.Media.Brush)Application.Current.Resources["OnAccentForeground"]
+            };
+            Grid.SetRow(headerBorder, 0);
+            rootGrid.Children.Add(headerBorder);
 
-            panel.Children.Add(new TextBlock
+            // Body
+            var bodyPanel = new StackPanel { Margin = new Thickness(24) };
+
+            bodyPanel.Children.Add(new TextBlock
             {
                 Text = $"Delete user '{username}'?",
-                FontSize = 16,
+                FontSize = 14,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = (System.Windows.Media.Brush)Application.Current.Resources["PrimaryText"],
                 Margin = new Thickness(0, 0, 0, 8),
                 TextWrapping = TextWrapping.Wrap
             });
 
-            panel.Children.Add(new TextBlock
+            bodyPanel.Children.Add(new TextBlock
             {
                 Text = "This action cannot be undone. The user's account and settings will be permanently removed.",
                 FontSize = 12,
                 Foreground = (System.Windows.Media.Brush)Application.Current.Resources["SecondaryText"],
-                Margin = new Thickness(0, 0, 0, 14),
+                Margin = new Thickness(0, 0, 0, 16),
                 TextWrapping = TextWrapping.Wrap
             });
 
-            panel.Children.Add(new TextBlock
+            bodyPanel.Children.Add(new TextBlock
             {
                 Text = $"Type '{username}' to confirm:",
                 FontSize = 12,
-                Foreground = (System.Windows.Media.Brush)Application.Current.Resources["PrimaryText"],
+                Foreground = (System.Windows.Media.Brush)Application.Current.Resources["SecondaryText"],
                 Margin = new Thickness(0, 0, 0, 6)
             });
 
+            var inputBorder = new Border
+            {
+                Background = (System.Windows.Media.Brush)Application.Current.Resources["WindowBackground"],
+                BorderBrush = (System.Windows.Media.Brush)Application.Current.Resources["BorderBrush"],
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Margin = new Thickness(0, 0, 0, 20)
+            };
             var confirmBox = new TextBox
             {
                 FontSize = 14,
-                Padding = new Thickness(8, 6, 8, 6),
-                Margin = new Thickness(0, 0, 0, 16),
-                Background = (System.Windows.Media.Brush)Application.Current.Resources["CardBackground"],
+                Padding = new Thickness(10, 8, 10, 8),
+                BorderThickness = new Thickness(0),
+                Background = System.Windows.Media.Brushes.Transparent,
                 Foreground = (System.Windows.Media.Brush)Application.Current.Resources["PrimaryText"],
-                BorderBrush = (System.Windows.Media.Brush)Application.Current.Resources["BorderBrush"]
+                CaretBrush = (System.Windows.Media.Brush)Application.Current.Resources["PrimaryText"]
             };
-            panel.Children.Add(confirmBox);
+            inputBorder.Child = confirmBox;
+            bodyPanel.Children.Add(inputBorder);
 
+            // Button row
             var btnRow = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
                 HorizontalAlignment = HorizontalAlignment.Right
             };
 
-            var cancelBtn = new Button
-            {
-                Content = "Cancel",
-                Width = 90,
-                Height = 32,
-                Margin = new Thickness(0, 0, 8, 0),
-                IsCancel = true,
-                Background = (System.Windows.Media.Brush)Application.Current.Resources["CardBackground"],
-                Foreground = (System.Windows.Media.Brush)Application.Current.Resources["PrimaryText"],
-                BorderBrush = (System.Windows.Media.Brush)Application.Current.Resources["BorderBrush"]
-            };
+            var cancelBtn = CreateThemedDialogButton(
+                "Cancel",
+                (System.Windows.Media.Brush)Application.Current.Resources["WindowBackground"],
+                (System.Windows.Media.Brush)Application.Current.Resources["PrimaryText"],
+                showBorder: true);
+            cancelBtn.Width = 100;
+            cancelBtn.Margin = new Thickness(0, 0, 10, 0);
+            cancelBtn.IsCancel = true;
 
-            var deleteBtn = new Button
-            {
-                Content = "Delete User",
-                Width = 110,
-                Height = 32,
-                IsEnabled = false,
-                Background = System.Windows.Media.Brushes.IndianRed,
-                Foreground = System.Windows.Media.Brushes.White,
-                BorderThickness = new Thickness(0),
-                FontWeight = FontWeights.SemiBold
-            };
+            var deleteBtn = CreateThemedDialogButton(
+                "Delete User",
+                System.Windows.Media.Brushes.IndianRed,
+                System.Windows.Media.Brushes.White,
+                showBorder: false);
+            deleteBtn.Width = 120;
+            deleteBtn.IsEnabled = false;
 
             confirmBox.TextChanged += (s, e) =>
             {
@@ -462,14 +494,72 @@ namespace FishLens_App
 
             btnRow.Children.Add(cancelBtn);
             btnRow.Children.Add(deleteBtn);
-            panel.Children.Add(btnRow);
+            bodyPanel.Children.Add(btnRow);
 
-            dlg.Content = panel;
+            Grid.SetRow(bodyPanel, 1);
+            rootGrid.Children.Add(bodyPanel);
+
+            cardBorder.Child = rootGrid;
+            dlg.Content = cardBorder;
+
+            headerBorder.MouseLeftButtonDown += (s, e) =>
+            {
+                if (e.ChangedButton == System.Windows.Input.MouseButton.Left)
+                    dlg.DragMove();
+            };
+
             dlg.Loaded += (s, e) => confirmBox.Focus();
             dlg.ShowDialog();
 
             return confirmed;
         }
+
+
+        private Button CreateThemedDialogButton(string content, System.Windows.Media.Brush background, System.Windows.Media.Brush foreground, bool showBorder)
+        {
+            var btn = new Button
+            {
+                Content = content,
+                Height = 36,
+                Padding = new Thickness(10, 6, 10, 6),
+                Background = background,
+                Foreground = foreground,
+                FontSize = 13,
+                FontWeight = FontWeights.SemiBold,
+                BorderThickness = showBorder ? new Thickness(1) : new Thickness(0),
+                BorderBrush = (System.Windows.Media.Brush)Application.Current.Resources["BorderBrush"],
+                Cursor = System.Windows.Input.Cursors.Hand
+            };
+
+            var template = new ControlTemplate(typeof(Button));
+            var border = new System.Windows.FrameworkElementFactory(typeof(Border));
+            border.SetValue(Border.BackgroundProperty, new System.Windows.TemplateBindingExtension(Button.BackgroundProperty));
+            border.SetValue(Border.BorderBrushProperty, new System.Windows.TemplateBindingExtension(Button.BorderBrushProperty));
+            border.SetValue(Border.BorderThicknessProperty, new System.Windows.TemplateBindingExtension(Button.BorderThicknessProperty));
+            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(6));
+            border.SetValue(Border.PaddingProperty, new System.Windows.TemplateBindingExtension(Button.PaddingProperty));
+
+            var contentPresenter = new System.Windows.FrameworkElementFactory(typeof(ContentPresenter));
+            contentPresenter.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            contentPresenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+            border.AppendChild(contentPresenter);
+
+            template.VisualTree = border;
+
+            var hoverTrigger = new System.Windows.Trigger { Property = Button.IsMouseOverProperty, Value = true };
+            hoverTrigger.Setters.Add(new System.Windows.Setter(Button.OpacityProperty, 0.85));
+            template.Triggers.Add(hoverTrigger);
+
+            var disabledTrigger = new System.Windows.Trigger { Property = Button.IsEnabledProperty, Value = false };
+            disabledTrigger.Setters.Add(new System.Windows.Setter(Button.OpacityProperty, 0.5));
+            template.Triggers.Add(disabledTrigger);
+
+            btn.Template = template;
+            return btn;
+        }
+
+
+
 
 
 
