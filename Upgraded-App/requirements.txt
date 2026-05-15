@@ -1,0 +1,10 @@
+﻿ultralytics
+opencv-python
+numpy
+torch
+torchvision
+deep-sort-realtime
+pytesseract
+tensorflow
+keras
+Pillow
