@@ -30,6 +30,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using System.Collections.ObjectModel;
 using Microsoft.IdentityModel.Tokens;
+using System.Threading;
 
 namespace FishLens_App
 {
@@ -59,6 +60,8 @@ namespace FishLens_App
 
         // Collection of all video statuses
         private Dictionary<int, VideoProgressStatus> _statuses = new();
+        internal ObservableCollection<VideoProgressStatus> ThreadStatuses { get; }
+        = new ObservableCollection<VideoProgressStatus>();
 
         #endregion
 
@@ -1128,7 +1131,6 @@ namespace FishLens_App
             string line;
             while ((line = myProcess.StandardOutput.ReadLine()) != null)
             {
-                System.Diagnostics.Debug.WriteLine("[PYTHON RAW] " + line);
 
                 if (line == "[PROGRESS] STARTUP")
                 {
@@ -1175,21 +1177,39 @@ namespace FishLens_App
                     {
                         return;
                     }
-                    _currentVideoStatus = $"Processing {filename} - frame {currentFrame}/{totalFrames} ";
+
+                    _currentVideoStatus = $"Processing {filename} - Frame {currentFrame}/{totalFrames} ";
                     int capturedCurrent = currentFrame;
-                        Dispatcher.Invoke(() =>
+
+
+                    Dispatcher.Invoke(() =>
+                    {
+                        var existing = ThreadStatuses.FirstOrDefault(t => t.Pid == pid);
+
+                        if (existing == null)
                         {
-                            SetAnalysisStatus(_currentVideoStatus);
-                            SetAnalysisFrameInfo(string.Empty); // clear frame line between videos
-
-                            var newBars = _builder.Build(_totalVideos, capturedCurrent - 1);
-
-                            Bars.Clear();
-                            foreach (var b in newBars)
+                            ThreadStatuses.Add(new VideoProgressStatus
                             {
-                                Bars.Add(b);
-                            }
-                        });
+                                Pid = pid,
+                                Message = _currentVideoStatus
+                            });
+                        }
+                        else
+                        {
+                            existing.Message = _currentVideoStatus;
+                        }
+
+                        SetAnalysisStatus(_currentVideoStatus);
+                        SetAnalysisFrameInfo(string.Empty); // clear frame line between videos
+
+                        var newBars = _builder.Build(_totalVideos, capturedCurrent - 1);
+
+                        Bars.Clear();
+                        foreach (var b in newBars)
+                        {
+                            Bars.Add(b);
+                        }
+                    });
                     
                 }
                 else if (line.StartsWith("[PROGRESS] FRAME:"))
