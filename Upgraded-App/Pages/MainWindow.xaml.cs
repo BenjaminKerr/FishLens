@@ -29,6 +29,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Collections.ObjectModel;
+using Microsoft.IdentityModel.Tokens;
 
 namespace FishLens_App
 {
@@ -55,6 +56,9 @@ namespace FishLens_App
 
         // State
         private string _currentFolderName = string.Empty;
+
+        // Collection of all video statuses
+        private Dictionary<int, VideoProgressStatus> _statuses = new();
 
         #endregion
 
@@ -1151,14 +1155,28 @@ namespace FishLens_App
                 else if (line.StartsWith("[PROGRESS] VIDEO:"))
                 {
                     string payload = line.Substring("[PROGRESS] VIDEO:".Length);
-                    int sep = payload.IndexOf('|');
-                    string fraction = sep >= 0 ? payload.Substring(0, sep) : payload;
-                    string filename = sep >= 0 ? payload.Substring(sep + 1) : string.Empty;
-                    var parts = fraction.Split('/');
-                    if (parts.Length == 2 && int.TryParse(parts[0], out int current))
+                    var sections = payload.Split('|');
+
+                    if (sections.Length != 3)
+                        return;
+
+                    string filename = sections[0];
+                    string pidString = sections[1];
+                    string fractionString = sections[2];
+
+                    if (!int.TryParse(pidString, out int pid))
+                        return;
+
+                    var parts = fractionString.Split('/');
+
+                    if (parts.Length != 2 ||
+                        !int.TryParse(parts[0], out int currentFrame) ||
+                        !int.TryParse(parts[1], out int totalFrames))
                     {
-                        _currentVideoStatus = $"Video {fraction} - {filename}";
-                        int capturedCurrent = current;
+                        return;
+                    }
+                    _currentVideoStatus = $"Processing {filename} - frame {currentFrame}/{totalFrames} ";
+                    int capturedCurrent = currentFrame;
                         Dispatcher.Invoke(() =>
                         {
                             SetAnalysisStatus(_currentVideoStatus);
@@ -1172,7 +1190,7 @@ namespace FishLens_App
                                 Bars.Add(b);
                             }
                         });
-                    }
+                    
                 }
                 else if (line.StartsWith("[PROGRESS] FRAME:"))
                 {

@@ -1656,7 +1656,7 @@ def run_video_tracker(video_path, source_video_path=None):
 
         if vidData.v_frame_index % 100 == 0:
             total_display = str(total_frames) if total_frames > 0 else "?"
-            print(f"[PROGRESS] VIDEO:{vidData.v_filename} WORKER:{vidData.v_worker_id} FRAME:{vidData.v_frame_index}/{total_display}", flush=True)
+            print(f"[PROGRESS] VIDEO:{vidData.v_filename} | {vidData.v_worker_id} | {vidData.v_frame_index}/{total_display}", flush=True)
         # Increment frame index and read next frame
         vidData.v_frame_index += 1
         vidData.v_total_frames += 1
