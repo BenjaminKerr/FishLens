@@ -31,6 +31,7 @@ using System.Windows.Threading;
 using System.Collections.ObjectModel;
 using Microsoft.IdentityModel.Tokens;
 using System.Threading;
+using System.Collections.Specialized;
 
 namespace FishLens_App
 {
@@ -146,6 +147,7 @@ namespace FishLens_App
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
             var app = Application.Current as App;
 
+            ThreadStatuses.CollectionChanged += ThreadStatuses_CollectionChanged;
 
 
             InitializeComponent();
@@ -1267,6 +1269,26 @@ namespace FishLens_App
             // Python process is already loading and we must not poison its _processingTcs.
             if (_yoloKillCount == myKillCount)
                 _processingTcs?.TrySetException(new Exception("Python process exited unexpectedly."));
+        }
+
+        private void ThreadStatuses_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (e.Action == NotifyCollectionChangedAction.Add)
+            {
+                foreach (VideoProgressStatus item in e.NewItems)
+                {
+                    Debug.WriteLine($"[DEBUG] Added PID={item.Pid}, Message=\"{item.Message}\"");
+                }
+            }
+
+            Debug.WriteLine("[DEBUG] Current Collection State:");
+
+            foreach (var item in ThreadStatuses)
+            {
+                Debug.WriteLine($"    PID={item.Pid} | {item.Message}");
+            }
+
+            Debug.WriteLine("--------------------------------------------------");
         }
 
         // **************************************************
