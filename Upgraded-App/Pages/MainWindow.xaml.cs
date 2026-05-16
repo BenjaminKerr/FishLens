@@ -1124,6 +1124,8 @@ namespace FishLens_App
             string line;
             while ((line = myProcess.StandardOutput.ReadLine()) != null)
             {
+                System.Diagnostics.Debug.WriteLine("[PYTHON RAW] " + line);
+
                 if (line == "[PROGRESS] STARTUP")
                 {
                     Dispatcher.Invoke(() => SetAnalysisStatus("Starting up, please wait..."));

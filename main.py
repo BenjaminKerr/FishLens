@@ -237,6 +237,7 @@ def _resolve_run_workers(input_path, video_count):
     # Auto policy for any input directory: one worker per video up to available CPU-1.
     auto_workers = max(1, min(max(1, int(video_count or 1)), max(1, cpu_count - 1)))
 
+    return 4
     if requested in ("", "auto"):
         return auto_workers
 
@@ -342,6 +343,7 @@ class VideoData:
         self.v_confidence_count = 0 
         self.v_video_timestamp = None
         self.frame_width = 640
+        self.v_worker_id = None
 
 
 # ========================================================================
@@ -1759,6 +1761,8 @@ def _process_video_with_retry(video_path, source_video_path):
 
 def _process_video_file(item_path):
     """Process one source video and return the export rows for that file."""
+    pid = os.getpid()
+    print(f"[DEBUG] PID {pid} started {item_path}", flush=True)
     filename = os.path.basename(item_path)
     video_path, is_temp = convert_asf_to_mp4(item_path)
     try:
@@ -1835,7 +1839,7 @@ def main(input_path=None):
         video_count = len(video_files)
         run_workers = _resolve_run_workers(input_path, video_count)
         _apply_run_workers(run_workers)
-        print(f"[INFO] Worker policy selected RUN_WORKERS={RUN_WORKERS}")
+        print(f"[INFO] Worker policy selected RUN_WORKERS={RUN_WORKERS}", flush=True)
         print(f"[PROGRESS] TOTAL:{video_count}", flush=True)
 
         # Build set of already-analyzed filenames from run_master.csv so they can be skipped.
