@@ -1570,7 +1570,9 @@ def run_video_tracker(video_path, source_video_path=None):
 
     # Initialize new VideoData and DeepSort tracker for each video
     vidData = VideoData()
+    vidData.v_worker_id = os.getpid()
     source_video_path = source_video_path or video_path
+    
     # Always use the original source filename so image saves and logs show the real name,
     # not a temp MP4 path when an ASF/WMV was converted before analysis.
     vidData.v_filename = os.path.basename(source_video_path)
@@ -1654,7 +1656,7 @@ def run_video_tracker(video_path, source_video_path=None):
 
         if vidData.v_frame_index % 100 == 0:
             total_display = str(total_frames) if total_frames > 0 else "?"
-            print(f"[PROGRESS] FRAME:{vidData.v_frame_index}/{total_display}", flush=True)
+            print(f"[PROGRESS] VIDEO:{vidData.v_filename} WORKER:{vidData.v_worker_id} FRAME:{vidData.v_frame_index}/{total_display}", flush=True)
         # Increment frame index and read next frame
         vidData.v_frame_index += 1
         vidData.v_total_frames += 1
@@ -1761,8 +1763,6 @@ def _process_video_with_retry(video_path, source_video_path):
 
 def _process_video_file(item_path):
     """Process one source video and return the export rows for that file."""
-    pid = os.getpid()
-    print(f"[DEBUG] PID {pid} started {item_path}", flush=True)
     filename = os.path.basename(item_path)
     video_path, is_temp = convert_asf_to_mp4(item_path)
     try:
