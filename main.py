@@ -1891,7 +1891,7 @@ def main(input_path=None):
                     item_path = future_to_path[future]
                     filename = os.path.basename(item_path)
                     completed += 1
-                    print(f"[PROGRESS] VIDEO:{completed}/{pending_total}|{filename}", flush=True)
+                    # print(f"[PROGRESS] VIDEO:{completed}/{pending_total}|{filename}", flush=True)
 
                     try:
                         _, video_tracks = future.result()
@@ -1913,7 +1913,7 @@ def main(input_path=None):
 
         for video_index, item_path in enumerate(pending_paths, start=1):
             filename = os.path.basename(item_path)
-            print(f"[PROGRESS] VIDEO:{video_index}/{pending_total}|{filename}", flush=True)
+           # print(f"[PROGRESS] VIDEO:{video_index}/{pending_total}|{filename}", flush=True)
 
             print(f"Processing: {filename}")
             try:

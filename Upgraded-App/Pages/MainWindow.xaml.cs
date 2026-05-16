@@ -1133,6 +1133,7 @@ namespace FishLens_App
             string line;
             while ((line = myProcess.StandardOutput.ReadLine()) != null)
             {
+                System.Diagnostics.Debug.Print(line);
 
                 if (line == "[PROGRESS] STARTUP")
                 {
@@ -1184,7 +1185,7 @@ namespace FishLens_App
                     int capturedCurrent = currentFrame;
 
 
-                    Dispatcher.Invoke(() =>
+                    Dispatcher.BeginInvoke(() =>
                     {
                         var existing = ThreadStatuses.FirstOrDefault(t => t.Pid == pid);
 
