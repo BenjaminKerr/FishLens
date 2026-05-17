@@ -57,6 +57,8 @@ INITIAL_LEARNING_RATE = 3e-5
 FINE_TUNE_LEARNING_RATE = 4e-6
 PATIENCE = 6
 FINE_TUNE_AT = 20  # Unfreeze the last N layers of MobileNetV2
+LABEL_SMOOTHING = 0.05
+SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 # ========================================================================
 # DATA AUGMENTATION
@@ -127,6 +129,41 @@ validation_dataset = tf.keras.utils.image_dataset_from_directory(
 class_names = train_dataset.class_names
 num_classes = len(class_names)
 print(f"Class indices: {dict(enumerate(class_names))}")
+
+
+def compute_class_weights(train_dir, class_names):
+    """Compute inverse-frequency class weights from the train split."""
+    counts = {}
+    for class_name in class_names:
+        class_dir = os.path.join(train_dir, class_name)
+        if not os.path.isdir(class_dir):
+            counts[class_name] = 0
+            continue
+
+        count = 0
+        for filename in os.listdir(class_dir):
+            _, ext = os.path.splitext(filename)
+            if ext.lower() in SUPPORTED_EXTENSIONS:
+                count += 1
+        counts[class_name] = count
+
+    total = sum(counts.values())
+    valid_classes = max(1, sum(1 for value in counts.values() if value > 0))
+
+    class_weights = {}
+    for class_index, class_name in enumerate(class_names):
+        class_count = counts.get(class_name, 0)
+        if class_count <= 0 or total <= 0:
+            class_weights[class_index] = 1.0
+        else:
+            class_weights[class_index] = float(total) / float(valid_classes * class_count)
+
+    print(f"Class counts (train): {counts}")
+    print(f"Class weights: {class_weights}")
+    return class_weights
+
+
+CLASS_WEIGHTS = compute_class_weights(TRAIN_DIR, class_names)
 
 # Shuffle and prefetch datasets for better training throughput.
 # Augmentation is applied inside the model so validation images stay untouched.
@@ -219,7 +256,7 @@ model = Model(inputs, outputs)
 # Description: Configures the frozen-base model for head training.
 model.compile(
     optimizer=Adam(learning_rate=INITIAL_LEARNING_RATE),
-    loss="categorical_crossentropy",
+    loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=LABEL_SMOOTHING),
     metrics=["accuracy"]
 )
 
@@ -261,6 +298,7 @@ history_initial = model.fit(
     train_dataset,
     epochs=INITIAL_EPOCHS,
     validation_data=validation_dataset,
+    class_weight=CLASS_WEIGHTS,
     callbacks=[best_model_checkpoint, early_stop, reduce_lr]
 )
 
@@ -285,7 +323,7 @@ for layer in base_model.layers[:-FINE_TUNE_AT]:
 # Description: Uses a much lower learning rate for the second phase.
 model.compile(
     optimizer=Adam(learning_rate=FINE_TUNE_LEARNING_RATE),
-    loss="categorical_crossentropy",
+    loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=LABEL_SMOOTHING),
     metrics=["accuracy"]
 )
 
@@ -297,6 +335,7 @@ history_fine = model.fit(
     epochs=INITIAL_EPOCHS + FINE_TUNE_EPOCHS,
     initial_epoch=len(history_initial.history["loss"]),
     validation_data=validation_dataset,
+    class_weight=CLASS_WEIGHTS,
     callbacks=[best_model_checkpoint, early_stop, reduce_lr]
 )
 
