@@ -308,6 +308,9 @@ LOAD_IMG, IMG_TO_ARRAY = _load_keras_image_utils()
 CLASS_NAMES = ["Chinook", "Omykiss"]
 IMAGE_SIZE = _get_classifier_input_size(CLASSIFIER_MODEL, default=(150, 150))
 CLASSIFIER_PREPROCESS_MODE = _get_classifier_preprocess_mode(CLASSIFIER_MODEL)
+SPECIES_TRACK_MAX_CROPS = max(1, int(os.getenv("FISHLENS_SPECIES_TRACK_MAX_CROPS", "5")))
+SPECIES_MIN_CONFIDENCE = max(0.0, min(1.0, float(os.getenv("FISHLENS_SPECIES_MIN_CONFIDENCE", "0.65"))))
+SPECIES_MIN_MARGIN = max(0.0, min(1.0, float(os.getenv("FISHLENS_SPECIES_MIN_MARGIN", "0.10"))))
 
 # Create and initialize folders
 os.makedirs(NO_FISH, exist_ok=True)
@@ -870,6 +873,22 @@ def _remember_crop_candidate(track_data, crop, frame, crop_score, conf):
 def deepsort_analysis(tracker, frame, frameData, vidData):
     """Advance DeepSort tracks for the current frame and maintain per-track state."""
 
+    def _store_species_crop(track_data, crop_img, crop_score, det_conf):
+        """Keep a small top-N buffer of the strongest crops for later species voting."""
+        if crop_img is None or crop_img.size == 0:
+            return
+
+        entry = {
+            "score": float(crop_score),
+            "conf": float(det_conf),
+            "crop": crop_img.copy(),
+        }
+        candidates = track_data.setdefault("species_candidate_crops", [])
+        candidates.append(entry)
+        candidates.sort(key=lambda item: (item["score"], item["conf"]), reverse=True)
+        if len(candidates) > SPECIES_TRACK_MAX_CROPS:
+            del candidates[SPECIES_TRACK_MAX_CROPS:]
+
     # Use the tracker's default iou threshold (tuned in the tracker)
     frameData.f_detections = tracker.filterOverlaps(frameData.f_detections)
 
@@ -898,7 +917,11 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                 "best_conf": -1.0,
                 "best_crop_score": -1.0,
                 "best_crop": None,
+<<<<<<< HEAD
                 "crop_candidates": [],
+=======
+                "species_candidate_crops": [],
+>>>>>>> b2173d0 (Training more accurate fish classifier)
                 "video_timestamp": vidData.v_video_timestamp or "Not detected",
                 "timestamp_confidence": initial_conf,
                 "timestamp_attempts": 0
@@ -964,6 +987,8 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                     and conf > previous_best_conf
                 )
             )
+
+            _store_species_crop(vidData.v_active_tracks[trackId], crop, crop_score, conf)
 
             if should_replace_crop:
                 track_data["best_crop_score"] = crop_score
@@ -1088,7 +1113,11 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         "end_time_sec": f"{end_sec:.2f}",
         "direction": overall_direction,
         "best_crop": track_data.get("best_crop"),
+<<<<<<< HEAD
         "crop_candidates": track_data.get("crop_candidates", []),
+=======
+        "species_candidate_crops": track_data.get("species_candidate_crops", []),
+>>>>>>> b2173d0 (Training more accurate fish classifier)
         "species": "No data",
         "species_confidence": "0.0000",
         "video_timestamp": video_timestamp,
@@ -1326,6 +1355,38 @@ def dedupe_fragmented_tracks(finished_tracks):
 
         return same_turn_point and same_outer_side and starts_and_ends_same_side
 
+    def _is_same_direction_fragment(a, b):
+        da, db = _direction_pair(a, b)
+        if da not in {"upstream", "downstream"} or db not in {"upstream", "downstream"}:
+            return False
+        if da != db:
+            return False
+
+        if str(a.get("likely_class", "")).lower() != str(b.get("likely_class", "")).lower():
+            return False
+
+        a_start = float(a.get("start_time_sec", 0.0))
+        a_end = float(a.get("end_time_sec", a_start))
+        b_start = float(b.get("start_time_sec", 0.0))
+        b_end = float(b.get("end_time_sec", b_start))
+
+        if a_start <= b_start:
+            earlier, later = a, b
+            earlier_end, later_start = a_end, b_start
+        else:
+            earlier, later = b, a
+            earlier_end, later_start = b_end, a_start
+
+        gap = max(0.0, later_start - earlier_end)
+        if gap > 1.00:
+            return False
+
+        continuity_threshold = max(_continuity_threshold(earlier), _continuity_threshold(later))
+        if abs(_x(earlier, "exit_x") - _x(later, "entry_x")) > continuity_threshold:
+            return False
+
+        return True
+
     def _is_opposite_direction_fragment(a, b):
         da, db = _direction_pair(a, b)
         if {da, db} != {"upstream", "downstream"}:
@@ -1372,6 +1433,7 @@ def dedupe_fragmented_tracks(finished_tracks):
             return False
         if (
             not _same_or_unknown_direction(a, b)
+            and not _is_same_direction_fragment(a, b)
             and not _is_turnaround_split(a, b)
             and not _is_opposite_direction_fragment(a, b)
         ):
@@ -1401,6 +1463,11 @@ def dedupe_fragmented_tracks(finished_tracks):
         if gap <= 0.55:
             return True
 
+        # Same-direction reacquisition on the same path is a split-track signal
+        # even when the gap is slightly larger than the immediate handoff window.
+        if _is_same_direction_fragment(a, b):
+            return True
+
         # Same OCR second + close in time is also a strong split-ID signal.
         if a_ts and b_ts and a_ts == b_ts and gap <= 2.00:
             return True
@@ -1424,6 +1491,8 @@ def dedupe_fragmented_tracks(finished_tracks):
             if _is_likely_duplicate(existing, track):
                 if _is_turnaround_split(existing, track):
                     kept[i] = _merge_track_rows(existing, track, "indecisive")
+                elif _is_same_direction_fragment(existing, track):
+                    kept[i] = _merge_track_rows(existing, track, str(existing.get("direction", track.get("direction", "indecisive"))).lower())
                 elif _is_opposite_direction_fragment(existing, track):
                     kept[i] = _merge_track_rows(existing, track, _merged_direction_from_path(existing, track))
                 elif _score(track) > _score(existing):
@@ -1570,6 +1639,7 @@ def _append_no_fish_row(video_file_path, video_timestamp):
 
 def save_best_image(finished_tracks, video_path):
     """Save each track's best crop, classify it, and move it into a species subfolder."""
+<<<<<<< HEAD
     video_stem = os.path.splitext(os.path.basename(video_path))[0]
     safe_video_stem = _safe_path_component(video_stem, default="unknown_video")
 
@@ -1591,10 +1661,88 @@ def save_best_image(finished_tracks, video_path):
             enhanced_crop = enhance_image(crop)
             suffix = "" if index == 1 else f"_candidate_{index}"
             temp_image_name = f"{base_image_name}{suffix}.jpg"
+=======
+
+    def _classify_candidates(candidate_crops):
+        """Average prediction probabilities over several strong crops from one track."""
+        prob_vectors = []
+
+        for candidate_crop in candidate_crops:
+            result = classify_crop(candidate_crop)
+            probs = result.get("probs") if result else None
+            if probs is None:
+                continue
+            prob_vectors.append(probs)
+
+        if not prob_vectors:
+            return None
+
+        mean_probs = np.mean(np.asarray(prob_vectors, dtype=np.float32), axis=0)
+        if mean_probs.size == 0:
+            return None
+
+        pred_index = int(np.argmax(mean_probs))
+        pred_label = CLASS_NAMES[pred_index]
+        pred_conf = float(mean_probs[pred_index])
+
+        sorted_probs = np.sort(mean_probs)
+        second_best = float(sorted_probs[-2]) if sorted_probs.size >= 2 else 0.0
+        margin = max(0.0, pred_conf - second_best)
+
+        return {
+            "label": pred_label,
+            "confidence": pred_conf,
+            "margin": margin,
+        }
+
+    for track in finished_tracks:
+        best_crop = track.get("best_crop")
+        candidate_entries = track.get("species_candidate_crops") or []
+        candidate_crops = [entry.get("crop") for entry in candidate_entries if entry.get("crop") is not None]
+
+        if not candidate_crops and best_crop is not None:
+            candidate_crops = [best_crop]
+
+        if candidate_crops:
+            enhanced_candidates = [enhance_image(crop) for crop in candidate_crops if crop is not None and crop.size > 0]
+            if not enhanced_candidates:
+                track["species"] = "No data"
+                track["species_confidence"] = "0.0000"
+                track["image_path"] = None
+                track.pop("best_crop", None)
+                track.pop("species_candidate_crops", None)
+                continue
+
+            species_data = _classify_candidates(enhanced_candidates)
+
+            if not species_data:
+                track["species"] = "No data"
+                track["species_confidence"] = "0.0000"
+                track["image_path"] = None
+                track.pop("best_crop", None)
+                track.pop("species_candidate_crops", None)
+                continue
+
+            pred_label = species_data["label"]
+            pred_conf = species_data["confidence"]
+            pred_margin = species_data["margin"]
+
+            if pred_conf < SPECIES_MIN_CONFIDENCE or pred_margin < SPECIES_MIN_MARGIN:
+                species = "Uncertain"
+            else:
+                species = pred_label
+
+            track["species"] = species
+            track["species_confidence"] = f"{pred_conf:.4f}"
+            
+            temp_image_name = f"{os.path.splitext(filename)[0]}_track_{track['trackId']}.jpg"
+>>>>>>> b2173d0 (Training more accurate fish classifier)
             temp_image_path = os.path.join(FISH_IMAGE_DIR, temp_image_name)
-            write_ok = cv2.imwrite(temp_image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            save_crop = enhanced_candidates[0]
+            write_ok = cv2.imwrite(temp_image_path, save_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
             if not write_ok:
                 print(f"Failed to write image at {temp_image_path}. Skipping classification.")
+<<<<<<< HEAD
                 continue
 
             # Classify the saved image
@@ -1625,6 +1773,20 @@ def save_best_image(finished_tracks, video_path):
             track["species_confidence"] = f"{(selected['species_conf'] / 100):.4f}"
 
             for rejected in classified_candidates[1:]:
+=======
+                track["species"] = "No data"
+                track["species_confidence"] = "0.0000"
+                track["image_path"] = None
+                track.pop("best_crop", None)
+                track.pop("species_candidate_crops", None)
+                continue
+
+            # Create species subfolder and move image
+            if species in CLASS_NAMES or species == "Uncertain":
+                species_folder = os.path.join(FISH_IMAGE_DIR, species)
+                os.makedirs(species_folder, exist_ok=True)
+                final_image_path = os.path.join(species_folder, temp_image_name)
+>>>>>>> b2173d0 (Training more accurate fish classifier)
                 try:
                     if os.path.exists(rejected["path"]):
                         os.remove(rejected["path"])
@@ -1663,7 +1825,11 @@ def save_best_image(finished_tracks, video_path):
         
         # Remove best_crop from track dict (no need to export it)
         track.pop("best_crop", None)
+<<<<<<< HEAD
         track.pop("crop_candidates", None)
+=======
+        track.pop("species_candidate_crops", None)
+>>>>>>> b2173d0 (Training more accurate fish classifier)
 
 # ========================================================================
 # CLASSIFICATION AND TIMESTAMP DEBUG HELPERS
@@ -1715,6 +1881,43 @@ def save_uncertain_timestamp_frames(finished_tracks, source_video_path):
         # Remove best_frame from track dict (no need to export it)
         track.pop("best_frame", None)
 
+def _prepare_classifier_array(img_array):
+    """Normalize a crop according to the loaded classifier's expected input format."""
+    if CLASSIFIER_PREPROCESS_MODE == "mobilenet_v2":
+        img_array = (img_array / 127.5) - 1.0
+    elif CLASSIFIER_PREPROCESS_MODE == "zero_one":
+        img_array = img_array / 255.0
+    return np.expand_dims(img_array, axis=0)
+
+
+def classify_crop(crop_image):
+    """Run species classification on a crop already loaded in memory."""
+    model = CLASSIFIER_MODEL
+
+    if model is None or crop_image is None or crop_image.size == 0:
+        return None
+
+    try:
+        resized = cv2.resize(crop_image, IMAGE_SIZE)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        img_array = np.asarray(rgb, dtype=np.float32)
+        batch = _prepare_classifier_array(img_array)
+        predictions = model.predict(batch, verbose=0)
+        probs = predictions[0] if predictions is not None and len(predictions) > 0 else None
+        if probs is None or len(probs) == 0:
+            return None
+
+        pred_index = int(np.argmax(probs))
+        return {
+            "label": CLASS_NAMES[pred_index],
+            "confidence": float(probs[pred_index]) * 100.0,
+            "probs": np.asarray(probs, dtype=np.float32),
+        }
+    except Exception as e:
+        print(f"ERROR during crop classification: {e}")
+        return None
+
+
 def classify_image(image_path):
     """Run the loaded species classifier on one saved crop image."""
    
@@ -1733,19 +1936,12 @@ def classify_image(image_path):
         # Load and preprocess image
         img = LOAD_IMG(image_path, target_size=IMAGE_SIZE)
         img_array = IMG_TO_ARRAY(img)
-        if CLASSIFIER_PREPROCESS_MODE == "mobilenet_v2":
-            img_array = (img_array / 127.5) - 1.0
-        elif CLASSIFIER_PREPROCESS_MODE == "zero_one":
-            img_array = img_array / 255.0
-        img_array = np.expand_dims(img_array, axis=0)
+        batch = _prepare_classifier_array(img_array)
+        predictions = model.predict(batch, verbose=0)
 
-      
-        predictions = model.predict(img_array, verbose=0)
-        
-        # Get results
-        pred_index = np.argmax(predictions)
+        pred_index = int(np.argmax(predictions[0]))
         pred_label = CLASS_NAMES[pred_index]
-        confidence = predictions[0][pred_index] * 100
+        confidence = float(predictions[0][pred_index] * 100.0)
         
         return pred_label, confidence
         
