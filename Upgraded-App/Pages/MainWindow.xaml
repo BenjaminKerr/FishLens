@@ -285,6 +285,14 @@
                             </ItemsControl.ItemTemplateSelector>
                         </ItemsControl>
 
+                        <ItemsControl ItemsSource="{Binding ThreadStatuses}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Message}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        
                     </StackPanel>
                 </Border>
 

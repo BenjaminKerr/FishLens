@@ -32,6 +32,7 @@ using System.Collections.ObjectModel;
 using Microsoft.IdentityModel.Tokens;
 using System.Threading;
 using System.Collections.Specialized;
+using Microsoft.Identity.Client;
 
 namespace FishLens_App
 {
@@ -61,8 +62,7 @@ namespace FishLens_App
 
         // Collection of all video statuses
         private Dictionary<int, VideoProgressStatus> _statuses = new();
-        internal ObservableCollection<VideoProgressStatus> ThreadStatuses { get; }
-        = new ObservableCollection<VideoProgressStatus>();
+
 
         #endregion
 
@@ -101,6 +101,7 @@ namespace FishLens_App
         private bool _processingComplete = false;
         public enum VideoProgressState { Empty, Active, Filled }
         public ObservableCollection<VideoProgressState> Bars { get; } = new ObservableCollection<VideoProgressState>();
+        public ObservableCollection<VideoProgressStatus> ThreadStatuses { get; } = new ObservableCollection<VideoProgressStatus>();
 
 
         // Multi-track state - all tracks for the currently displayed video

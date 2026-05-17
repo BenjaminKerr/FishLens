@@ -1,13 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace FishLens_App
 {
-    internal class VideoProgressStatus : INotifyPropertyChanged
+    public class VideoProgressStatus : INotifyPropertyChanged
     {
         public int Pid { get; set; }
         public string Status { get; set; }
@@ -18,6 +19,7 @@ namespace FishLens_App
             set
             {
                 _message = value;
+                Debug.WriteLine($"[DEBUG] Updated PID={Pid} → \"{_message}\"");
                 PropertyChanged?.Invoke(this,new PropertyChangedEventArgs(nameof(Message)));
             }
         }
