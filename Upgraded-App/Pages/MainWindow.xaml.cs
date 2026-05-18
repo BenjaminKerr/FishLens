@@ -1198,20 +1198,32 @@ namespace FishLens_App
 
                     if (existing == null)
                     {
-                        VideoProgressStatus status = new VideoProgressStatus()
-                        {
-                            Message = _currentVideoStatus,
-                            Pid = pid,
-                            ThreadIndex = threadID
-
-                        };
+                            VideoProgressStatus status = new VideoProgressStatus()
+                            {
+                                Message = _currentVideoStatus,
+                                Pid = pid,
+                                Filename = filename
+                            };
                         ThreadStatuses.Add(status);
                         var bar = Bars.FirstOrDefault(b => b.State == VideoProgressState.Empty);
-                        bar.SetInProgress();
-                        threadID++;
+                            if (bar != null)
+                            {
+                                status.VideoIndex = Bars.IndexOf(bar);
+                                bar.SetInProgress();
+                            }
                         }
                         else
                         {
+                            if (existing.Filename != filename)
+                            {
+                                existing.Filename = filename;
+                                var bar = Bars.FirstOrDefault(b => b.State == VideoProgressState.Empty);
+                                if (bar != null)
+                                {
+                                    existing.VideoIndex = Bars.IndexOf(bar);
+                                    bar.SetInProgress();
+                                }
+                            }
                             existing.Message = _currentVideoStatus;
                         }
 
@@ -1261,17 +1273,23 @@ namespace FishLens_App
                 }
                 else if (line.StartsWith("[PROGRESS] VIDEO_DONE"))
                 {
+
+
+
                     Dispatcher.Invoke(() =>
                     {
-                        var bar = Bars.FirstOrDefault(b => b.State == VideoProgressState.InProgress);
+                        string filename = line.Split(' ')[2];
+                        var cleanName = filename.Trim();
+
+                        var threadStatus =
+                            ThreadStatuses.FirstOrDefault(x =>
+                                x.Filename != null &&
+                                x.Filename.Trim() == cleanName);
+                        var bar = Bars[threadStatus.VideoIndex];
 
                         if (bar != null)
                             bar.SetComplete();
-
-                        var nextBar = Bars.FirstOrDefault(b => b.State == VideoProgressState.Empty);
-
-                        if (nextBar != null)
-                            nextBar.SetInProgress();
+                        
                     });
                     threadID++;
                 }
@@ -1339,7 +1357,6 @@ namespace FishLens_App
             analysisProgressArea.Visibility = Visibility.Collapsed;
             App.RaiseAnalysisStateChanged(false);
         }
-
         private void SetAnalysisStatus(string status)
         {
             analysisStatusText.Text = status;

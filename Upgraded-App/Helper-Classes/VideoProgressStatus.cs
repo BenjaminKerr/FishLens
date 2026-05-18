@@ -23,7 +23,7 @@ namespace FishLens_App
 
         private VideoProgressState _state;
 
-        public int ThreadIndex {  get; set; }
+        public int VideoIndex {  get; set; }
         public VideoProgressState State
         {
             get => _state;
@@ -34,6 +34,8 @@ namespace FishLens_App
                 OnPropertyChanged(nameof(State));
             }
         }
+
+        public string Filename { get; set; }
 
         private string _message;
         public string Message

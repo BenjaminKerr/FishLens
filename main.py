@@ -237,7 +237,6 @@ def _resolve_run_workers(input_path, video_count):
     # Auto policy for any input directory: one worker per video up to available CPU-1.
     auto_workers = max(1, min(max(1, int(video_count or 1)), max(1, cpu_count - 1)))
 
-    return 2
     if requested in ("", "auto"):
         return auto_workers
 
@@ -1819,7 +1818,7 @@ def main(input_path=None):
                 print(f"[ERROR] Failed to write CSV for {filename}: {e}")
         else:
             print(f"[INFO] No fish tracks to export for {filename}.")
-        print(f"[PROGRESS] VIDEO_DONE:{filename}", flush=True)
+        print(f"[PROGRESS] VIDEO_DONE: {filename}", flush=True)
     else:
         # Process all videos in folder
         video_extensions = ('.mp4', '.avi', '.mov', '.mkv', '.asf', '.wmv', '.flv', '.webm')
@@ -1908,7 +1907,7 @@ def main(input_path=None):
                     else:
                         print(f"[INFO] No fish tracks to export for {filename}.")
 
-                    print(f"[PROGRESS] VIDEO_DONE:{filename}", flush=True)
+                    print(f"[PROGRESS] VIDEO_DONE: {filename}", flush=True)
             return
 
         for video_index, item_path in enumerate(pending_paths, start=1):
@@ -1933,7 +1932,7 @@ def main(input_path=None):
             else:
                 print(f"[INFO] No fish tracks to export for {filename}.")
 
-            print(f"[PROGRESS] VIDEO_DONE:{filename}", flush=True)
+            print(f"[PROGRESS] VIDEO_DONE: {filename}", flush=True)
 
 if __name__ == "__main__":
     # Persistent server loop: accept one folder path per line from stdin, process it, signal done.
