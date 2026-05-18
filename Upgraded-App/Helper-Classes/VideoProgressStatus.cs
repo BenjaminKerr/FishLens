@@ -22,6 +22,8 @@ namespace FishLens_App
 
 
         private VideoProgressState _state;
+
+        public int ThreadIndex {  get; set; }
         public VideoProgressState State
         {
             get => _state;

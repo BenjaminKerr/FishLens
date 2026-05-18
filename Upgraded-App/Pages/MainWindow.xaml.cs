@@ -33,6 +33,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Threading;
 using System.Collections.Specialized;
 using Microsoft.Identity.Client;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace FishLens_App
 {
@@ -1158,6 +1159,10 @@ namespace FishLens_App
                         }
                     });
                 }
+                else if (line.StartsWith("[INFO] Skipping"))
+                {
+
+                }
                 else if (line.StartsWith("[PROGRESS] VIDEO:"))
                 {
                     string payload = line.Substring("[PROGRESS] VIDEO:".Length);
@@ -1188,18 +1193,21 @@ namespace FishLens_App
 
                     Dispatcher.BeginInvoke(() =>
                     {
-                        var existing = ThreadStatuses.FirstOrDefault(t => t.Pid == pid);
+                    var existing = ThreadStatuses.FirstOrDefault(t => t.Pid == pid);
 
-                        if (existing == null)
+                    if (existing == null)
+                    {
+                        VideoProgressStatus status = new VideoProgressStatus()
                         {
-                            ThreadStatuses.Add(new VideoProgressStatus()
-                            {
-                                Message = _currentVideoStatus,
-                                Pid = pid
-                            });
+                            Message = _currentVideoStatus,
+                            Pid = pid,
+                            ThreadIndex = threadID
 
-                            Bars[threadID].SetInProgress();
-                            threadID++;
+                        };
+                        ThreadStatuses.Add(status);
+                        var bar = Bars.FirstOrDefault(b => b.State == VideoProgressState.Empty);
+                        bar.SetInProgress();
+                        threadID++;
                         }
                         else
                         {
@@ -1250,12 +1258,29 @@ namespace FishLens_App
                         Dispatcher.Invoke(() => SetAnalysisFrameInfo(frameInfo));
                     }
                 }
+                else if (line.StartsWith("[PROGRESS] VIDEO_DONE"))
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        var bar = Bars.FirstOrDefault(b => b.State == VideoProgressState.InProgress);
+
+                        if (bar != null)
+                            bar.SetComplete();
+
+                        var nextBar = Bars.FirstOrDefault(b => b.State == VideoProgressState.Empty);
+
+                        if (nextBar != null)
+                            nextBar.SetInProgress();
+                    });
+                    threadID++;
+                }
                 else if (line == "[PROGRESS] DONE")
                 {
                     string error;
                     lock (_errorBuilder) { error = _errorBuilder.ToString(); _errorBuilder.Clear(); }
                     Dispatcher.Invoke(() =>
                     {
+
                         HideAnalysisProgress();
                         DisplayProcessOutputIfNeeded(error);
                     });
