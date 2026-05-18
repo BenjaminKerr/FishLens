@@ -28,8 +28,9 @@ namespace FishLens_App
 
             for (int i = 0; i < count; i++)
             {
-                result.Add(new VideoProgressStatus
-                { Status = "Empty" });
+                VideoProgressStatus status = new VideoProgressStatus();
+                status.SetEmpty();
+                result.Add(status);
 
             }
 

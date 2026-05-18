@@ -21,30 +21,18 @@ namespace FishLens_App
        public int Pid { get; set;  }
 
 
-        private string _status;
-        public string Status
-        {
-            get => _status;
-            set
-            {
-                _status = value;
-
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(State)));
-            }
-        }
+        private VideoProgressState _state;
         public VideoProgressState State
         {
-            get
+            get => _state;
+            set
             {
-                return Status switch
-                {
-                    "Processing" => VideoProgressState.InProgress,
-                    "Complete" => VideoProgressState.Filled,
-                         _       => VideoProgressState.Empty
-                };
+                if (_state == value) return;
+                _state = value;
+                OnPropertyChanged(nameof(State));
             }
         }
+
         private string _message;
         public string Message
         {
@@ -53,10 +41,28 @@ namespace FishLens_App
             {
                 _message = value;
                 Debug.WriteLine($"[DEBUG] Updated PID={Pid} → \"{_message}\"");
-                PropertyChanged?.Invoke(this,new PropertyChangedEventArgs(nameof(Message)));
+                OnPropertyChanged(nameof(Message));
             }
         }
+
+        public void SetInProgress()
+        {
+            State = VideoProgressState.InProgress;
+        }
+        public void SetComplete()
+        {
+            State = VideoProgressState.Filled;
+        }
+        public void SetEmpty()
+        {
+            State = VideoProgressState.Empty;
+        }
+
         public event PropertyChangedEventHandler PropertyChanged;
 
+        private void OnPropertyChanged(string name)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
     }
 }
