@@ -275,9 +275,9 @@
                                         <Border.Style>
                                             <Style TargetType="Border">
 
-                                                <!-- base state -->
+                                                <!-- Base state -->
                                                 <Setter Property="Background"
-                            Value="{DynamicResource WindowBackground}" />
+                                                    Value="{DynamicResource WindowBackground}" />
                                                 <Setter Property="Opacity" Value="1"/>
 
                                                 <Style.Triggers>
@@ -285,7 +285,7 @@
                                                     <!-- EMPTY -->
                                                     <DataTrigger Binding="{Binding State}" Value="Empty">
                                                         <Setter Property="Background"
-                                    Value="{DynamicResource WindowBackground}" />
+                                                            Value="{DynamicResource WindowBackground}" />
                                                         <Setter Property="Opacity" Value="1"/>
                                                     </DataTrigger>
 
@@ -298,12 +298,12 @@
                                                             <BeginStoryboard x:Name="Pulse">
                                                                 <Storyboard>
                                                                     <DoubleAnimation
-                                            Storyboard.TargetProperty="Opacity"
-                                            From="0.2"
-                                            To="1"
-                                            Duration="0:0:0.8"
-                                            AutoReverse="True"
-                                            RepeatBehavior="Forever"/>
+                                                                        Storyboard.TargetProperty="Opacity"
+                                                                        From="0.2"
+                                                                        To="1"
+                                                                        Duration="0:0:0.8"
+                                                                        AutoReverse="True"
+                                                                        RepeatBehavior="Forever"/>
                                                                 </Storyboard>
                                                             </BeginStoryboard>
                                                         </DataTrigger.EnterActions>
