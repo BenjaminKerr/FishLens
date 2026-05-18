@@ -29,8 +29,10 @@ namespace FishLens_App.Services
         private readonly object _workersLock = new object();
         private readonly object _csvLock = new object();
         private readonly List<PythonWorker> _workers = new List<PythonWorker>();
+        private readonly string _appSessionId = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         private readonly Timer _idleTimer;
         private CancellationTokenSource _activeRunCts;
+        private PythonClassifierProcess _activeClassifier;
         private DateTime _lastWorkCompletedUtc = DateTime.UtcNow;
         private bool _disposed;
 
@@ -82,19 +84,21 @@ namespace FishLens_App.Services
                 return summary;
 
             EnsureCsvFiles(context);
+            PrepareImageFolders(context);
 
             int targetWorkers = WorkerCountPolicy.GetTargetWorkerCount(
                 pending.Count,
                 Environment.ProcessorCount,
                 GetTotalMemoryBytes());
 
-            var workers = EnsureWorkerCountStarted(targetWorkers);
+            var workers = EnsureWorkerCountStarted(1);
             var queue = new ConcurrentQueue<string>(pending);
+            var completedResults = new ConcurrentBag<PythonVideoResult>();
             int completed = 0;
             int analyzed = 0;
             int failed = 0;
 
-            var tasks = workers.Select(worker => Task.Run(async () =>
+            async Task ConsumeQueueAsync(PythonWorker worker)
             {
                 await worker.WaitUntilReadyAsync(token);
                 while (!token.IsCancellationRequested && queue.TryDequeue(out string videoPath))
@@ -113,7 +117,7 @@ namespace FishLens_App.Services
                     try
                     {
                         var result = await worker.AnalyzeVideoAsync(videoPath, context, token);
-                        WriteResult(context, result);
+                        completedResults.Add(result);
                         Interlocked.Increment(ref analyzed);
                     }
                     catch (OperationCanceledException)
@@ -139,7 +143,26 @@ namespace FishLens_App.Services
                         });
                     }
                 }
-            }, token)).ToList();
+            }
+
+            var tasks = new List<Task>
+            {
+                Task.Run(() => ConsumeQueueAsync(workers[0]), token)
+            };
+
+            for (int workerIndex = 2; workerIndex <= targetWorkers; workerIndex++)
+            {
+                int capturedWorkerIndex = workerIndex;
+                tasks.Add(Task.Run(async () =>
+                {
+                    await Task.Delay(GetWorkerStartupDelay(capturedWorkerIndex), token);
+                    if (token.IsCancellationRequested || queue.IsEmpty)
+                        return;
+
+                    var stagedWorker = EnsureWorkerCountStarted(capturedWorkerIndex)[capturedWorkerIndex - 1];
+                    await ConsumeQueueAsync(stagedWorker);
+                }, token));
+            }
 
             try
             {
@@ -154,18 +177,41 @@ namespace FishLens_App.Services
                 if (token.IsCancellationRequested)
                     summary.Cancelled = true;
                 _lastWorkCompletedUtc = DateTime.UtcNow;
-                _activeRunCts?.Dispose();
-                _activeRunCts = null;
             }
 
             summary.AnalyzedVideos = analyzed;
             summary.FailedVideos = failed;
+
+            try
+            {
+                var results = completedResults.ToList();
+                if (summary.Cancelled)
+                {
+                    foreach (var result in results)
+                        MarkNoSpecies(result);
+                }
+                else
+                {
+                    ShutdownExtraWorkers(keepCount: 1);
+                    await ClassifyCompletedResultsAsync(context, results, token);
+                }
+
+                foreach (var result in results)
+                    WriteResult(context, result);
+            }
+            finally
+            {
+                _activeRunCts?.Dispose();
+                _activeRunCts = null;
+            }
+
             return summary;
         }
 
         public void CancelActiveRun()
         {
             _activeRunCts?.Cancel();
+            _activeClassifier?.Dispose();
             List<PythonWorker> workers;
             lock (_workersLock)
                 workers = _workers.Where(worker => worker.IsBusy).ToList();
@@ -198,6 +244,25 @@ namespace FishLens_App.Services
                 }
                 return _workers.Take(targetCount).ToList();
             }
+        }
+
+        private static TimeSpan GetWorkerStartupDelay(int workerIndex)
+        {
+            return workerIndex <= 2 ? TimeSpan.FromSeconds(2) : TimeSpan.FromSeconds(8);
+        }
+
+        private void PrepareImageFolders(AnalysisBatchContext context)
+        {
+            if (!string.IsNullOrWhiteSpace(context.ImageBatchFolder))
+                return;
+
+            string root = Path.Combine(_pathResolver.ResolveProjectRoot(), "fish_images", "sessions", $"app_{_appSessionId}");
+            string batch = Path.Combine(root, $"batch_{DateTime.Now:yyyyMMdd_HHmmss}");
+            context.ImageBatchFolder = batch;
+            context.PendingImageFolder = Path.Combine(batch, "pending");
+            context.ClassifiedImageFolder = Path.Combine(batch, "classified");
+            Directory.CreateDirectory(context.PendingImageFolder);
+            Directory.CreateDirectory(context.ClassifiedImageFolder);
         }
 
         private IEnumerable<string> FilterPendingVideos(IEnumerable<string> allVideos, AnalysisBatchContext context)
@@ -253,6 +318,70 @@ namespace FishLens_App.Services
                         AppendCsvRows(context.AllHistoryCsvPath, FishCsvKeys, new[] { fullRow });
                     }
                 }
+            }
+        }
+
+        private async Task ClassifyCompletedResultsAsync(AnalysisBatchContext context, List<PythonVideoResult> results, CancellationToken token)
+        {
+            var imagePaths = results
+                .SelectMany(result => result.Tracks)
+                .Select(track => track.GetValueOrDefault("image_path", string.Empty))
+                .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (imagePaths.Count == 0)
+            {
+                foreach (var result in results)
+                    MarkNoSpecies(result);
+                return;
+            }
+
+            try
+            {
+                using var classifier = new PythonClassifierProcess(_pathResolver, _logger);
+                _activeClassifier = classifier;
+                await classifier.StartAsync(token);
+                var classifications = await classifier.ClassifyBatchAsync(imagePaths, context.ClassifiedImageFolder, token);
+
+                foreach (var result in results)
+                {
+                    foreach (var track in result.Tracks)
+                    {
+                        string originalPath = track.GetValueOrDefault("image_path", string.Empty);
+                        if (classifications.TryGetValue(originalPath, out var classification))
+                        {
+                            track["species"] = classification.Species;
+                            track["species_confidence"] = classification.SpeciesConfidence;
+                            track["image_path"] = classification.FinalPath;
+                        }
+                        else
+                        {
+                            track["species"] = "No species";
+                            track["species_confidence"] = "0.0000";
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Species classifier pass failed; writing completed YOLO rows without species.");
+                foreach (var result in results)
+                    MarkNoSpecies(result);
+            }
+            finally
+            {
+                _activeClassifier = null;
+            }
+        }
+
+        private static void MarkNoSpecies(PythonVideoResult result)
+        {
+            if (result == null) return;
+            foreach (var track in result.Tracks)
+            {
+                track["species"] = "No species";
+                track["species_confidence"] = "0.0000";
             }
         }
 
@@ -341,8 +470,8 @@ namespace FishLens_App.Services
             lock (_workersLock)
             {
                 _workers.RemoveAll(worker => worker.HasExited);
-                int keep = idleFor >= TimeSpan.FromMinutes(60) ? 1 : 2;
-                if (idleFor < TimeSpan.FromMinutes(10))
+                int keep = 1;
+                if (idleFor < TimeSpan.FromMinutes(3))
                     keep = Math.Max(keep, _workers.Count);
 
                 while (_workers.Count > keep)
@@ -369,11 +498,27 @@ namespace FishLens_App.Services
 
         private void ShutdownAllWorkers()
         {
+            _activeClassifier?.Dispose();
+            _activeClassifier = null;
             lock (_workersLock)
             {
                 foreach (var worker in _workers)
-                    worker.Shutdown();
+                    worker.Shutdown(forceKill: true);
                 _workers.Clear();
+            }
+        }
+
+        private void ShutdownExtraWorkers(int keepCount)
+        {
+            lock (_workersLock)
+            {
+                _workers.RemoveAll(worker => worker.HasExited);
+                while (_workers.Count > Math.Max(1, keepCount))
+                {
+                    var worker = _workers[_workers.Count - 1];
+                    _workers.RemoveAt(_workers.Count - 1);
+                    worker.Shutdown(forceKill: true);
+                }
             }
         }
 
@@ -417,8 +562,8 @@ namespace FishLens_App.Services
                 };
 
                 _process = Process.Start(psi);
-                Task.Run(ReadStdoutLoop);
-                Task.Run(ReadStderrLoop);
+                _ = Task.Run(ReadStdoutLoop);
+                _ = Task.Run(ReadStderrLoop);
             }
 
             public Task WaitUntilReadyAsync(CancellationToken token)
@@ -443,7 +588,8 @@ namespace FishLens_App.Services
                         run_folder = context.RunFolder,
                         location = context.Location,
                         upstream_direction = context.UpstreamDirection,
-                        fast_mode = context.FastMode
+                        fast_mode = context.FastMode,
+                        pending_image_folder = context.PendingImageFolder
                     }
                 });
 
@@ -458,15 +604,15 @@ namespace FishLens_App.Services
                 }
             }
 
-            public void Shutdown()
+            public void Shutdown(bool forceKill = false)
             {
                 try
                 {
                     if (_process != null && !_process.HasExited)
                     {
                         Send(new { command = "shutdown", request_id = Guid.NewGuid().ToString("N") });
-                        if (!_process.WaitForExit(2000))
-                            _process.Kill();
+                        if (!_process.WaitForExit(2000) || forceKill)
+                            KillProcessTree(_process);
                     }
                 }
                 catch { }
@@ -478,7 +624,7 @@ namespace FishLens_App.Services
                 {
                     if (_process != null && !_process.HasExited)
                     {
-                        _process.Kill();
+                        KillProcessTree(_process);
                         _process.WaitForExit(2000);
                     }
                 }
@@ -488,6 +634,18 @@ namespace FishLens_App.Services
                     _activeTcs?.TrySetCanceled();
                     if (restart)
                         Start();
+                }
+            }
+
+            private static void KillProcessTree(Process process)
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch
+                {
+                    try { process.Kill(); } catch { }
                 }
             }
 
@@ -589,6 +747,171 @@ namespace FishLens_App.Services
                     ? $"Video progress: {current * 100 / total}%"
                     : "Video progress: ?";
             }
+        }
+
+        private sealed class PythonClassifierProcess : IDisposable
+        {
+            private readonly IProjectPathResolver _pathResolver;
+            private readonly ILogger _logger;
+            private readonly object _writeLock = new object();
+            private readonly TaskCompletionSource<bool> _readyTcs = new TaskCompletionSource<bool>();
+            private TaskCompletionSource<Dictionary<string, ClassificationResult>> _activeTcs;
+            private Process _process;
+
+            public PythonClassifierProcess(IProjectPathResolver pathResolver, ILogger logger)
+            {
+                _pathResolver = pathResolver;
+                _logger = logger;
+            }
+
+            public async Task StartAsync(CancellationToken token)
+            {
+                string pythonPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "venv", "Scripts", "python.exe");
+                var psi = new ProcessStartInfo
+                {
+                    FileName = pythonPath,
+                    WorkingDirectory = _pathResolver.ResolveProjectRoot(),
+                    Arguments = $"-u \"{_pathResolver.ResolveYoloScriptPath()}\" --classifier-json",
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                _process = Process.Start(psi);
+                _ = Task.Run(ReadStdoutLoop);
+                _ = Task.Run(ReadStderrLoop);
+                await _readyTcs.Task.WaitAsync(token);
+            }
+
+            public async Task<Dictionary<string, ClassificationResult>> ClassifyBatchAsync(
+                List<string> imagePaths,
+                string classifiedFolder,
+                CancellationToken token)
+            {
+                _activeTcs = new TaskCompletionSource<Dictionary<string, ClassificationResult>>();
+                Send(new
+                {
+                    command = "classify_batch",
+                    request_id = Guid.NewGuid().ToString("N"),
+                    image_paths = imagePaths,
+                    classified_folder = classifiedFolder
+                });
+
+                try
+                {
+                    return await _activeTcs.Task.WaitAsync(token);
+                }
+                finally
+                {
+                    _activeTcs = null;
+                }
+            }
+
+            private void Send(object command)
+            {
+                string json = JsonSerializer.Serialize(command);
+                lock (_writeLock)
+                {
+                    _process.StandardInput.WriteLine(json);
+                    _process.StandardInput.Flush();
+                }
+            }
+
+            private void ReadStdoutLoop()
+            {
+                try
+                {
+                    string line;
+                    while ((line = _process.StandardOutput.ReadLine()) != null)
+                    {
+                        if (!line.StartsWith("{", StringComparison.Ordinal))
+                            continue;
+
+                        using var document = JsonDocument.Parse(line);
+                        string eventName = GetString(document.RootElement, "event");
+                        if (eventName == "ready")
+                        {
+                            _readyTcs.TrySetResult(true);
+                            continue;
+                        }
+
+                        if (eventName == "classification_finished")
+                        {
+                            _activeTcs?.TrySetResult(ReadClassifications(document.RootElement));
+                            continue;
+                        }
+
+                        if (eventName == "error")
+                            _activeTcs?.TrySetException(new Exception(GetString(document.RootElement, "message") ?? "Classifier failed."));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "Python classifier stdout loop failed");
+                    _readyTcs.TrySetException(ex);
+                    _activeTcs?.TrySetException(ex);
+                }
+            }
+
+            private void ReadStderrLoop()
+            {
+                try
+                {
+                    string line;
+                    while ((line = _process.StandardError.ReadLine()) != null)
+                        _logger?.LogWarning("Python classifier: {Line}", line);
+                }
+                catch { }
+            }
+
+            private static Dictionary<string, ClassificationResult> ReadClassifications(JsonElement root)
+            {
+                var results = new Dictionary<string, ClassificationResult>(StringComparer.OrdinalIgnoreCase);
+                if (!root.TryGetProperty("results", out JsonElement items) || items.ValueKind != JsonValueKind.Array)
+                    return results;
+
+                foreach (var item in items.EnumerateArray())
+                {
+                    string originalPath = GetString(item, "original_path");
+                    if (string.IsNullOrWhiteSpace(originalPath))
+                        continue;
+
+                    results[originalPath] = new ClassificationResult
+                    {
+                        Species = GetString(item, "species") ?? "No species",
+                        SpeciesConfidence = GetString(item, "species_confidence") ?? "0.0000",
+                        FinalPath = GetString(item, "final_path") ?? originalPath
+                    };
+                }
+
+                return results;
+            }
+
+            public void Dispose()
+            {
+                try
+                {
+                    if (_process != null && !_process.HasExited)
+                    {
+                        Send(new { command = "shutdown", request_id = Guid.NewGuid().ToString("N") });
+                        if (!_process.WaitForExit(2000))
+                            _process.Kill(entireProcessTree: true);
+                    }
+                }
+                catch
+                {
+                    try { _process?.Kill(entireProcessTree: true); } catch { }
+                }
+            }
+        }
+
+        private class ClassificationResult
+        {
+            public string Species { get; set; } = "No species";
+            public string SpeciesConfidence { get; set; } = "0.0000";
+            public string FinalPath { get; set; } = string.Empty;
         }
 
         private class PythonVideoResult

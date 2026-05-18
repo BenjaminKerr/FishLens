@@ -136,6 +136,7 @@ def _resolve_classifier_model_path():
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 IS_WORKER_MODE = "--worker-json" in sys.argv
+IS_CLASSIFIER_MODE = "--classifier-json" in sys.argv
 
 
 # CSV export schema
@@ -152,11 +153,12 @@ CSV_KEYS = [
     "video_timestamp",    # col 9
     "run",                # col 10
 ]
+WORKER_RESULT_KEYS = CSV_KEYS + ["image_path"]
 NO_FISH_CSV_KEYS = ["video_file", "location", "video_timestamp"]
 TESSERACT_AVAILABLE = check_tesseract()
 
 # Detector configuration
-MODEL = _load_yolo_model("models/fish_detector5.pt")
+MODEL = None if IS_CLASSIFIER_MODE else _load_yolo_model("models/fish_detector5.pt")
 STRICT_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_YOLO_CONFIDENCE_THRESHOLD", "0.42"))
 LOOSE_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_LOOSE_YOLO_CONFIDENCE_THRESHOLD", "0.34"))
 ENABLE_LOOSE_RETRY = os.getenv("FISHLENS_ENABLE_LOOSE_RETRY", "1") == "1"
@@ -195,6 +197,7 @@ _RUN_FOLDER = _resolve_run_folder()
 _IS_DEBUG_RUN = _RUN_FOLDER and os.path.basename(_RUN_FOLDER).lower() == "debug"
 OUTPUT_CSV = os.path.join(PROJECT_ROOT, "fish_summary.csv")
 FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
+FISH_IMAGE_PENDING_DIR = ""
 
 
 if not _RUN_FOLDER:
@@ -225,7 +228,7 @@ FISHLENS_LOCATION = os.getenv("FISHLENS_LOCATION", "Unknown").strip() or "Unknow
 FISHLENS_UPSTREAM_DIRECTION = os.getenv("FISHLENS_UPSTREAM_DIRECTION", "left").strip().lower()
 if FISHLENS_UPSTREAM_DIRECTION not in {"left", "right"}:
     FISHLENS_UPSTREAM_DIRECTION = "left"
-FAST_MODE = os.getenv("FISHLENS_FAST_MODE", "1") == "1"
+FAST_MODE = os.getenv("FISHLENS_FAST_MODE", "0") == "1"  # Legacy setting name; true now means Slow Mode.
 # Strict pass is fixed at stride 3 by policy.
 # Loose retry still drops to stride 1 when strict finds no fish.
 STRICT_FRAME_STRIDE = 3
@@ -286,11 +289,11 @@ def _apply_run_workers(workers):
     except Exception:
         pass
 
-YOLO_IMGSZ = max(320, int(os.getenv("FISHLENS_YOLO_IMGSZ", "448" if FAST_MODE else "512")))
+YOLO_IMGSZ = max(320, int(os.getenv("FISHLENS_YOLO_IMGSZ", "512" if FAST_MODE else "448")))
 SAVE_TIMESTAMP_DEBUG_FRAMES = os.getenv("FISHLENS_SAVE_TIMESTAMP_DEBUG", "0") == "1"
-TIMESTAMP_MAX_ATTEMPTS = max(1, int(os.getenv("FISHLENS_TIMESTAMP_MAX_ATTEMPTS", "4" if FAST_MODE else "8")))
+TIMESTAMP_MAX_ATTEMPTS = max(1, int(os.getenv("FISHLENS_TIMESTAMP_MAX_ATTEMPTS", "8" if FAST_MODE else "4")))
 SUPPRESS_CODEC_WARNINGS = os.getenv("FISHLENS_SUPPRESS_CODEC_WARNINGS", "1") == "1"
-VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRAMES", "6" if FAST_MODE else "12")))
+VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRAMES", "12" if FAST_MODE else "6")))
 STRICT_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DURATION_SEC", "0.65")))
 LOOSE_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_LOOSE_MIN_TRACK_DURATION_SEC", "0.45")))
 MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
@@ -304,8 +307,8 @@ MIN_CROP_SIZE = max(1, int(os.getenv("FISHLENS_MIN_CROP_SIZE", "180")))
 
 # Classifier configuration
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
-CLASSIFIER_MODEL = _load_classifier_model(CLASSIFIER_MODEL_PATH)
-LOAD_IMG, IMG_TO_ARRAY = _load_keras_image_utils()
+CLASSIFIER_MODEL = None if IS_WORKER_MODE else _load_classifier_model(CLASSIFIER_MODEL_PATH)
+LOAD_IMG, IMG_TO_ARRAY = (None, None) if IS_WORKER_MODE else _load_keras_image_utils()
 CLASS_NAMES = ["Chinook", "Omykiss"]
 IMAGE_SIZE = _get_classifier_input_size(CLASSIFIER_MODEL, default=(150, 150))
 CLASSIFIER_PREPROCESS_MODE = _get_classifier_preprocess_mode(CLASSIFIER_MODEL)
@@ -344,7 +347,7 @@ def _init_csvs():
         for path, keys in [(OUTPUT_CSV, CSV_KEYS), (MASTER_FISH_CSV, CSV_KEYS)]:
             _initialize_csv_header(path, keys, overwrite=False)
 
-if not IS_WORKER_MODE:
+if not IS_WORKER_MODE and not IS_CLASSIFIER_MODE:
     _init_csvs()
 
 # Signal to the host application that models are loaded and we are ready for work.
@@ -1583,7 +1586,7 @@ def save_best_image(finished_tracks, video_path):
         start_token = _safe_path_component(str(track.get("start_time_sec", "0")).replace(".", "p"))
         track_token = _safe_path_component(track.get("trackId"), default="unknown_track")
         base_image_name = f"{safe_video_stem}_track_{track_token}_start_{start_token}"
-        classified_candidates = []
+        saved_candidates = []
 
         for index, candidate in enumerate(candidates[:CROP_CANDIDATE_LIMIT], start=1):
             crop = candidate.get("crop") if isinstance(candidate, dict) else candidate
@@ -1593,40 +1596,69 @@ def save_best_image(finished_tracks, video_path):
             enhanced_crop = enhance_image(crop)
             suffix = "" if index == 1 else f"_candidate_{index}"
             temp_image_name = f"{base_image_name}{suffix}.jpg"
-            temp_image_path = os.path.join(FISH_IMAGE_DIR, temp_image_name)
+            output_dir = FISH_IMAGE_PENDING_DIR if IS_WORKER_MODE and FISH_IMAGE_PENDING_DIR else FISH_IMAGE_DIR
+            os.makedirs(output_dir, exist_ok=True)
+            temp_image_path = os.path.join(output_dir, temp_image_name)
             write_ok = cv2.imwrite(temp_image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
             if not write_ok:
                 print(f"Failed to write image at {temp_image_path}. Skipping classification.")
                 continue
 
-            # Classify the saved image
-            species_data = classify_image(temp_image_path)
-            species = species_data[0] if species_data else "No data"
-            species_conf = float(species_data[1]) if species_data and len(species_data) > 1 else 0.0
-            classified_candidates.append(
+            saved_candidates.append(
                 {
                     "path": temp_image_path,
                     "name": temp_image_name,
-                    "species": species,
-                    "species_conf": species_conf,
                     "crop_score": float(candidate.get("score", 0.0)) if isinstance(candidate, dict) else 0.0,
+                    "confidence": float(candidate.get("confidence", 0.0)) if isinstance(candidate, dict) else 0.0,
                 }
             )
 
-        if classified_candidates:
-            classified_candidates.sort(
+            if IS_WORKER_MODE:
+                continue
+
+            # Legacy CLI mode still classifies inline. The WPF worker pool does a single
+            # classifier pass after all YOLO workers finish.
+            species_data = classify_image(temp_image_path)
+            species = species_data[0] if species_data else "No data"
+            species_conf = float(species_data[1]) if species_data and len(species_data) > 1 else 0.0
+            saved_candidates[-1].update(
+                {
+                    "species": species,
+                    "species_conf": species_conf,
+                }
+            )
+
+        if IS_WORKER_MODE:
+            if saved_candidates:
+                saved_candidates.sort(key=lambda c: (c["confidence"], c["crop_score"]), reverse=True)
+                selected = saved_candidates[0]
+                for rejected in saved_candidates[1:]:
+                    try:
+                        if os.path.exists(rejected["path"]):
+                            os.remove(rejected["path"])
+                    except OSError:
+                        pass
+                track["species"] = "No species"
+                track["species_confidence"] = "0.0000"
+                track["image_path"] = selected["path"]
+            else:
+                track["species"] = "No species"
+                track["species_confidence"] = "0.0000"
+                track["image_path"] = ""
+        elif saved_candidates:
+            saved_candidates.sort(
                 key=lambda c: (
-                    c["species"] in CLASS_NAMES,
-                    c["species_conf"],
+                    c.get("species") in CLASS_NAMES,
+                    c.get("species_conf", 0.0),
                     c["crop_score"],
                 ),
                 reverse=True,
             )
-            selected = classified_candidates[0]
+            selected = saved_candidates[0]
             track["species"] = selected["species"]
             track["species_confidence"] = f"{(selected['species_conf'] / 100):.4f}"
 
-            for rejected in classified_candidates[1:]:
+            for rejected in saved_candidates[1:]:
                 try:
                     if os.path.exists(rejected["path"]):
                         os.remove(rejected["path"])
@@ -1659,9 +1691,9 @@ def save_best_image(finished_tracks, video_path):
                 except OSError:
                     pass
         else:
-            track["species"] = "No data"
+            track["species"] = "No species"
             track["species_confidence"] = "0.0000"
-            track["image_path"] = None
+            track["image_path"] = ""
         
         # Remove best_crop from track dict (no need to export it)
         track.pop("best_crop", None)
@@ -1902,7 +1934,7 @@ def run_video_tracker(video_path, source_video_path=None):
     return vidData.v_finished_tracks
 
 def _process_video_with_retry(video_path, source_video_path):
-    """Two-pass processing: strict pass, then optional loose retry if fast mode may have skipped fish."""
+    """Two-pass processing: standard stride-3 pass, or slow stride-1 pass when enabled."""
     global FRAME_STRIDE, YOLO_CONFIDENCE_THRESHOLD, MIN_TRACK_DURATION_SEC
 
     original_stride = FRAME_STRIDE
@@ -1924,8 +1956,8 @@ def _process_video_with_retry(video_path, source_video_path):
             return []
 
     try:
-        # Pass 1: strict settings
-        FRAME_STRIDE = STRICT_FRAME_STRIDE
+        # Pass 1: normal analysis samples every third frame; Slow Mode inspects every frame.
+        FRAME_STRIDE = 1 if FAST_MODE else STRICT_FRAME_STRIDE
         YOLO_CONFIDENCE_THRESHOLD = STRICT_YOLO_CONFIDENCE_THRESHOLD
         MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
         video_tracks = _run_pass("strict")
@@ -1977,19 +2009,22 @@ def _apply_worker_context(context):
     """Apply per-job context supplied by the C# worker-pool coordinator."""
     global FISHLENS_LOCATION, FISHLENS_UPSTREAM_DIRECTION, FAST_MODE
     global FRAME_STRIDE, _RUN_FOLDER, _IS_DEBUG_RUN, _ALL_HISTORY_DIR, _RUN_NAME
-    global OUTPUT_CSV, SESSION_CSV, SESSION_NO_FISH_CSV, MASTER_FISH_CSV
+    global OUTPUT_CSV, SESSION_CSV, SESSION_NO_FISH_CSV, MASTER_FISH_CSV, FISH_IMAGE_PENDING_DIR
 
     context = context or {}
     FISHLENS_LOCATION = str(context.get("location") or "Unknown").strip() or "Unknown"
     upstream_direction = str(context.get("upstream_direction") or "left").strip().lower()
     FISHLENS_UPSTREAM_DIRECTION = upstream_direction if upstream_direction in {"left", "right"} else "left"
     FAST_MODE = bool(context.get("fast_mode", FAST_MODE))
-    FRAME_STRIDE = STRICT_FRAME_STRIDE
+    FRAME_STRIDE = 1 if FAST_MODE else STRICT_FRAME_STRIDE
 
     _RUN_FOLDER = str(context.get("run_folder") or "").strip()
     _IS_DEBUG_RUN = _RUN_FOLDER and os.path.basename(_RUN_FOLDER).lower() == "debug"
     _ALL_HISTORY_DIR = os.path.dirname(_RUN_FOLDER) if _RUN_FOLDER else PROJECT_ROOT
     _RUN_NAME = str(context.get("run_name") or (os.path.basename(_RUN_FOLDER) if _RUN_FOLDER else "")).strip()
+    FISH_IMAGE_PENDING_DIR = str(context.get("pending_image_folder") or "").strip()
+    if FISH_IMAGE_PENDING_DIR:
+        os.makedirs(FISH_IMAGE_PENDING_DIR, exist_ok=True)
 
     if _IS_DEBUG_RUN:
         OUTPUT_CSV = os.path.join(_RUN_FOLDER, "debug.csv") if _RUN_FOLDER else None
@@ -2054,7 +2089,7 @@ def _run_worker_server():
         try:
             _, tracks = _process_video_file(video_path)
             export_tracks = [
-                {key: track.get(key, "") for key in CSV_KEYS}
+                {key: track.get(key, "") for key in WORKER_RESULT_KEYS}
                 for track in tracks
             ]
             no_fish_row = None
@@ -2083,6 +2118,75 @@ def _run_worker_server():
                 error=str(exc),
                 traceback=traceback.format_exc(),
             )
+
+def _run_classifier_server():
+    """Persistent JSON-lines classifier used for the final species pass."""
+    _worker_emit("ready", classifier_pid=os.getpid())
+
+    for raw_line in sys.stdin:
+        raw_line = raw_line.strip()
+        if not raw_line:
+            continue
+
+        try:
+            command = json.loads(raw_line)
+        except Exception as exc:
+            _worker_emit("error", message=f"Invalid JSON command: {exc}")
+            continue
+
+        command_name = str(command.get("command") or "").strip().lower()
+        request_id = command.get("request_id")
+
+        if command_name == "ping":
+            _worker_emit("ready", request_id=request_id, classifier_pid=os.getpid())
+            continue
+
+        if command_name == "shutdown":
+            _worker_emit("shutdown_ack", request_id=request_id)
+            return
+
+        if command_name != "classify_batch":
+            _worker_emit("error", request_id=request_id, message=f"Unknown command: {command_name}")
+            continue
+
+        image_paths = command.get("image_paths") or []
+        classified_folder = str(command.get("classified_folder") or os.path.join(FISH_IMAGE_DIR, "classified")).strip()
+        os.makedirs(classified_folder, exist_ok=True)
+        results = []
+
+        for image_path in image_paths:
+            image_path = str(image_path or "").strip()
+            if not image_path:
+                continue
+
+            species_data = classify_image(image_path)
+            species = species_data[0] if species_data else "No species"
+            species_conf = float(species_data[1]) if species_data and len(species_data) > 1 else 0.0
+            safe_species = species if species in CLASS_NAMES else "no_species"
+            species_folder = os.path.join(classified_folder, _safe_path_component(safe_species, default="no_species"))
+            os.makedirs(species_folder, exist_ok=True)
+
+            final_path = image_path
+            try:
+                final_path = os.path.join(species_folder, os.path.basename(image_path))
+                if os.path.exists(final_path):
+                    base, ext = os.path.splitext(final_path)
+                    final_path = f"{base}_{datetime.now().strftime('%H%M%S%f')}{ext}"
+                shutil.move(image_path, final_path)
+            except Exception as exc:
+                print(f"[WARNING] Could not move classified image {image_path}: {exc}", flush=True)
+                final_path = image_path
+
+            results.append(
+                {
+                    "original_path": image_path,
+                    "final_path": final_path,
+                    "species": species if species in CLASS_NAMES else "No species",
+                    "species_confidence": f"{(species_conf / 100):.4f}",
+                }
+            )
+
+        _worker_emit("classification_finished", request_id=request_id, results=results)
 
 def main(input_path=None):
     """Process either one video or every video in a folder and flush results per video."""
@@ -2211,7 +2315,9 @@ def main(input_path=None):
 
 if __name__ == "__main__":
     # Persistent server loop: accept one folder path per line from stdin, process it, signal done.
-    if IS_WORKER_MODE:
+    if IS_CLASSIFIER_MODE:
+        _run_classifier_server()
+    elif IS_WORKER_MODE:
         _run_worker_server()
     elif CLI_INPUT_PATH:
         try:

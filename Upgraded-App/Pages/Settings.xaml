@@ -301,13 +301,13 @@
                         Margin="0,0,0,30">
                     <StackPanel>
                         <CheckBox x:Name="enableFastMode"
-                                  Content="Enable Fast Mode"
+                                  Content="Enable Slow Mode"
                                   FontSize="{DynamicResource BaseFontSize}"
                                   Foreground="{DynamicResource PrimaryText}"
                                   Margin="0,0,0,8"
                                   Click="ToggleFastMode"/>
 
-                        <TextBlock Text="Process every other frame and use a lower YOLO resolution. This speeds up analysis but may reduce accuracy."
+                        <TextBlock Text="Process every frame with higher analysis settings. This may improve difficult videos but will take longer."
                                    FontSize="{DynamicResource BaseFontSize}"
                                    Foreground="{DynamicResource SecondaryText}"
                                    TextWrapping="Wrap"/>

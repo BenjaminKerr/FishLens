@@ -462,7 +462,7 @@ namespace FishLens_App
 
         // **************************************************
         // Function: OnFastModeChanged
-        // Description: Restarts Python only when the user saves a Fast Mode change in Settings
+        // Description: Tracks the legacy FastMode setting, which now represents Slow Mode.
         // **************************************************
         private void OnFastModeChanged()
         {
@@ -470,7 +470,6 @@ namespace FishLens_App
             if (_yoloFastModeAtStart == fastMode) return; // no actual change, ignore
 
             _yoloFastModeAtStart = fastMode;
-            _workerPool.RestartWorkers();
         }
 
         // **************************************************

@@ -11,11 +11,9 @@ namespace FishLens_App.Services
 
             int desired = pendingVideos <= 4
                 ? 1
-                : pendingVideos <= 12
+                : pendingVideos <= 30
                     ? 2
-                    : pendingVideos <= 30
-                        ? 3
-                        : 4 + Math.Max(0, (pendingVideos - 31) / 30);
+                    : 3;
 
             return Math.Max(1, Math.Min(desired, GetMachineWorkerCap(logicalCpuCount, totalMemoryBytes)));
         }
@@ -27,19 +25,15 @@ namespace FishLens_App.Services
 
             int memoryCap = memoryGb < 12
                 ? 1
-                : memoryGb < 24
+                : memoryGb < 32
                     ? 2
-                    : memoryGb < 48
-                        ? 4
-                        : 5;
+                    : 3;
 
             int cpuCap = cpu < 6
                 ? 1
-                : cpu < 10
+                : cpu < 12
                     ? 2
-                    : cpu < 16
-                        ? 4
-                        : 5;
+                    : 3;
 
             return Math.Max(1, Math.Min(memoryCap, cpuCap));
         }
