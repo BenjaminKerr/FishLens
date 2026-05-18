@@ -237,7 +237,7 @@ def _resolve_run_workers(input_path, video_count):
     # Auto policy for any input directory: one worker per video up to available CPU-1.
     auto_workers = max(1, min(max(1, int(video_count or 1)), max(1, cpu_count - 1)))
 
-    return 4
+    return 2
     if requested in ("", "auto"):
         return auto_workers
 

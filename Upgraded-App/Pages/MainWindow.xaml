@@ -271,7 +271,7 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Width="20" Height="10">
+                                    <Border Height="10">
                                         <Border.Style>
                                             <Style TargetType="Border">
 
