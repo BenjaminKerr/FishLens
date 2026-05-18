@@ -1161,7 +1161,8 @@ namespace FishLens_App
                 }
                 else if (line.StartsWith("[INFO] Skipping"))
                 {
-
+                    var bar = Bars.FirstOrDefault(b => b.State == VideoProgressState.Empty);
+                    bar.SetComplete();
                 }
                 else if (line.StartsWith("[PROGRESS] VIDEO:"))
                 {
