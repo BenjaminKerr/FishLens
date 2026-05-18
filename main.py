@@ -10,8 +10,8 @@ import sys
 print("[PROGRESS] STARTUP", flush=True)
 
 import csv
-from concurrent.futures import ProcessPoolExecutor, as_completed
 import importlib
+import json
 import os
 import shutil
 import subprocess
@@ -135,6 +135,7 @@ def _resolve_classifier_model_path():
 # ========================================================================
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+IS_WORKER_MODE = "--worker-json" in sys.argv
 
 
 # CSV export schema
@@ -175,7 +176,7 @@ CORNER_ARTIFACT_MAX_SIZE = 0.20   # box must be < 20 % of frame width AND height
 FPS_DEFAULT = 30 
 MAX_EXPORT_PER_VIDEO = 5
 
-CLI_INPUT_PATH = sys.argv[1].strip() if len(sys.argv) > 1 else ""
+CLI_INPUT_PATH = next((arg.strip() for arg in sys.argv[1:] if not arg.startswith("--")), "")
 
 
 def _resolve_run_folder():
@@ -343,7 +344,8 @@ def _init_csvs():
         for path, keys in [(OUTPUT_CSV, CSV_KEYS), (MASTER_FISH_CSV, CSV_KEYS)]:
             _initialize_csv_header(path, keys, overwrite=False)
 
-_init_csvs()
+if not IS_WORKER_MODE:
+    _init_csvs()
 
 # Signal to the host application that models are loaded and we are ready for work.
 print("[PROGRESS] READY", flush=True)
@@ -1971,6 +1973,117 @@ def _process_video_file(item_path):
 
     return filename, video_tracks
 
+def _apply_worker_context(context):
+    """Apply per-job context supplied by the C# worker-pool coordinator."""
+    global FISHLENS_LOCATION, FISHLENS_UPSTREAM_DIRECTION, FAST_MODE
+    global FRAME_STRIDE, _RUN_FOLDER, _IS_DEBUG_RUN, _ALL_HISTORY_DIR, _RUN_NAME
+    global OUTPUT_CSV, SESSION_CSV, SESSION_NO_FISH_CSV, MASTER_FISH_CSV
+
+    context = context or {}
+    FISHLENS_LOCATION = str(context.get("location") or "Unknown").strip() or "Unknown"
+    upstream_direction = str(context.get("upstream_direction") or "left").strip().lower()
+    FISHLENS_UPSTREAM_DIRECTION = upstream_direction if upstream_direction in {"left", "right"} else "left"
+    FAST_MODE = bool(context.get("fast_mode", FAST_MODE))
+    FRAME_STRIDE = STRICT_FRAME_STRIDE
+
+    _RUN_FOLDER = str(context.get("run_folder") or "").strip()
+    _IS_DEBUG_RUN = _RUN_FOLDER and os.path.basename(_RUN_FOLDER).lower() == "debug"
+    _ALL_HISTORY_DIR = os.path.dirname(_RUN_FOLDER) if _RUN_FOLDER else PROJECT_ROOT
+    _RUN_NAME = str(context.get("run_name") or (os.path.basename(_RUN_FOLDER) if _RUN_FOLDER else "")).strip()
+
+    if _IS_DEBUG_RUN:
+        OUTPUT_CSV = os.path.join(_RUN_FOLDER, "debug.csv") if _RUN_FOLDER else None
+        SESSION_CSV = None
+        SESSION_NO_FISH_CSV = None
+        MASTER_FISH_CSV = None
+    else:
+        SESSION_CSV = os.path.join(_RUN_FOLDER, "session_fish.csv") if _RUN_FOLDER else None
+        SESSION_NO_FISH_CSV = os.path.join(_RUN_FOLDER, "session_no_fish.csv") if _RUN_FOLDER else None
+        OUTPUT_CSV = os.path.join(_RUN_FOLDER, "run_master.csv") if _RUN_FOLDER else None
+        MASTER_FISH_CSV = os.path.join(_ALL_HISTORY_DIR, "all_history.csv") if _RUN_FOLDER else None
+
+def _worker_emit(event, **payload):
+    message = {"event": event}
+    message.update(payload)
+    print(json.dumps(message, separators=(",", ":")), flush=True)
+
+def _run_worker_server():
+    """Persistent JSON-lines worker server used by the WPF coordinator."""
+    _worker_emit("ready", worker_pid=os.getpid())
+
+    for raw_line in sys.stdin:
+        raw_line = raw_line.strip()
+        if not raw_line:
+            continue
+
+        try:
+            command = json.loads(raw_line)
+        except Exception as exc:
+            _worker_emit("error", message=f"Invalid JSON command: {exc}")
+            continue
+
+        command_name = str(command.get("command") or "").strip().lower()
+        request_id = command.get("request_id")
+
+        if command_name == "ping":
+            _worker_emit("ready", request_id=request_id, worker_pid=os.getpid())
+            continue
+
+        if command_name == "load":
+            # Models are loaded at module startup; this acknowledges readiness.
+            _worker_emit("ready", request_id=request_id, worker_pid=os.getpid())
+            continue
+
+        if command_name == "shutdown":
+            _worker_emit("shutdown_ack", request_id=request_id)
+            return
+
+        if command_name == "cancel":
+            _worker_emit("cancelled", request_id=request_id)
+            continue
+
+        if command_name != "analyze_video":
+            _worker_emit("error", request_id=request_id, message=f"Unknown command: {command_name}")
+            continue
+
+        video_path = str(command.get("video_path") or "").strip()
+        _apply_worker_context(command.get("context") or {})
+        filename = os.path.basename(video_path)
+        _worker_emit("video_started", request_id=request_id, video_file=video_path, filename=filename)
+
+        try:
+            _, tracks = _process_video_file(video_path)
+            export_tracks = [
+                {key: track.get(key, "") for key in CSV_KEYS}
+                for track in tracks
+            ]
+            no_fish_row = None
+            if not export_tracks:
+                no_fish_row = {
+                    "video_file": video_path,
+                    "location": FISHLENS_LOCATION,
+                    "video_timestamp": "Not detected",
+                    "run": _RUN_NAME,
+                }
+            _worker_emit(
+                "video_finished",
+                request_id=request_id,
+                video_file=video_path,
+                filename=filename,
+                tracks=export_tracks,
+                no_fish_row=no_fish_row,
+            )
+        except Exception as exc:
+            import traceback
+            _worker_emit(
+                "video_failed",
+                request_id=request_id,
+                video_file=video_path,
+                filename=filename,
+                error=str(exc),
+                traceback=traceback.format_exc(),
+            )
+
 def main(input_path=None):
     """Process either one video or every video in a folder and flush results per video."""
     if input_path is None:
@@ -2072,38 +2185,6 @@ def main(input_path=None):
         _apply_run_workers(run_workers)
         print(f"[INFO] Worker policy selected RUN_WORKERS={RUN_WORKERS}")
 
-        if run_workers > 1:
-            with ProcessPoolExecutor(max_workers=run_workers) as executor:
-                future_to_path = {
-                    executor.submit(_process_video_file, item_path): item_path
-                    for item_path in pending_paths
-                }
-
-                completed = 0
-                for future in as_completed(future_to_path):
-                    item_path = future_to_path[future]
-                    filename = os.path.basename(item_path)
-                    completed += 1
-                    print(f"[PROGRESS] VIDEO:{completed}/{pending_total}|{filename}", flush=True)
-
-                    try:
-                        _, video_tracks = future.result()
-                    except Exception as e:
-                        print(f"[ERROR] Failed to process {filename}: {e}")
-                        video_tracks = []
-
-                    if video_tracks:
-                        try:
-                            _flush_tracks_to_csv(video_tracks)
-                            print(f"[SUCCESS] Exported {len(video_tracks)} fish tracks for {filename}.")
-                        except Exception as e:
-                            print(f"[ERROR] Failed to write CSV for {filename}: {e}")
-                    else:
-                        print(f"[INFO] No fish tracks to export for {filename}.")
-
-                    print(f"[PROGRESS] VIDEO_DONE:{filename}", flush=True)
-            return
-
         for video_index, item_path in enumerate(pending_paths, start=1):
             filename = os.path.basename(item_path)
             print(f"[PROGRESS] VIDEO:{video_index}/{pending_total}|{filename}", flush=True)
@@ -2130,7 +2211,9 @@ def main(input_path=None):
 
 if __name__ == "__main__":
     # Persistent server loop: accept one folder path per line from stdin, process it, signal done.
-    if CLI_INPUT_PATH:
+    if IS_WORKER_MODE:
+        _run_worker_server()
+    elif CLI_INPUT_PATH:
         try:
             main(CLI_INPUT_PATH)
         except Exception as e:
