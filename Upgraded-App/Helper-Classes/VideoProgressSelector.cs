@@ -26,12 +26,12 @@ namespace FishLens_App
         // Notes: N/A
         public override DataTemplate SelectTemplate(object item, DependencyObject container)
         {
-            if (item is MainWindow.VideoProgressState state)
+            if (item is VideoProgressStatus vps)
             {
-                return state switch
+                return vps.State switch
                 {
-                    MainWindow.VideoProgressState.Filled => FilledTemplate,
-                    MainWindow.VideoProgressState.Active => ActiveTemplate,
+                    VideoProgressState.InProgress=> FilledTemplate,
+                    VideoProgressState.Filled => ActiveTemplate,
                     _ => EmptyTemplate
                 };
             }

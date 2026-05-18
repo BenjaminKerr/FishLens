@@ -22,18 +22,15 @@ namespace FishLens_App
         // Description: Builds a new row of bars as a 
         // collective progress bar.
         // Notes: N/A
-        public List<MainWindow.VideoProgressState> Build(int count, int currentIndex)
+        public List<VideoProgressStatus> InitialBuild(int count)
         {
-            var result = new List<MainWindow.VideoProgressState>();
+            var result = new List<VideoProgressStatus>();
 
             for (int i = 0; i < count; i++)
             {
-                if (i < currentIndex)
-                    result.Add(MainWindow.VideoProgressState.Filled);
-                else if (i == currentIndex)
-                    result.Add(MainWindow.VideoProgressState.Active);
-                else
-                    result.Add(MainWindow.VideoProgressState.Empty);
+                result.Add(new VideoProgressStatus
+                { Status = "Empty" });
+
             }
 
             return result;

@@ -99,8 +99,7 @@ namespace FishLens_App
         private int _suppressTimerTicks = 0;
         private string _playbackTempPath = null; // temp MP4 created from ASF for accurate scrubbing
         private bool _processingComplete = false;
-        public enum VideoProgressState { Empty, Active, Filled }
-        public ObservableCollection<VideoProgressState> Bars { get; } = new ObservableCollection<VideoProgressState>();
+        public ObservableCollection<VideoProgressStatus> Bars { get; } = new ObservableCollection<VideoProgressStatus>();
         public ObservableCollection<VideoProgressStatus> ThreadStatuses { get; } = new ObservableCollection<VideoProgressStatus>();
 
 
@@ -1152,7 +1151,7 @@ namespace FishLens_App
                     Dispatcher.Invoke(() =>
                     {
                         Bars.Clear();
-                        foreach (var b in _builder.Build(_totalVideos, 0))
+                        foreach (var b in _builder.InitialBuild(_totalVideos))
                         {
                             Bars.Add(b);
                         }
@@ -1192,10 +1191,10 @@ namespace FishLens_App
 
                         if (existing == null)
                         {
-                            ThreadStatuses.Add(new VideoProgressStatus
+                            ThreadStatuses.Add(new VideoProgressStatus()
                             {
-                                Pid = pid,
-                                Message = _currentVideoStatus
+                                Message = _currentVideoStatus,
+                                Pid = pid
                             });
                         }
                         else
@@ -1206,12 +1205,12 @@ namespace FishLens_App
                         SetAnalysisStatus(_currentVideoStatus);
                         SetAnalysisFrameInfo(string.Empty); // clear frame line between videos
 
-                        var newBars = _builder.Build(_totalVideos, capturedCurrent - 1);
+                       // var newBars = _builder.Build(_totalVideos, capturedCurrent - 1);
 
-                        Bars.Clear();
-                        foreach (var b in newBars)
+                        //Bars.Clear();
+                       // foreach (var b in newBars)
                         {
-                            Bars.Add(b);
+                         //   Bars.Add(b);
                         }
                     });
                     
