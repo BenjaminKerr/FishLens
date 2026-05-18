@@ -15,34 +15,33 @@
 
     <Window.Resources>
 
-        <DataTemplate x:Key="FilledSegment">
-            <Rectangle Fill ="#40842F" Height="10"/>
-        </DataTemplate>
+        
+        <DataTemplate x:Key="Template">
+            <Rectangle Height="10">
+                <Rectangle.Style>
+                    <Style TargetType="Rectangle">
+                        <!-- default -->
+                        <Setter Property="Fill" Value="{DynamicResource WindowBackground}" />
+                        <Setter Property="Opacity" Value="1"/>
+                        <Style.Triggers>
+                            <!-- IN PROGRESS -->
+                            <DataTrigger Binding="{Binding State}" Value="InProgress">
 
-        <DataTemplate x:Key="EmptySegment">
-            <Rectangle Fill="{DynamicResource WindowBackground}" Height="10"/>
-        </DataTemplate>
+                                <Setter Property="Fill" Value="#E8A038"/>
 
-        <DataTemplate x:Key="ActiveSegment">
-            <Rectangle Fill="#E8A038" Height="10">
-                <Rectangle.Triggers>
-                    <EventTrigger RoutedEvent="Loaded">
-                        <BeginStoryboard>
-                            <Storyboard RepeatBehavior="Forever">
-                                <DoubleAnimation
-                        Storyboard.TargetProperty="Opacity"
-                        From="0.4" To="1"
-                        Duration="0:0:0.6"
-                        AutoReverse="True"/>
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </EventTrigger>
-                </Rectangle.Triggers>
+                            </DataTrigger>
+                            <!-- FILLED -->
+                            <DataTrigger Binding="{Binding State}" Value="Filled">
+                                <Setter Property="Fill" Value="#40842F"/>
+                                <Setter Property="Opacity" Value="1"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Rectangle.Style>
             </Rectangle>
         </DataTemplate>
-
     </Window.Resources>
-
+    
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition x:Name ="SidebarColumn" Width="Auto"/>
@@ -263,28 +262,72 @@
                                     Margin="8,0,0,0"
                                     Opacity="0.75"/>
                         </Grid>
-                        <TextBlock x:Name="analysisFrameText"
-                                   Text=""
-                                   Foreground="{DynamicResource OnAccentForeground}"
-                                   FontSize="11"
-                                   Opacity="0.6"
-                                   Margin="0,0,0,8"
-                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="analysisFrameText" Text="" Foreground="{DynamicResource OnAccentForeground}" FontSize="11" Opacity="0.6" Margin="0,0,0,8" TextTrimming="CharacterEllipsis"/>
                         <ItemsControl ItemsSource="{Binding Bars}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <UniformGrid Rows="1"/>
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Width="20" Height="10">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
 
-                            <ItemsControl.ItemTemplateSelector>
-                                <local:VideoProgressSelector
-                                    FilledTemplate="{StaticResource FilledSegment}"
-                                    EmptyTemplate="{StaticResource EmptySegment}"
-                                    ActiveTemplate="{StaticResource ActiveSegment}" />
-                            </ItemsControl.ItemTemplateSelector>
+                                                <!-- base state -->
+                                                <Setter Property="Background"
+                            Value="{DynamicResource WindowBackground}" />
+                                                <Setter Property="Opacity" Value="1"/>
+
+                                                <Style.Triggers>
+
+                                                    <!-- EMPTY -->
+                                                    <DataTrigger Binding="{Binding State}" Value="Empty">
+                                                        <Setter Property="Background"
+                                    Value="{DynamicResource WindowBackground}" />
+                                                        <Setter Property="Opacity" Value="1"/>
+                                                    </DataTrigger>
+
+                                                    <!-- IN PROGRESS (VISIBLE + OBVIOUS ANIMATION) -->
+                                                    <DataTrigger Binding="{Binding State}" Value="InProgress">
+
+                                                        <Setter Property="Background" Value="#E8A038"/>
+
+                                                        <DataTrigger.EnterActions>
+                                                            <BeginStoryboard x:Name="Pulse">
+                                                                <Storyboard>
+                                                                    <DoubleAnimation
+                                            Storyboard.TargetProperty="Opacity"
+                                            From="0.2"
+                                            To="1"
+                                            Duration="0:0:0.8"
+                                            AutoReverse="True"
+                                            RepeatBehavior="Forever"/>
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </DataTrigger.EnterActions>
+
+                                                        <DataTrigger.ExitActions>
+                                                            <StopStoryboard BeginStoryboardName="Pulse"/>
+                                                        </DataTrigger.ExitActions>
+
+                                                    </DataTrigger>
+
+                                                    <!-- FILLED -->
+                                                    <DataTrigger Binding="{Binding State}" Value="Filled">
+                                                        <Setter Property="Background" Value="#40842F"/>
+                                                        <Setter Property="Opacity" Value="1"/>
+                                                    </DataTrigger>
+
+                                                </Style.Triggers>
+
+                                            </Style>
+                                        </Border.Style>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
                         </ItemsControl>
-
                         <ItemsControl ItemsSource="{Binding ThreadStatuses}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -292,7 +335,6 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        
                     </StackPanel>
                 </Border>
 

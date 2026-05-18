@@ -30,8 +30,8 @@ namespace FishLens_App
             {
                 return vps.State switch
                 {
-                    VideoProgressState.InProgress=> FilledTemplate,
-                    VideoProgressState.Filled => ActiveTemplate,
+                    VideoProgressState.InProgress=> ActiveTemplate,
+                    VideoProgressState.Filled => FilledTemplate,
                     _ => EmptyTemplate
                 };
             }

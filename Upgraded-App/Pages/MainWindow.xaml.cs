@@ -106,6 +106,7 @@ namespace FishLens_App
         // Multi-track state - all tracks for the currently displayed video
         private List<FishLens_App.Models.Video> _currentTracks = new List<FishLens_App.Models.Video>();
         private int _currentTrackIndex;
+        int threadID = 0; //CHANGE THIS LATER
 
 
         #endregion
@@ -1196,6 +1197,9 @@ namespace FishLens_App
                                 Message = _currentVideoStatus,
                                 Pid = pid
                             });
+
+                            Bars[threadID].SetInProgress();
+                            threadID++;
                         }
                         else
                         {
