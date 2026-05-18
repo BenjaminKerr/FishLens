@@ -1170,7 +1170,7 @@ namespace FishLens_App
                     var sections = payload.Split('|');
 
                     if (sections.Length != 3)
-                        return;
+                        continue;
 
                     string filename = sections[0];
                     string pidString = sections[1];
@@ -1188,8 +1188,8 @@ namespace FishLens_App
                         return;
                     }
 
-                    _currentVideoStatus = $"Processing {filename} - Frame {currentFrame}/{totalFrames} ";
-                    int capturedCurrent = currentFrame;
+                    string currentVideoStatus =
+                        $"Processing {filename} - Frame {currentFrame}/{totalFrames}";
 
 
                     Dispatcher.BeginInvoke(() =>
@@ -1200,7 +1200,7 @@ namespace FishLens_App
                     {
                             VideoProgressStatus status = new VideoProgressStatus()
                             {
-                                Message = _currentVideoStatus,
+                                Message = currentVideoStatus,
                                 Pid = pid,
                                 Filename = filename
                             };
@@ -1224,19 +1224,11 @@ namespace FishLens_App
                                     bar.SetInProgress();
                                 }
                             }
-                            existing.Message = _currentVideoStatus;
+                            existing.Message = currentVideoStatus;
                         }
 
-                        SetAnalysisStatus(_currentVideoStatus);
                         SetAnalysisFrameInfo(string.Empty); // clear frame line between videos
 
-                       // var newBars = _builder.Build(_totalVideos, capturedCurrent - 1);
-
-                        //Bars.Clear();
-                       // foreach (var b in newBars)
-                        {
-                         //   Bars.Add(b);
-                        }
                     });
                     
                 }
@@ -1276,19 +1268,23 @@ namespace FishLens_App
 
 
 
-                    Dispatcher.Invoke(() =>
+                    Dispatcher.BeginInvoke(() =>
                     {
-                        string filename = line.Split(' ')[2];
-                        var cleanName = filename.Trim();
+                        string filename = line.Substring("[PROGRESS] VIDEO_DONE:".Length).Trim();
 
                         var threadStatus =
                             ThreadStatuses.FirstOrDefault(x =>
-                                x.Filename != null &&
-                                x.Filename.Trim() == cleanName);
-                        var bar = Bars[threadStatus.VideoIndex];
+                            string.Equals(
+                                x.Filename?.Trim(),
+                                filename,
+                                StringComparison.OrdinalIgnoreCase));
 
-                        if (bar != null)
-                            bar.SetComplete();
+                        if (threadStatus != null &&
+                            threadStatus.VideoIndex >= 0 &&
+                            threadStatus.VideoIndex < Bars.Count)
+                        {
+                            Bars[threadStatus.VideoIndex]?.SetComplete();
+                        }
                         
                     });
                     threadID++;
