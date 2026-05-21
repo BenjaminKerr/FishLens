@@ -116,21 +116,58 @@ namespace FishLens_App.Services
             }
         }
 
+        // **************************************************
+        // Function: NormalizeVideoFile
+        // Description: Reduces any VideoFile value to just the filename (no directory path).
+        //              Python writes full paths; C# sometimes writes just filenames. The upsert
+        //              key uses VideoFile so both must produce the same string.
+        // **************************************************
+        private static string NormalizeVideoFile(string rawPath)
+        {
+            string result = rawPath ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(result))
+                result = Path.GetFileName(result.Trim());
+            return result;
+        }
+
+        // **************************************************
+        // Function: NormalizeStartTimeSec
+        // Description: Collapses equivalent zero representations ("0", "0.0", "00.00", "")
+        //              to the canonical sentinel "0" so the upsert key never diverges across
+        //              code paths that all mean "no fish detected at a specific time".
+        //              Non-zero fish detection times are returned as-is.
+        // **************************************************
+        private static string NormalizeStartTimeSec(string raw)
+        {
+            string result = raw?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(result))
+                result = "0";
+            else if (double.TryParse(result, out double val) && val == 0.0)
+                result = "0";
+            return result;
+        }
+
         private static void UpsertDetection(SqlConnection conn, Video video, int orgId, int userId)
         {
             using var cmd = new SqlCommand("kaharra.UpsertFishDetection", conn);
             cmd.CommandType = System.Data.CommandType.StoredProcedure;
 
+            // Normalize the two key columns so every code path produces the same strings and
+            // the SP's IF EXISTS check always finds the right row instead of inserting a duplicate.
+            string videoFile    = NormalizeVideoFile(video.VideoFilePath ?? video.Name);
+            string startTimeSec = NormalizeStartTimeSec(video.StartTime);
+
             cmd.Parameters.AddWithValue("@pOrgId",              orgId);
-            cmd.Parameters.AddWithValue("@pRunName",            (object)video.Run          ?? string.Empty);
-            cmd.Parameters.AddWithValue("@pLocationName",       (object)video.Location     ?? "Unknown");
-            cmd.Parameters.AddWithValue("@pVideoFile",          (object)video.VideoFilePath ?? video.Name ?? string.Empty);
+            cmd.Parameters.AddWithValue("@pRunName",            (object)video.Run ?? string.Empty);
+            cmd.Parameters.AddWithValue("@pLocationName",
+                string.IsNullOrWhiteSpace(video.Location) ? "Unknown" : (object)video.Location);
+            cmd.Parameters.AddWithValue("@pVideoFile",          videoFile);
             cmd.Parameters.AddWithValue("@pSpecies",            string.IsNullOrEmpty(video.Species) ? DBNull.Value : (object)video.Species);
             cmd.Parameters.AddWithValue("@pSpeciesConfidence",  video.SpeciesConfidence > 0 ? (object)video.SpeciesConfidence : DBNull.Value);
             cmd.Parameters.AddWithValue("@pLikelyClass",        string.IsNullOrEmpty(video.LikelyClass) ? DBNull.Value : (object)video.LikelyClass);
             cmd.Parameters.AddWithValue("@pConfidence",         video.AvgConfidence > 0 ? (object)video.AvgConfidence : DBNull.Value);
             cmd.Parameters.AddWithValue("@pDirection",          string.IsNullOrEmpty(video.Direction) ? DBNull.Value : (object)video.Direction);
-            cmd.Parameters.AddWithValue("@pStartTimeSec",       string.IsNullOrEmpty(video.StartTime) ? DBNull.Value : (object)video.StartTime);
+            cmd.Parameters.AddWithValue("@pStartTimeSec",       startTimeSec);
             cmd.Parameters.AddWithValue("@pEndTimeSec",         string.IsNullOrEmpty(video.EndTime) ? DBNull.Value : (object)video.EndTime);
             cmd.Parameters.AddWithValue("@pDetectionTimestamp", (object)video.DetectionTimestamp ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@pCreatedByUserId",    userId > 0 ? (object)userId : DBNull.Value);

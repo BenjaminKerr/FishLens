@@ -1509,10 +1509,12 @@ def dedupe_duplicate_track_ids(finished_tracks):
     return sorted(kept, key=lambda t: _start(t))
 
 def no_fish_found(video_path, filename):
-    """Log that a video produced no fish tracks after all configured passes."""
+    """Log that a video produced no fish tracks after all configured passes,
+    then persist the result so the C# app and skip-check can find it next run."""
     print("***************************************************************")
     print(f"No fish detected in {filename}. Skipping export.")
     print("***************************************************************")
+    _append_no_fish_row(video_path, None)
 
 def _append_no_fish_row(video_file_path, video_timestamp):
     """Append a no-fish result to the slim session file and the master CSV outputs."""
@@ -1523,9 +1525,13 @@ def _append_no_fish_row(video_file_path, video_timestamp):
     }
     # Full-schema row for the master files; likely_class="no_fish" is the fish-present indicator.
     # Fish-specific fields are left blank so the master CSV has a uniform shape for every video.
+    # start_time_sec / end_time_sec are set to "0" (the no-fish sentinel) so the upsert key
+    # (OrgId, RunName, VideoFile, StartTimeSec) is always "0" for these rows and never NULL.
     master_row = {k: "" for k in CSV_KEYS}
     master_row["video_file"]      = video_file_path
     master_row["likely_class"]    = "no_fish"
+    master_row["start_time_sec"]  = "0"
+    master_row["end_time_sec"]    = "0"
     master_row["video_timestamp"] = video_timestamp or "Not detected"
     master_row["location"]        = FISHLENS_LOCATION
     master_row["run"]             = _RUN_NAME

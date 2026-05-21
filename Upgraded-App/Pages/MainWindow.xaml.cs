@@ -2456,7 +2456,21 @@ namespace FishLens_App
             bool convertingToFish = newLikelyClass.Equals("fish", StringComparison.OrdinalIgnoreCase);
 
             string videoFile  = track?.VideoFilePath ?? videoName;
-            string location   = track?.Location ?? string.Empty;
+
+            // Prefer the track's own location. Fall back to the session-active location when
+            // the track location is absent or still the generic default written by Python on
+            // first analysis (before the user explicitly set a location).
+            string location = track?.Location ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(location) || location.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+            {
+                string activeLocation = (Application.Current as App)?.ActiveLocation ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(activeLocation)
+                    && !activeLocation.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+                {
+                    location = activeLocation;
+                }
+            }
+
             string timestamp  = track?.DetectionTimestamp.HasValue == true
                 ? track.DetectionTimestamp.Value.ToString("yyyy/MM/dd HH:mm:ss")
                 : string.Empty;
@@ -2478,7 +2492,12 @@ namespace FishLens_App
                 FishLens_App.Services.CsvUtils.RemoveVideoFromCsv(noFishPath, videoName);
 
                 if (track != null)
+                {
                     track.LikelyClass = newLikelyClass;
+                    // Propagate the resolved location back onto the in-memory track so that
+                    // the UpsertTrackToDb call in SaveButtonClick stores the correct value.
+                    track.Location = location;
+                }
             }
         }
 

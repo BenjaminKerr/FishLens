@@ -406,6 +406,7 @@ namespace FishLens_App
             var stats = InitializeStatistics();
             stats.TotalDetections = csvLines.Length;
             double totalConfidence = 0;
+            int confidenceCount = 0;   // tracks rows that actually have a positive confidence value
             double totalCorrectness = 0;
             int correctnessCount = 0;
             var uniqueDates = new HashSet<DateTime>();
@@ -455,7 +456,12 @@ namespace FishLens_App
                 ProcessDirectionData(stats, direction);
                 // Only track fish detections in VideoDetections (for bar charts)
                 ProcessVideoData(stats, videoName);
-                totalConfidence += ProcessConfidenceData(stats, columns);
+                double rowConf = ProcessConfidenceData(stats, columns);
+                if (rowConf > 0)
+                {
+                    totalConfidence += rowConf;
+                    confidenceCount++;
+                }
 
                 // col 9: video_timestamp (full datetime string)
                 DateTime? timestamp = null;
@@ -516,7 +522,7 @@ namespace FishLens_App
             stats.TotalDetections -= stats.NoFishCount;
             stats.TotalVideoCount  = uniqueVideos.Count;
 
-            stats.AverageConfidence = CalculateAverageConfidence(totalConfidence, stats.TotalDetections);
+            stats.AverageConfidence = CalculateAverageConfidence(totalConfidence, confidenceCount);
             stats.AverageCorrectness = correctnessCount > 0 ? totalCorrectness / correctnessCount : 0;
 
             // Calculate fish per day
