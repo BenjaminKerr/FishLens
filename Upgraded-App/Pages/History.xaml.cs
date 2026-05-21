@@ -8,6 +8,7 @@ using FishLens_App.Interfaces;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using System;
+using System.Data.SqlClient;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -1067,33 +1068,97 @@ namespace FishLens_App
         // **************************************************
         private string[] ReadAllDataLines(string filterRun)
         {
-            string csvPath = GetCsvPathForRun(filterRun);
-            var lines = new List<string>();
+            bool useDb = string.IsNullOrWhiteSpace(filterRun) || filterRun == "All";
+            var app = Application.Current as App;
+            string[] result;
 
-            if (File.Exists(csvPath))
-                lines.AddRange(File.ReadAllLines(csvPath).Skip(1)); // skip header
-
-            if (filterRun == "CurrentSession")
+            if (useDb && app != null && app.CurrentOrganizationId > 0)
             {
-                string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(activeRun))
+                result = ReadAllDataLinesFromDb(app.CurrentOrganizationId, app.connectionString);
+            }
+            else
+            {
+                string csvPath = GetCsvPathForRun(filterRun);
+                var lines = new List<string>();
+
+                if (File.Exists(csvPath))
+                    lines.AddRange(File.ReadAllLines(csvPath).Skip(1)); // skip header
+
+                if (filterRun == "CurrentSession")
                 {
-                    string noFishPath = _pathResolver.ResolveSessionNoFishCsvPath(activeRun);
-                    if (File.Exists(noFishPath))
+                    string activeRun = app?.ActiveRun ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(activeRun))
                     {
-                        foreach (string line in File.ReadLines(noFishPath).Skip(1))
+                        string noFishPath = _pathResolver.ResolveSessionNoFishCsvPath(activeRun);
+                        if (File.Exists(noFishPath))
                         {
-                            if (string.IsNullOrWhiteSpace(line)) continue;
-                            var parts = line.Split(',');
-                            if (parts.Length < 3) continue;
-                            // Pad to fish schema; timestamp (col 2 in no-fish) moves to col 9 and run to col 10.
-                            string padded = $"{parts[0]},{parts[1]},,0,no_fish,0,,0,0,{parts[2]},{activeRun}";
-                            lines.Add(padded);
+                            foreach (string line in File.ReadLines(noFishPath).Skip(1))
+                            {
+                                if (!string.IsNullOrWhiteSpace(line))
+                                {
+                                    var parts = line.Split(',');
+                                    if (parts.Length >= 3)
+                                    {
+                                        // Pad to fish schema; timestamp (col 2 in no-fish) moves to col 9 and run to col 10.
+                                        string padded = $"{parts[0]},{parts[1]},,0,no_fish,0,,0,0,{parts[2]},{activeRun}";
+                                        lines.Add(padded);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
+
+                result = lines.ToArray();
             }
 
+            return result;
+        }
+
+        // **************************************************
+        // Function: ReadAllDataLinesFromDb
+        // Description: Queries FishDetections for the org and returns rows in the same
+        //              11-column CSV format used by all existing filter and stats logic.
+        // **************************************************
+        private string[] ReadAllDataLinesFromDb(int orgId, string connectionString)
+        {
+            var lines = new List<string>();
+            try
+            {
+                using var conn = new SqlConnection(connectionString);
+                conn.Open();
+                using var cmd = new SqlCommand("kaharra.GetFishDetectionsByOrg", conn);
+                cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                cmd.Parameters.AddWithValue("@pOrgId",        orgId);
+                cmd.Parameters.AddWithValue("@pRunName",      DBNull.Value);
+                cmd.Parameters.AddWithValue("@pLocationName", DBNull.Value);
+
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    string videoFile   = reader["VideoFile"]?.ToString()    ?? string.Empty;
+                    string location    = reader["LocationName"]?.ToString() ?? string.Empty;
+                    string species     = reader["Species"]?.ToString()      ?? string.Empty;
+                    string speciesConf = reader["SpeciesConfidence"] == DBNull.Value
+                        ? "0" : ((double)reader["SpeciesConfidence"]).ToString("F4");
+                    string likelyClass = reader["LikelyClass"]?.ToString()  ?? string.Empty;
+                    string confidence  = reader["Confidence"] == DBNull.Value
+                        ? "0" : ((double)reader["Confidence"]).ToString("F4");
+                    string direction   = reader["Direction"]?.ToString()    ?? string.Empty;
+                    string startTime   = reader["StartTimeSec"]?.ToString() ?? "0";
+                    string endTime     = reader["EndTimeSec"]?.ToString()   ?? "0";
+                    string timestamp   = reader["DetectionTimestamp"] == DBNull.Value
+                        ? string.Empty
+                        : ((DateTime)reader["DetectionTimestamp"]).ToString("yyyy/MM/dd HH:mm:ss");
+                    string run         = reader["RunName"]?.ToString()      ?? string.Empty;
+
+                    lines.Add($"{videoFile},{location},{species},{speciesConf},{likelyClass},{confidence},{direction},{startTime},{endTime},{timestamp},{run}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reading detections from DB for org {OrgId}", orgId);
+            }
             return lines.ToArray();
         }
 

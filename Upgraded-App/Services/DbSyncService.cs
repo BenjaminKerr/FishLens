@@ -25,11 +25,15 @@ namespace FishLens_App.Services
 
                 for (int i = 1; i < lines.Length; i++)
                 {
-                    if (string.IsNullOrWhiteSpace(lines[i])) continue;
-                    var cols = CsvUtils.ParseCsvLine(lines[i]);
-                    if (cols.Length < 2) continue;
-                    var video = CsvUtils.ParseVideoFromColumns(cols);
-                    UpsertDetection(conn, video, orgId, userId);
+                    if (!string.IsNullOrWhiteSpace(lines[i]))
+                    {
+                        var cols = CsvUtils.ParseCsvLine(lines[i]);
+                        if (cols.Length >= 2)
+                        {
+                            var video = CsvUtils.ParseVideoFromColumns(cols);
+                            UpsertDetection(conn, video, orgId, userId);
+                        }
+                    }
                 }
             }
         }
