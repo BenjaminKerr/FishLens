@@ -1535,6 +1535,39 @@ def _probe_video_timestamp_only(video_path):
         print(f"[WARN] Timestamp probe for no-fish video failed: {e}")
     return ts
 
+def _probe_no_fish_video_timestamp(video_path):
+    """Probe a no-fish video for an OCR timestamp without writing any CSV rows."""
+    ts = _probe_video_timestamp_only(video_path)
+    if ts:
+        return ts
+
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            return None
+
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+        fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
+        if total_frames > 0:
+            start_frame = max(0, total_frames - int(max(fps * 3, VIDEO_TIMESTAMP_PROBE_FRAMES)))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+
+        attempts = max(1, VIDEO_TIMESTAMP_PROBE_FRAMES)
+        for _ in range(attempts):
+            ret, frame = _video_capture_read(cap)
+            if not ret or frame is None:
+                break
+            result = extractTimestamFromFrame(frame, False)
+            if result and result[0]:
+                cap.release()
+                return result[0]
+
+        cap.release()
+    except Exception as e:
+        print(f"[WARN] Late timestamp probe for no-fish video failed: {e}")
+
+    return None
+
 def no_fish_found(video_path, filename, probe_video_path=None):
     """Log that a video produced no fish tracks after all configured passes,
     then persist the result so the C# app and skip-check can find it next run.
@@ -2132,10 +2165,11 @@ def _run_worker_server():
             ]
             no_fish_row = None
             if not export_tracks:
+                no_fish_timestamp = _probe_no_fish_video_timestamp(video_path)
                 no_fish_row = {
                     "video_file": video_path,
                     "location": FISHLENS_LOCATION,
-                    "video_timestamp": "Not detected",
+                    "video_timestamp": no_fish_timestamp or "Not detected",
                     "run": _RUN_NAME,
                 }
             _worker_emit(
