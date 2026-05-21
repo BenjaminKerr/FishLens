@@ -99,6 +99,10 @@ namespace FishLens_App
         private List<FishLens_App.Models.Video> _currentTracks = new List<FishLens_App.Models.Video>();
         private int _currentTrackIndex;
 
+        // Guards that prevent UI event handlers from firing during programmatic control updates.
+        private bool _suppressStatusHandler    = false;
+        private bool _updatingConfidenceText   = false;
+
 
         #endregion
 
@@ -1723,12 +1727,61 @@ namespace FishLens_App
                     CreateFolderHeader(sectionContext, batch.FolderHeaderTexts.TryGetValue(item.folder, out var saved) ? saved : null);
                 }
 
-                // Re-add the original grid (checkbox state is reset to unchecked).
+                // Re-add the original grid at its correct confidence-sorted position
+                // (ascending: lowest confidence at the top, highest at the bottom).
                 if (item.grid.Parent == null)
                 {
                     foreach (var elem in item.grid.Children)
                         if (elem is CheckBox cb) cb.IsChecked = false;
-                    videoList.Children.Add(item.grid);
+
+                    // Walk the list to find where this item belongs within its section.
+                    // Stop as soon as we find the first existing item whose confidence
+                    // is greater than the restored item's — insert before that item.
+                    // If no such item exists, fall through and append (Add) instead.
+                    double restoredConf  = item.video.AvgConfidence;
+                    int    insertIndex   = -1;
+                    bool   inTargetSection = false;
+                    int    idx           = 0;
+                    while (idx < videoList.Children.Count && insertIndex < 0)
+                    {
+                        if (videoList.Children[idx] is Grid g && g.Tag is string t)
+                        {
+                            if (t.Equals(GetHeaderTag(item.folder), StringComparison.OrdinalIgnoreCase))
+                            {
+                                inTargetSection = true;
+                            }
+                            else if (inTargetSection && t.StartsWith("header:", StringComparison.OrdinalIgnoreCase))
+                            {
+                                // Crossed into the next section without finding a higher-confidence
+                                // item — insert at the end of our section, just before this header.
+                                insertIndex = idx;
+                            }
+                            else if (inTargetSection
+                                     && !t.StartsWith("header:", StringComparison.OrdinalIgnoreCase)
+                                     && t.Equals(item.folder, StringComparison.OrdinalIgnoreCase))
+                            {
+                                // Video item in our section: compare confidences.
+                                double existingConf = 0;
+                                bool   confFound    = false;
+                                foreach (var elem in g.Children)
+                                {
+                                    if (!confFound && elem is Button b && b.DataContext is FishLens_App.Models.Video v)
+                                    {
+                                        existingConf = v.AvgConfidence;
+                                        confFound    = true;
+                                    }
+                                }
+                                if (restoredConf <= existingConf)
+                                    insertIndex = idx;
+                            }
+                        }
+                        idx++;
+                    }
+
+                    if (insertIndex >= 0)
+                        videoList.Children.Insert(insertIndex, item.grid);
+                    else
+                        videoList.Children.Add(item.grid);
                 }
             }
         }
@@ -2308,6 +2361,60 @@ namespace FishLens_App
                 }
 
                 RefreshSessionOverview();
+
+                // Update the in-memory track confidence so the library re-sort uses the
+                // saved value rather than the stale CSV-loaded one.
+                double savedPresConf = ParseConfidenceText(fishPresentConfidence.Text);
+                if (_currentTracks.Count > _currentTrackIndex && _currentTracks[_currentTrackIndex] != null)
+                    _currentTracks[_currentTrackIndex].AvgConfidence = savedPresConf;
+
+                // The library shows one entry per video file whose AvgConfidence is the
+                // minimum across all of that file's tracks.  Recalculate and push the new
+                // value into the library button's DataContext, then re-sort and re-colour.
+                double newLibConf    = _currentTracks.Count > 0
+                    ? _currentTracks.Min(t => t.AvgConfidence)
+                    : savedPresConf;
+                string savedVideoName = currentVideoName;
+                string savedRun       = sourceRun;
+                string libSectionKey  = null;
+
+                foreach (var child in videoList.Children)
+                {
+                    if (child is Grid rowGrid
+                        && rowGrid.Tag is string rowTag
+                        && !rowTag.StartsWith("header:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        foreach (var elem in rowGrid.Children)
+                        {
+                            if (elem is Button btn
+                                && btn.DataContext is FishLens_App.Models.Video libVid
+                                && string.Equals(libVid.Name, savedVideoName, StringComparison.OrdinalIgnoreCase)
+                                && string.Equals(ResolveVideoRun(libVid), savedRun, StringComparison.OrdinalIgnoreCase))
+                            {
+                                libVid.AvgConfidence = newLibConf;
+                                btn.Style            = CreateButtonStyle(IsLowConfidence(newLibConf));
+                                libSectionKey        = rowTag;
+                            }
+                        }
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(libSectionKey))
+                    ResortLibrarySection(libSectionKey);
+
+                // Refresh the analysis panel immediately so direction, status, and
+                // all other fields reflect exactly what was just written to the CSV/DB
+                // without requiring the user to navigate away and back.
+                if (_currentTracks.Count > _currentTrackIndex && _currentTracks[_currentTrackIndex] != null)
+                {
+                    var savedTrack           = _currentTracks[_currentTrackIndex];
+                    savedTrack.LikelyClass       = GetFishPresentClass();
+                    savedTrack.Direction         = GetTravelDirectionValue();
+                    savedTrack.Species           = fishSpecies.Text.Trim();
+                    savedTrack.SpeciesConfidence = ParseConfidenceText(fishSpeciesConfidence.Text);
+                    DisplayTrackInUi(savedTrack);
+                }
+
                 MessageBox.Show("Changes saved successfully!", "Save Successful",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
@@ -2554,6 +2661,90 @@ namespace FishLens_App
             {
                 EnsureCsvHasRunColumn(csvPath, string.Empty);
                 File.AppendAllText(csvPath, row + Environment.NewLine);
+            }
+        }
+
+        // **************************************************
+        // Function: ConfidenceTextBox_TextChanged
+        // Description: Keeps the "%" suffix permanently visible in both confidence
+        //              TextBoxes.  Whenever the user edits the number part the handler
+        //              strips any stray "%" characters and re-appends exactly one,
+        //              then parks the caret just before the "%" so further typing
+        //              naturally extends the number.  The "--" placeholder and empty
+        //              string are left untouched so programmatic clears still work.
+        // **************************************************
+        private void ConfidenceTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_updatingConfidenceText) return;
+            if (sender is TextBox tb)
+            {
+                string text = tb.Text;
+                if (!string.IsNullOrEmpty(text) && text != "--")
+                {
+                    // Strip all "%" instances and re-append exactly one at the end.
+                    string stripped = text.Replace("%", "");
+                    string desired  = stripped + "%";
+                    if (text != desired)
+                    {
+                        _updatingConfidenceText = true;
+                        int caretPos = Math.Min(tb.CaretIndex, stripped.Length);
+                        tb.Text       = desired;
+                        tb.CaretIndex = caretPos;
+                        _updatingConfidenceText = false;
+                    }
+                }
+            }
+        }
+
+        // **************************************************
+        // Function: ConfidenceTextBox_PreviewKeyDown
+        // Description: Prevents accidental edits to the trailing "%" in a confidence TextBox.
+        //              - End key snaps caret to just before the "%".
+        //              - Delete is blocked when the caret is already at the "%" position.
+        //              Left/right arrow keys are intentionally left unhandled so they
+        //              continue to drive the video scrub bar as normal.
+        // **************************************************
+        private void ConfidenceTextBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (sender is TextBox tb && tb.Text.EndsWith("%"))
+            {
+                int lastEditPos = tb.Text.Length - 1;   // index of the "%" character
+                if (e.Key == System.Windows.Input.Key.End)
+                {
+                    tb.CaretIndex = lastEditPos;
+                    e.Handled     = true;
+                }
+                if (e.Key == System.Windows.Input.Key.Delete
+                    && tb.SelectionLength == 0
+                    && tb.CaretIndex >= lastEditPos)
+                {
+                    e.Handled = true;
+                }
+            }
+        }
+
+        // **************************************************
+        // Function: FishPresentStatus_SelectionChanged
+        // Description: Reacts when the user changes the fish-present dropdown.
+        //              Switching to "Present" auto-fills 100 % confidence unless
+        //              a non-placeholder value is already shown.
+        //              Switching to "Not Present" replaces the confidence with "--".
+        //              The handler is suppressed during programmatic DisplayTrackInUi
+        //              updates via the _suppressStatusHandler flag.
+        // **************************************************
+        private void FishPresentStatus_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressStatusHandler) return;
+            if (fishPresentStatus.SelectedIndex == 0)   // "Present"
+            {
+                string current = fishPresentConfidence.Text.Trim();
+                if (string.IsNullOrEmpty(current) || current == "--")
+                    fishPresentConfidence.Text = "100%";
+            }
+            else                                        // "Not Present"
+            {
+                fishPresentConfidence.Text            = "--";
+                fishTravelDirection.SelectedIndex     = -1;
             }
         }
 
@@ -3081,13 +3272,19 @@ namespace FishLens_App
                 && !vid.LikelyClass.Equals("not_fish", StringComparison.OrdinalIgnoreCase)
                 && !vid.LikelyClass.Equals("no_fish",  StringComparison.OrdinalIgnoreCase)
                 && !vid.LikelyClass.Equals("N/A",      StringComparison.OrdinalIgnoreCase);
+            _suppressStatusHandler            = true;
             fishPresentStatus.SelectedIndex   = fishPresent ? 0 : 1;
+            _suppressStatusHandler            = false;
             fishPresentConfidence.Text        = fishPresent ? $"{vid.AvgConfidence * 100:F2}%" : "--";
             string dirLower = (vid.Direction ?? string.Empty).ToLower().Trim();
             fishTravelDirection.SelectedIndex = fishPresent
                 ? (dirLower == "upstream" ? 0 : dirLower == "downstream" ? 1 : 2)
                 : -1;
-            fishSpecies.Text = CapitalizeFirstLetter(vid.Species);
+            string speciesDisplay = string.IsNullOrWhiteSpace(vid.Species)
+                || vid.Species.Equals("No data", StringComparison.OrdinalIgnoreCase)
+                ? "No data"
+                : CapitalizeFirstLetter(vid.Species);
+            fishSpecies.Text           = speciesDisplay;
             fishSpeciesConfidence.Text = vid.SpeciesConfidence > 0 ? $"{vid.SpeciesConfidence * 100:F2}%" : "--";
 
             // Refresh all track markers on the scrubber (opacity highlights the active one)
@@ -3357,6 +3554,91 @@ namespace FishLens_App
                     if (button.DataContext is FishLens_App.Models.Video video)
                         button.Style = CreateButtonStyle(IsLowConfidence(video.AvgConfidence));
                 }
+            }
+        }
+
+        // **************************************************
+        // Function: ResortLibrarySection
+        // Description: Re-orders the video item rows within a single library section
+        //              so they stay sorted ascending by AvgConfidence after a save.
+        //              Collects the section's Grid rows, sorts them, removes them from
+        //              the panel, then re-inserts them in sorted order right after the
+        //              section header and its separator.
+        // **************************************************
+        private void ResortLibrarySection(string sectionKey)
+        {
+            // Collect all video item grids belonging to this section (preserving current order).
+            var sectionItems = new List<Grid>();
+            foreach (var child in videoList.Children)
+            {
+                if (child is Grid g
+                    && g.Tag is string t
+                    && !t.StartsWith("header:", StringComparison.OrdinalIgnoreCase)
+                    && t.Equals(sectionKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    sectionItems.Add(g);
+                }
+            }
+
+            if (sectionItems.Count <= 1) return;
+
+            // Build the desired confidence-ascending order.
+            var sorted = sectionItems
+                .OrderBy(g =>
+                {
+                    double conf     = 0;
+                    bool   confFound = false;
+                    foreach (var elem in g.Children)
+                    {
+                        if (!confFound && elem is Button b && b.DataContext is FishLens_App.Models.Video v)
+                        {
+                            conf      = v.AvgConfidence;
+                            confFound = true;
+                        }
+                    }
+                    return conf;
+                })
+                .ToList();
+
+            // Short-circuit if order is already correct.
+            bool alreadySorted = true;
+            int  checkIdx      = 0;
+            while (checkIdx < sectionItems.Count && alreadySorted)
+            {
+                if (!ReferenceEquals(sectionItems[checkIdx], sorted[checkIdx]))
+                    alreadySorted = false;
+                checkIdx++;
+            }
+
+            if (alreadySorted) return;
+
+            // Remove all section items from the panel.
+            foreach (var g in sectionItems)
+                videoList.Children.Remove(g);
+
+            // Find the header so we can insert right after header + separator.
+            int insertAt   = -1;
+            int headerSearch = 0;
+            while (headerSearch < videoList.Children.Count && insertAt < 0)
+            {
+                if (videoList.Children[headerSearch] is Grid hg
+                    && hg.Tag is string ht
+                    && ht.Equals(GetHeaderTag(sectionKey), StringComparison.OrdinalIgnoreCase))
+                {
+                    insertAt = headerSearch + 2; // skip header (+0) and separator (+1)
+                }
+                headerSearch++;
+            }
+
+            if (insertAt >= 0)
+            {
+                for (int i = 0; i < sorted.Count; i++)
+                    videoList.Children.Insert(insertAt + i, sorted[i]);
+            }
+            else
+            {
+                foreach (var g in sorted)
+                    videoList.Children.Add(g);
             }
         }
 

@@ -825,7 +825,7 @@ Height="70">
                                                Foreground="{DynamicResource SecondaryText}"
                                                VerticalAlignment="Center"
                                                Margin="0,0,8,0"/>
-                                        <ComboBox x:Name="fishPresentStatus" 
+                                        <ComboBox x:Name="fishPresentStatus"
                                               FontSize="{DynamicResource BaseFontSize}"
                                               FontWeight="Medium"
                                               Foreground="{DynamicResource PrimaryText}"
@@ -833,7 +833,8 @@ Height="70">
                                               BorderThickness="1"
                                               Padding="8,4"
                                               MinWidth="120"
-                                              IsEnabled="False">
+                                              IsEnabled="False"
+                                              SelectionChanged="FishPresentStatus_SelectionChanged">
                                             <ComboBoxItem Content="Present"/>
                                             <ComboBoxItem Content="Not Present"/>
                                         </ComboBox>
@@ -843,8 +844,8 @@ Height="70">
                                                FontSize="{DynamicResource BaseFontSize}"
                                                Foreground="{DynamicResource SecondaryText}"
                                                Margin="0,0,8,0"/>
-                                        <TextBox x:Name="fishPresentConfidence" 
-                                             Text="--" 
+                                        <TextBox x:Name="fishPresentConfidence"
+                                             Text="--"
                                              FontSize="{DynamicResource BaseFontSize}"
                                              FontWeight="Medium"
                                              Foreground="{DynamicResource PrimaryText}"
@@ -853,6 +854,8 @@ Height="70">
                                              Padding="8,4"
                                              Width="80"
                                              IsEnabled="False"
+                                             TextChanged="ConfidenceTextBox_TextChanged"
+                                             PreviewKeyDown="ConfidenceTextBox_PreviewKeyDown"
                                              />
                                     </StackPanel>
                                 </StackPanel>
@@ -900,7 +903,7 @@ Height="70">
                                                FontSize="{DynamicResource BaseFontSize}"
                                                Foreground="{DynamicResource SecondaryText}"
                                                Margin="0,0,0,4"/>
-                                        <ComboBox x:Name="fishSpecies" 
+                                        <ComboBox x:Name="fishSpecies"
                                               FontSize="{DynamicResource BaseFontSize}"
                                               FontWeight="Medium"
                                               Foreground="{DynamicResource PrimaryText}"
@@ -909,6 +912,7 @@ Height="70">
                                               Padding="8,4"
                                               MinWidth="120"
                                               IsEnabled="False">
+                                            <System:String xmlns:System="clr-namespace:System;assembly=netstandard">No data</System:String>
                                             <System:String xmlns:System="clr-namespace:System;assembly=netstandard">Chinook</System:String>
                                             <System:String xmlns:System="clr-namespace:System;assembly=netstandard">Omykiss</System:String>
                                         </ComboBox>
@@ -918,8 +922,8 @@ Height="70">
                                                FontSize="{DynamicResource BaseFontSize}"
                                                Foreground="{DynamicResource SecondaryText}"
                                                Margin="0,0,8,0"/>
-                                        <TextBox x:Name="fishSpeciesConfidence" 
-                                             Text="--" 
+                                        <TextBox x:Name="fishSpeciesConfidence"
+                                             Text="--"
                                              FontSize="{DynamicResource BaseFontSize}"
                                              FontWeight="Medium"
                                              Foreground="{DynamicResource PrimaryText}"
@@ -928,6 +932,8 @@ Height="70">
                                              Padding="8,4"
                                              Width="80"
                                              IsEnabled="False"
+                                             TextChanged="ConfidenceTextBox_TextChanged"
+                                             PreviewKeyDown="ConfidenceTextBox_PreviewKeyDown"
                                              />
                                     </StackPanel>
                                 </StackPanel>
