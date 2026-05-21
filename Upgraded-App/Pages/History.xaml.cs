@@ -89,6 +89,20 @@ namespace FishLens_App
                 // Apply immediately in case analysis was already running when user navigated here
                 ApplyAnalysisLock(App.IsAnalyzing);
                 _isHistoryLoaded = true;
+
+                // Backfill no-fish rows for all runs into DB so "Videos w/ No Fish" reports
+                // work correctly even for runs processed before DB sync was introduced.
+                var bfApp = Application.Current as App;
+                if (bfApp != null && bfApp.CurrentOrganizationId > 0)
+                {
+                    string bfHistoryDir = _pathResolver.ResolveAllHistoryFolder();
+                    int bfOrgId         = bfApp.CurrentOrganizationId;
+                    int bfUserId        = bfApp.CurrentUserId;
+                    string bfConn       = bfApp.connectionString;
+                    _ = System.Threading.Tasks.Task.Run(() =>
+                        FishLens_App.Services.DbSyncService.BackfillNoFishRuns(bfHistoryDir, bfOrgId, bfUserId, bfConn));
+                }
+
                 GenerateReportClick(this, new RoutedEventArgs());
             };
             Unloaded += (s, e) =>

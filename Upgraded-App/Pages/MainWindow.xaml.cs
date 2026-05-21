@@ -449,12 +449,16 @@ namespace FishLens_App
                 await _processingTcs.Task;
 
                 var _syncApp = Application.Current as App;
-                string _syncCsvPath = _pathResolver.ResolveRunCsvPath(_syncApp?.ActiveRun ?? string.Empty);
-                int _syncOrgId = _syncApp?.CurrentOrganizationId ?? 0;
-                int _syncUserId = _syncApp?.CurrentUserId ?? 0;
-                string _syncConn = _syncApp?.connectionString;
+                string _syncActiveRun   = _syncApp?.ActiveRun ?? string.Empty;
+                string _syncCsvPath     = _pathResolver.ResolveRunCsvPath(_syncActiveRun);
+                string _syncNoFishPath  = _pathResolver.ResolveSessionNoFishCsvPath(_syncActiveRun);
+                int _syncOrgId          = _syncApp?.CurrentOrganizationId ?? 0;
+                int _syncUserId         = _syncApp?.CurrentUserId ?? 0;
+                string _syncConn        = _syncApp?.connectionString;
                 _ = System.Threading.Tasks.Task.Run(() =>
                     FishLens_App.Services.DbSyncService.SyncRunToDb(_syncCsvPath, _syncOrgId, _syncUserId, _syncConn));
+                _ = System.Threading.Tasks.Task.Run(() =>
+                    FishLens_App.Services.DbSyncService.SyncNoFishRunToDb(_syncNoFishPath, _syncActiveRun, _syncOrgId, _syncUserId, _syncConn));
             }
             catch (OperationCanceledException)
             {
@@ -1766,7 +1770,23 @@ namespace FishLens_App
 
             try
             {
-                return FishLens_App.Services.CsvUtils.ReadAllTracksFromCsv(csvPath, videoFileName, effectiveRun, videoFilePath);
+                var tracks = FishLens_App.Services.CsvUtils.ReadAllTracksFromCsv(csvPath, videoFileName, effectiveRun, videoFilePath);
+
+                // If the only result is the default placeholder (video not in fish CSV),
+                // check the no-fish CSV. If it's there, mark it correctly so the detail
+                // panel shows "Not Present" instead of "Present / 0%".
+                if (tracks.Count == 1 && tracks[0].LikelyClass == "N/A")
+                {
+                    string noFishPath = _pathResolver.ResolveSessionNoFishCsvPath(effectiveRun);
+                    string noFishLocation = FishLens_App.Services.CsvUtils.ReadLocationFromNoFishCsv(noFishPath, videoFileName);
+                    if (noFishLocation != null)
+                    {
+                        tracks[0].LikelyClass = "no_fish";
+                        tracks[0].Location    = noFishLocation;
+                    }
+                }
+
+                return tracks;
             }
             catch (Exception ex)
             {
@@ -2925,11 +2945,16 @@ namespace FishLens_App
             videoDateTime.Text = $"Duration: {vid.StartTime}s - {vid.EndTime}s";
             // likely_class can be "fish", a species name ("chinook"), "not_fish", or "no_fish".
             // Anything other than not_fish/no_fish means a fish was detected.
-            bool fishPresent = vid.LikelyClass != "not_fish" && vid.LikelyClass != "no_fish";
-            fishPresentStatus.SelectedIndex = fishPresent ? 0 : 1;
-            fishPresentConfidence.Text = $"{vid.AvgConfidence * 100:F2}%";
+            bool fishPresent = !string.IsNullOrWhiteSpace(vid.LikelyClass)
+                && !vid.LikelyClass.Equals("not_fish", StringComparison.OrdinalIgnoreCase)
+                && !vid.LikelyClass.Equals("no_fish",  StringComparison.OrdinalIgnoreCase)
+                && !vid.LikelyClass.Equals("N/A",      StringComparison.OrdinalIgnoreCase);
+            fishPresentStatus.SelectedIndex   = fishPresent ? 0 : 1;
+            fishPresentConfidence.Text        = fishPresent ? $"{vid.AvgConfidence * 100:F2}%" : "--";
             string dirLower = (vid.Direction ?? string.Empty).ToLower().Trim();
-            fishTravelDirection.SelectedIndex = dirLower == "upstream" ? 0 : dirLower == "downstream" ? 1 : 2;
+            fishTravelDirection.SelectedIndex = fishPresent
+                ? (dirLower == "upstream" ? 0 : dirLower == "downstream" ? 1 : 2)
+                : -1;
             fishSpecies.Text = CapitalizeFirstLetter(vid.Species);
             fishSpeciesConfidence.Text = vid.SpeciesConfidence > 0 ? $"{vid.SpeciesConfidence * 100:F2}%" : "--";
 
