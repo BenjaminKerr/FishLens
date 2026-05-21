@@ -447,6 +447,14 @@ namespace FishLens_App
                 _yoloProcess.StandardInput.WriteLine(videoFolder);
                 _yoloProcess.StandardInput.Flush();
                 await _processingTcs.Task;
+
+                var _syncApp = Application.Current as App;
+                string _syncCsvPath = _pathResolver.ResolveRunCsvPath(_syncApp?.ActiveRun ?? string.Empty);
+                int _syncOrgId = _syncApp?.CurrentOrganizationId ?? 0;
+                int _syncUserId = _syncApp?.CurrentUserId ?? 0;
+                string _syncConn = _syncApp?.connectionString;
+                _ = System.Threading.Tasks.Task.Run(() =>
+                    FishLens_App.Services.DbSyncService.SyncRunToDb(_syncCsvPath, _syncOrgId, _syncUserId, _syncConn));
             }
             catch (OperationCanceledException)
             {
@@ -2204,6 +2212,30 @@ namespace FishLens_App
 
                 if (currentTrack != null)
                     currentTrack.Run = sourceRun;
+
+                var _saveApp = Application.Current as App;
+                if (_saveApp != null && currentTrack != null)
+                {
+                    var dbTrack = new FishLens_App.Models.Video
+                    {
+                        VideoFilePath      = currentTrack.VideoFilePath,
+                        Name               = currentVideoName,
+                        Run                = sourceRun,
+                        Location           = currentTrack.Location,
+                        LikelyClass        = GetFishPresentClass(),
+                        Direction          = GetTravelDirectionValue(),
+                        Species            = fishSpecies.Text.Trim(),
+                        StartTime          = startTimeSec,
+                        EndTime            = currentTrack.EndTime,
+                        DetectionTimestamp = currentTrack.DetectionTimestamp,
+                        AvgConfidence      = ParseConfidenceText(fishPresentConfidence.Text),
+                        SpeciesConfidence  = ParseConfidenceText(fishSpeciesConfidence.Text),
+                    };
+                    _ = System.Threading.Tasks.Task.Run(() =>
+                        FishLens_App.Services.DbSyncService.UpsertTrackToDb(
+                            dbTrack, _saveApp.CurrentOrganizationId, _saveApp.CurrentUserId, _saveApp.connectionString));
+                }
+
                 RefreshSessionOverview();
                 MessageBox.Show("Changes saved successfully!", "Save Successful",
                     MessageBoxButton.OK, MessageBoxImage.Information);
@@ -2371,6 +2403,14 @@ namespace FishLens_App
             }
 
             return selectedItem.Content.ToString().ToLower();
+        }
+
+        private double ParseConfidenceText(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text) || text == "--") return 0.0;
+            if (double.TryParse(text.Replace("%", "").Trim(), out double val))
+                return val > 1 ? val / 100.0 : val;
+            return 0.0;
         }
 
         #endregion
