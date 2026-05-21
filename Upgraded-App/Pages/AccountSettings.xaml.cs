@@ -59,6 +59,26 @@ namespace FishLens_App
         }
 
         // ****************************************************************
+        // Function: NewPasswordEye_Click
+        // Description: Toggles the Create User password field between masked and visible.
+        // Notes: N/A
+        private void NewPasswordEye_Click(object sender, RoutedEventArgs e)
+        {
+            if (NewPasswordVisible.Visibility == Visibility.Collapsed)
+            {
+                NewPasswordVisible.Text = NewPassword.Password;
+                NewPassword.Visibility = Visibility.Collapsed;
+                NewPasswordVisible.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                NewPassword.Password = NewPasswordVisible.Text;
+                NewPasswordVisible.Visibility = Visibility.Collapsed;
+                NewPassword.Visibility = Visibility.Visible;
+            }
+        }
+
+        // ****************************************************************
         // Function: CreateUserClick
         // Description: Handles the Create User button — validates input, attempts signup and updates UI.
         // Notes: Validates via `UserValidationRules`, shows inline errors or success and reloads users on success.

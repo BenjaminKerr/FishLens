@@ -5,6 +5,7 @@
 // ***************************************************************************************************************************
 
 using System.Windows;
+using System.Windows.Controls;
 
 namespace FishLens_App
 {
@@ -78,6 +79,51 @@ namespace FishLens_App
         private void GoToForgotPassword_Click(object sender, RoutedEventArgs e)
         {
             ShowPanel("ForgotPanel");
+        }
+
+        // ****************************************************************
+        // Function: TogglePasswordVisibility
+        // Description: Swaps a PasswordBox with its paired plain TextBox so the user can see what they typed.
+        // Notes: Shared by all eye-toggle handlers in this window.
+        private void TogglePasswordVisibility(PasswordBox pwBox, TextBox pwVisible)
+        {
+            if (pwVisible.Visibility == Visibility.Collapsed)
+            {
+                pwVisible.Text = pwBox.Password;
+                pwBox.Visibility = Visibility.Collapsed;
+                pwVisible.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                pwBox.Password = pwVisible.Text;
+                pwVisible.Visibility = Visibility.Collapsed;
+                pwBox.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void SignInPasswordEye_Click(object sender, RoutedEventArgs e)
+        {
+            TogglePasswordVisibility(SignInPasswordBox, SignInPasswordVisible);
+        }
+
+        private void NewPasswordEye_Click(object sender, RoutedEventArgs e)
+        {
+            TogglePasswordVisibility(NewPasswordBox, NewPasswordVisible);
+        }
+
+        private void ConfirmPasswordEye_Click(object sender, RoutedEventArgs e)
+        {
+            TogglePasswordVisibility(ConfirmPasswordBox, ConfirmPasswordVisible);
+        }
+
+        private void ResetNewPasswordEye_Click(object sender, RoutedEventArgs e)
+        {
+            TogglePasswordVisibility(ResetNewPasswordBox, ResetNewPasswordVisible);
+        }
+
+        private void ResetConfirmPasswordEye_Click(object sender, RoutedEventArgs e)
+        {
+            TogglePasswordVisibility(ResetConfirmPasswordBox, ResetConfirmPasswordVisible);
         }
     }
 }

@@ -132,14 +132,29 @@
                                FontSize="{DynamicResource BaseFontSize}"
                                Foreground="{DynamicResource SecondaryText}"/>
 
-                    <PasswordBox x:Name="SignInPasswordBox"
-                                 Height="36"
-                                 Padding="8"
+                    <Grid Margin="0,5,0,20" Height="36">
+                        <PasswordBox x:Name="SignInPasswordBox"
+                                     Padding="8,8,36,8"
+                                     FontSize="{DynamicResource BaseFontSize}"
+                                     TabIndex="1"
+                                     KeyDown="SignInPassword_KeyDown"
+                                     GotKeyboardFocus="PasswordBox_GotKeyFocus"/>
+                        <TextBox x:Name="SignInPasswordVisible"
+                                 Padding="8,8,36,8"
                                  FontSize="{DynamicResource BaseFontSize}"
-                                 Margin="0,5,0,20"
-                                 TabIndex="1"
-                                 KeyDown="SignInPassword_KeyDown"
-                                 GotKeyboardFocus="PasswordBox_GotKeyFocus"/>
+                                 Visibility="Collapsed"
+                                 VerticalContentAlignment="Center"/>
+                        <Button Content="👁"
+                                Width="30" Height="30"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Margin="0,0,4,0"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                FontSize="14"
+                                Cursor="Hand"
+                                Click="SignInPasswordEye_Click"/>
+                    </Grid>
 
                     <TextBlock x:Name="SignInError"
                                FontSize="{DynamicResource BaseFontSize}"
@@ -273,11 +288,26 @@
                         <TextBlock Text="Password"
                                    FontSize="{DynamicResource BaseFontSize}"
                                    Foreground="{DynamicResource SecondaryText}"/>
-                        <PasswordBox x:Name="NewPasswordBox"
-                                     Height="36"
-                                     Padding="8"
+                        <Grid Margin="0,5,0,5" Height="36">
+                            <PasswordBox x:Name="NewPasswordBox"
+                                         Padding="8,8,36,8"
+                                         FontSize="{DynamicResource BaseFontSize}"/>
+                            <TextBox x:Name="NewPasswordVisible"
+                                     Padding="8,8,36,8"
                                      FontSize="{DynamicResource BaseFontSize}"
-                                     Margin="0,5,0,5"/>
+                                     Visibility="Collapsed"
+                                     VerticalContentAlignment="Center"/>
+                            <Button Content="👁"
+                                    Width="30" Height="30"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,4,0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    FontSize="14"
+                                    Cursor="Hand"
+                                    Click="NewPasswordEye_Click"/>
+                        </Grid>
                         <StackPanel Margin="0,0,0,10">
                             <TextBlock x:Name="ReqSignUpPasswordLength"
                                        Text="• At least 6 characters"
@@ -295,11 +325,26 @@
                         <TextBlock Text="Confirm Password"
                                    FontSize="{DynamicResource BaseFontSize}"
                                    Foreground="{DynamicResource SecondaryText}"/>
-                        <PasswordBox x:Name="ConfirmPasswordBox"
-                                     Height="36"
-                                     Padding="8"
+                        <Grid Margin="0,5,0,5" Height="36">
+                            <PasswordBox x:Name="ConfirmPasswordBox"
+                                         Padding="8,8,36,8"
+                                         FontSize="{DynamicResource BaseFontSize}"/>
+                            <TextBox x:Name="ConfirmPasswordVisible"
+                                     Padding="8,8,36,8"
                                      FontSize="{DynamicResource BaseFontSize}"
-                                     Margin="0,5,0,5"/>
+                                     Visibility="Collapsed"
+                                     VerticalContentAlignment="Center"/>
+                            <Button Content="👁"
+                                    Width="30" Height="30"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,4,0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    FontSize="14"
+                                    Cursor="Hand"
+                                    Click="ConfirmPasswordEye_Click"/>
+                        </Grid>
                         <StackPanel Margin="0,0,0,10">
                             <TextBlock x:Name="ReqSignUpPasswordMatch"
                                        Text="• Passwords must match"
@@ -544,11 +589,26 @@
                                Foreground="#888888"
                                Margin="0,2,0,10"/>
 
-                    <PasswordBox x:Name="ResetNewPasswordBox"
-                                 Height="36"
-                                 Padding="8"
+                    <Grid Margin="0,5,0,15" Height="36">
+                        <PasswordBox x:Name="ResetNewPasswordBox"
+                                     Padding="8,8,36,8"
+                                     FontSize="{DynamicResource BaseFontSize}"/>
+                        <TextBox x:Name="ResetNewPasswordVisible"
+                                 Padding="8,8,36,8"
                                  FontSize="{DynamicResource BaseFontSize}"
-                                 Margin="0,5,0,15"/>
+                                 Visibility="Collapsed"
+                                 VerticalContentAlignment="Center"/>
+                        <Button Content="👁"
+                                Width="30" Height="30"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Margin="0,0,4,0"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                FontSize="14"
+                                Cursor="Hand"
+                                Click="ResetNewPasswordEye_Click"/>
+                    </Grid>
 
                     <TextBlock Text="Confirm Password"
                                FontSize="{DynamicResource BaseFontSize}"
@@ -560,11 +620,26 @@
                                Foreground="#888888"
                                Margin="0,2,0,10"/>
 
-                    <PasswordBox x:Name="ResetConfirmPasswordBox"
-                                 Height="36"
-                                 Padding="8"
+                    <Grid Margin="0,5,0,5" Height="36">
+                        <PasswordBox x:Name="ResetConfirmPasswordBox"
+                                     Padding="8,8,36,8"
+                                     FontSize="{DynamicResource BaseFontSize}"/>
+                        <TextBox x:Name="ResetConfirmPasswordVisible"
+                                 Padding="8,8,36,8"
                                  FontSize="{DynamicResource BaseFontSize}"
-                                 Margin="0,5,0,5"/>
+                                 Visibility="Collapsed"
+                                 VerticalContentAlignment="Center"/>
+                        <Button Content="👁"
+                                Width="30" Height="30"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Margin="0,0,4,0"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                FontSize="14"
+                                Cursor="Hand"
+                                Click="ResetConfirmPasswordEye_Click"/>
+                    </Grid>
 
                     <TextBlock x:Name="ResetError"
                                FontSize="{DynamicResource BaseFontSize}"

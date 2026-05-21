@@ -1068,13 +1068,18 @@ namespace FishLens_App
         // **************************************************
         private string[] ReadAllDataLines(string filterRun)
         {
-            bool useDb = string.IsNullOrWhiteSpace(filterRun) || filterRun == "All";
+            bool useDb    = string.IsNullOrWhiteSpace(filterRun) || filterRun == "All";
+            bool useRunDb = !useDb && filterRun != "CurrentSession";
             var app = Application.Current as App;
             string[] result;
 
             if (useDb && app != null && app.CurrentOrganizationId > 0)
             {
                 result = ReadAllDataLinesFromDb(app.CurrentOrganizationId, app.connectionString);
+            }
+            else if (useRunDb && app != null && app.CurrentOrganizationId > 0)
+            {
+                result = ReadAllDataLinesFromDb(app.CurrentOrganizationId, app.connectionString, filterRun);
             }
             else
             {
@@ -1120,7 +1125,7 @@ namespace FishLens_App
         // Description: Queries FishDetections for the org and returns rows in the same
         //              11-column CSV format used by all existing filter and stats logic.
         // **************************************************
-        private string[] ReadAllDataLinesFromDb(int orgId, string connectionString)
+        private string[] ReadAllDataLinesFromDb(int orgId, string connectionString, string runName = null)
         {
             var lines = new List<string>();
             try
@@ -1130,7 +1135,7 @@ namespace FishLens_App
                 using var cmd = new SqlCommand("kaharra.GetFishDetectionsByOrg", conn);
                 cmd.CommandType = System.Data.CommandType.StoredProcedure;
                 cmd.Parameters.AddWithValue("@pOrgId",        orgId);
-                cmd.Parameters.AddWithValue("@pRunName",      DBNull.Value);
+                cmd.Parameters.AddWithValue("@pRunName",      runName != null ? (object)runName : DBNull.Value);
                 cmd.Parameters.AddWithValue("@pLocationName", DBNull.Value);
 
                 using var reader = cmd.ExecuteReader();
