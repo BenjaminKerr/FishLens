@@ -1559,13 +1559,9 @@ def _append_no_fish_row(video_file_path, video_timestamp):
     }
     # Full-schema row for the master files; likely_class="no_fish" is the fish-present indicator.
     # Fish-specific fields are left blank so the master CSV has a uniform shape for every video.
-    # start_time_sec / end_time_sec are set to "0" (the no-fish sentinel) so the upsert key
-    # (OrgId, RunName, VideoFile, StartTimeSec) is always "0" for these rows and never NULL.
     master_row = {k: "" for k in CSV_KEYS}
     master_row["video_file"]      = video_file_path
     master_row["likely_class"]    = "no_fish"
-    master_row["start_time_sec"]  = "0"
-    master_row["end_time_sec"]    = "0"
     master_row["video_timestamp"] = video_timestamp or "Not detected"
     master_row["location"]        = FISHLENS_LOCATION
     master_row["run"]             = _RUN_NAME
@@ -2012,7 +2008,7 @@ def _process_video_with_retry(video_path, source_video_path):
         # Pass video_path (the processed/possibly-transcoded path) as probe_video_path so the
         # OCR probe uses the same file that YOLO successfully decoded - avoids re-opening a
         # raw ASF that cv2 may struggle with while the reliable temp MP4 is still on disk.
-        if not video_tracks:
+        if not video_tracks and not IS_WORKER_MODE:
             no_fish_found(
                 source_video_path or video_path,
                 os.path.basename(source_video_path or video_path),
