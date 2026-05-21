@@ -65,6 +65,7 @@ namespace FishLens_App
         private readonly ILogger<MainWindow> _logger;
         private readonly AppConfiguration _config;
         private readonly CheckBoxToggle _checkBoxes;
+        private readonly PythonWorkerPoolService _workerPool;
         // Stack of deletion batches for undo support
         private readonly Stack<DeletionBatch> _deletionHistory = new Stack<DeletionBatch>();
 
@@ -149,6 +150,8 @@ namespace FishLens_App
             app.ApplyCurrentSettings();
             _checkBoxes = GetCheckBoxToggleFromApplication();
             _config = GetConfigurationFromApplication();
+            _workerPool = new PythonWorkerPoolService(_pathResolver, _logger);
+            _workerPool.ProgressChanged += WorkerPool_ProgressChanged;
             Loaded += MainWindow_Loaded;
             Closed += MainWindow_Closed;
 
@@ -217,12 +220,15 @@ namespace FishLens_App
             UpdateRunDisplay();
             App.LocationChanged += OnLocationChanged;
             App.RunChanged += OnRunChanged;
+            _ = _workerPool.StartBaselineAsync();
         }
 
         private void MainWindow_Closed(object sender, EventArgs e)
         {
             App.LocationChanged -= OnLocationChanged;
             App.RunChanged -= OnRunChanged;
+            _workerPool.ProgressChanged -= WorkerPool_ProgressChanged;
+            _workerPool.Dispose();
         }
 
         #region Directory Management
@@ -399,58 +405,14 @@ namespace FishLens_App
         // **************************************************
         private async Task RunYolo(string videoFolder)
         {
-            _logger.LogInformation("Starting YOLO process with videoFolder: {VideoFolder}", videoFolder);
-
-            // Only restart Python if it's not running at all (e.g. crashed between runs).
-            // If it's still in the middle of startup, leave it alone - await _yoloReadyTcs.Task
-            // will wait for the existing startup to finish without triggering a second launch.
-            if (_yoloProcess == null || _yoloProcess.HasExited)
-                EnsureYoloProcessRunning();
-
-            // If the user changed location while models were loading, restart now with the
-            // correct env vars before sending any work.
-            string currentLocation = (Application.Current as App)?.ActiveLocation ?? "Unknown";
-            if (!string.Equals(currentLocation, _yoloLocationAtStart, StringComparison.OrdinalIgnoreCase))
-            {
-                _yoloKillCount++; // signal ReadYoloOutputLoop that this is an intentional restart
-                if (_yoloProcess != null && !_yoloProcess.HasExited)
-                    try { _yoloProcess.Kill(); } catch { }
-                StartYoloProcess();
-            }
-
-            // If the active run changed since Python started, restart so FISHLENS_RUN_FOLDER is correct.
-            string currentRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
-            if (!string.Equals(currentRun, _yoloRunAtStart, StringComparison.OrdinalIgnoreCase))
-            {
-                _yoloKillCount++; // signal ReadYoloOutputLoop that this is an intentional restart
-                if (_yoloProcess != null && !_yoloProcess.HasExited)
-                    try { _yoloProcess.Kill(); } catch { }
-                StartYoloProcess();
-            }
-
-            // Show inline progress bar
+            _logger.LogInformation("Starting worker-pool analysis with videoFolder: {VideoFolder}", videoFolder);
             Dispatcher.Invoke(ShowAnalysisProgress);
-
-            // Wait for Python models to finish loading before sending work.
-            // NOTE: this await is inside the try so that if a dying ReadYoloOutputLoop from a
-            // previous process restart poisons _yoloReadyTcs, the exception is caught here instead
-            // of propagating uncaught up through the async void call chain and crashing the app.
-            lock (_errorBuilder) _errorBuilder.Clear();
-            _currentVideoStatus = "Processing videos, please wait...";
-            _totalVideos = 0;
             _processingTcs = new TaskCompletionSource<bool>();
-
             try
             {
-                if (_yoloReadyTcs != null && !_yoloReadyTcs.Task.IsCompleted)
-                {
-                    Dispatcher.Invoke(() => SetAnalysisStatus("Starting up, please wait..."));
-                    await _yoloReadyTcs.Task;
-                }
-
-                _yoloProcess.StandardInput.WriteLine(videoFolder);
-                _yoloProcess.StandardInput.Flush();
-                await _processingTcs.Task;
+                var context = CreateAnalysisBatchContext(videoFolder);
+                await _workerPool.AnalyzeFolderAsync(context, System.Threading.CancellationToken.None);
+                _processingTcs.TrySetResult(true);
 
                 var _syncApp = Application.Current as App;
                 string _syncActiveRun   = _syncApp?.ActiveRun ?? string.Empty;
@@ -466,14 +428,41 @@ namespace FishLens_App
             }
             catch (OperationCanceledException)
             {
-                // User clicked Cancel - process already killed and restarting
+                _processingTcs.TrySetCanceled();
                 Dispatcher.Invoke(HideAnalysisProgress);
             }
             catch (Exception ex)
             {
+                _processingTcs.TrySetException(ex);
                 Dispatcher.Invoke(HideAnalysisProgress);
                 MessageBox.Show(ex.Message, "Could not process videos.", MessageBoxButton.OK);
             }
+        }
+
+        private AnalysisBatchContext CreateAnalysisBatchContext(string videoFolder)
+        {
+            string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
+            string runFolder = string.IsNullOrWhiteSpace(activeRun) ? string.Empty : _pathResolver.ResolveRunFolder(activeRun);
+            var videoFiles = Directory.GetFiles(videoFolder)
+                .Where(f => VideoExtensions.Contains(Path.GetExtension(f)))
+                .ToList();
+
+            return new AnalysisBatchContext
+            {
+                VideoFolder = videoFolder,
+                VideoFiles = videoFiles,
+                RunName = activeRun,
+                RunFolder = runFolder,
+                Location = (Application.Current as App)?.ActiveLocation ?? "Unknown",
+                UpstreamDirection = GetUpstreamDirectionForActiveLocation(),
+                FastMode = _checkBoxes?.FastMode ?? false,
+                RunCsvPath = string.Equals(activeRun, "debug", StringComparison.OrdinalIgnoreCase)
+                    ? _pathResolver.ResolveCsvScriptPath()
+                    : _pathResolver.ResolveRunCsvPath(activeRun),
+                SessionCsvPath = string.IsNullOrWhiteSpace(activeRun) ? string.Empty : _pathResolver.ResolveSessionCsvPath(activeRun),
+                SessionNoFishCsvPath = string.IsNullOrWhiteSpace(activeRun) ? string.Empty : _pathResolver.ResolveSessionNoFishCsvPath(activeRun),
+                AllHistoryCsvPath = _pathResolver.ResolveAllTimeMasterFishCsvPath()
+            };
         }
 
         // **************************************************
@@ -489,18 +478,14 @@ namespace FishLens_App
 
         // **************************************************
         // Function: OnFastModeChanged
-        // Description: Restarts Python only when the user saves a Fast Mode change in Settings
+        // Description: Tracks the legacy FastMode setting, which now represents Slow Mode.
         // **************************************************
         private void OnFastModeChanged()
         {
             bool fastMode = _checkBoxes?.FastMode ?? false;
             if (_yoloFastModeAtStart == fastMode) return; // no actual change, ignore
 
-            _yoloKillCount++; // signal ReadYoloOutputLoop that this is an intentional restart
-            if (_yoloProcess != null && !_yoloProcess.HasExited)
-                try { _yoloProcess.Kill(); } catch { }
-
-            StartYoloProcess();
+            _yoloFastModeAtStart = fastMode;
         }
 
         // **************************************************
@@ -1247,6 +1232,52 @@ namespace FishLens_App
             analysisFrameText.Text = info;
         }
 
+        private void WorkerPool_ProgressChanged(object sender, AnalysisProgressEventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (e.TotalVideos > 0)
+                    _totalVideos = e.TotalVideos;
+
+                if (e.EventType == "total")
+                {
+                    Bars.Clear();
+                    foreach (var b in _builder.Build(_totalVideos, 0))
+                        Bars.Add(b);
+                    SetAnalysisStatus(e.Message);
+                    SetAnalysisFrameInfo(string.Empty);
+                    return;
+                }
+
+                if (e.EventType == "video_started" && !string.IsNullOrWhiteSpace(e.Message))
+                {
+                    _currentVideoStatus = e.Message;
+                    SetAnalysisStatus(_currentVideoStatus);
+                    SetAnalysisFrameInfo(string.Empty);
+                    var bars = _builder.Build(_totalVideos, Math.Max(0, e.CompletedVideos - 1));
+                    Bars.Clear();
+                    foreach (var b in bars)
+                        Bars.Add(b);
+                    return;
+                }
+
+                if (e.EventType == "frame_progress")
+                {
+                    SetAnalysisFrameInfo(e.FrameInfo);
+                    return;
+                }
+
+                if (e.EventType == "video_finished")
+                {
+                    var bars = _builder.Build(_totalVideos, e.CompletedVideos);
+                    Bars.Clear();
+                    foreach (var b in bars)
+                        Bars.Add(b);
+                    SetAnalysisStatus(e.Message);
+                }
+            });
+        }
+
         // **************************************************
         // Function: UpdateActionButtonState
         // Description: Enables/disables the Delete, Change Location, and Undo buttons based on
@@ -1284,12 +1315,8 @@ namespace FishLens_App
         private void OnProcessingCancelled()
         {
             _processingTcs?.TrySetCanceled();
-            if (_yoloProcess != null && !_yoloProcess.HasExited)
-                try { _yoloProcess.Kill(); } catch { }
-            _yoloProcess = null;
+            _workerPool.CancelActiveRun();
             HideAnalysisProgress();
-            // Restart Python in the background so models are ready for the next run
-            EnsureYoloProcessRunning();
         }
 
         // **************************************************
