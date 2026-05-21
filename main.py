@@ -1508,13 +1508,42 @@ def dedupe_duplicate_track_ids(finished_tracks):
 
     return sorted(kept, key=lambda t: _start(t))
 
-def no_fish_found(video_path, filename):
+def _probe_video_timestamp_only(video_path):
+    """Open video_path, read a handful of early frames, and return the best OCR timestamp.
+    Used for no-fish videos where the main tracker loop never stored a timestamp.
+    Returns the timestamp string on success, or None if the video cannot be opened
+    or Tesseract finds nothing useful."""
+    ts = None
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if cap.isOpened():
+            ret, frame = cap.read()
+            if ret and frame is not None:
+                result_ts, _ = probe_video_timestamp(
+                    cap, frame,
+                    probe_frames=VIDEO_TIMESTAMP_PROBE_FRAMES,
+                    read_frame_fn=_video_capture_read
+                )
+                ts = result_ts
+            cap.release()
+    except Exception as e:
+        print(f"[WARN] Timestamp probe for no-fish video failed: {e}")
+    return ts
+
+def no_fish_found(video_path, filename, probe_video_path=None):
     """Log that a video produced no fish tracks after all configured passes,
-    then persist the result so the C# app and skip-check can find it next run."""
+    then persist the result so the C# app and skip-check can find it next run.
+    Runs a lightweight OCR probe so no-fish rows carry a real video timestamp
+    for time-based reporting rather than 'Not detected'."""
     print("***************************************************************")
     print(f"No fish detected in {filename}. Skipping export.")
     print("***************************************************************")
-    _append_no_fish_row(video_path, None)
+    ts = _probe_video_timestamp_only(probe_video_path or video_path)
+    if ts:
+        print(f"[INFO] No-fish video timestamp (OCR): {ts}")
+    else:
+        print(f"[INFO] No-fish video timestamp: Not detected (OCR found nothing)")
+    _append_no_fish_row(video_path, ts)
 
 def _append_no_fish_row(video_file_path, video_timestamp):
     """Append a no-fish result to the slim session file and the master CSV outputs."""
@@ -1946,8 +1975,15 @@ def _process_video_with_retry(video_path, source_video_path):
             video_tracks = _run_pass("loose")
 
         # Only mark/copy as no-fish after all passes are exhausted.
+        # Pass video_path (the processed/possibly-transcoded path) as probe_video_path so the
+        # OCR probe uses the same file that YOLO successfully decoded - avoids re-opening a
+        # raw ASF that cv2 may struggle with while the reliable temp MP4 is still on disk.
         if not video_tracks:
-            no_fish_found(source_video_path or video_path, os.path.basename(source_video_path or video_path))
+            no_fish_found(
+                source_video_path or video_path,
+                os.path.basename(source_video_path or video_path),
+                probe_video_path=video_path
+            )
 
         # Second pass (ffmpeg/ffprobe): enrich export with display duration only.
         # No changes to track creation, filtering, dedupe, or existing fields.

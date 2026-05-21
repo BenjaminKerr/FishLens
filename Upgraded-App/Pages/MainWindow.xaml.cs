@@ -994,6 +994,49 @@ namespace FishLens_App
 
             if (currentTrackUpdated && _currentTracks.Count > 0)
                 DisplayTrackInUi(_currentTracks[_currentTrackIndex]);
+
+            // Sync the location change to the database for every detection row that belongs to
+            // these videos.  We re-read the already-updated run CSV so every track carries the
+            // new location without requiring the user to hit Save Changes separately.
+            var dbApp = Application.Current as App;
+            if (dbApp != null && dbApp.CurrentOrganizationId > 0 && !string.IsNullOrWhiteSpace(dbApp.connectionString))
+            {
+                int    dbOrgId  = dbApp.CurrentOrganizationId;
+                int    dbUserId = dbApp.CurrentUserId;
+                string dbConn   = dbApp.connectionString;
+
+                var seenVideoKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var video in selectedVideos)
+                {
+                    string videoFileName = !string.IsNullOrWhiteSpace(video.Name)
+                        ? video.Name
+                        : Path.GetFileName(video.VideoFilePath ?? string.Empty);
+                    string videoRun = ResolveVideoRun(video);
+                    string videoKey = $"{videoRun}|{videoFileName}";
+
+                    if (!string.IsNullOrWhiteSpace(videoFileName) && !seenVideoKeys.Contains(videoKey))
+                    {
+                        seenVideoKeys.Add(videoKey);
+
+                        var allTracks = GetAllTracks(videoFileName, videoRun, video.VideoFilePath);
+                        foreach (var track in allTracks)
+                        {
+                            if (track != null
+                                && !string.IsNullOrWhiteSpace(track.LikelyClass)
+                                && !track.LikelyClass.Equals("N/A", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var    capturedTrack  = track;
+                                int    capturedOrgId  = dbOrgId;
+                                int    capturedUserId = dbUserId;
+                                string capturedConn   = dbConn;
+                                _ = System.Threading.Tasks.Task.Run(() =>
+                                    FishLens_App.Services.DbSyncService.UpsertTrackToDb(
+                                        capturedTrack, capturedOrgId, capturedUserId, capturedConn));
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // **************************************************
