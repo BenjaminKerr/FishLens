@@ -1783,6 +1783,8 @@ namespace FishLens_App
                     {
                         tracks[0].LikelyClass = "no_fish";
                         tracks[0].Location    = noFishLocation;
+                        tracks[0].StartTime   = "0";
+                        tracks[0].EndTime     = "0";
                     }
                 }
 
@@ -2211,14 +2213,20 @@ namespace FishLens_App
 
                 // run_master.csv and all_history.csv are written together during analysis
                 // and must stay in sync - the save must succeed in both.
-                string runMasterPath = _pathResolver.ResolveRunCsvPath(sourceRun);
-                if (!File.Exists(runMasterPath) || !UpdateCsvFile(runMasterPath, currentTrack, currentVideoName, startTimeSec))
+                string runMasterPath  = _pathResolver.ResolveRunCsvPath(sourceRun);
+                bool fishRowExists    = File.Exists(runMasterPath) && UpdateCsvFile(runMasterPath, currentTrack, currentVideoName, startTimeSec);
+                bool trackIsNoFish    = IsNoFishLikelyClass(currentTrack?.LikelyClass);
+
+                if (!fishRowExists && !trackIsNoFish)
                 {
                     MessageBox.Show(
                         "This track was not found in the run master CSV. No changes were saved.",
                         "Save Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
+
+                if (!fishRowExists && trackIsNoFish)
+                    HandleNoFishCsvUpdate(currentTrack, currentVideoName, sourceRun);
 
                 string allHistoryPath = _pathResolver.ResolveAllTimeMasterFishCsvPath();
                 if (File.Exists(allHistoryPath))
@@ -2418,11 +2426,73 @@ namespace FishLens_App
             var selectedItem = fishTravelDirection.SelectedItem as ComboBoxItem;
 
             if (selectedItem == null)
-            {
-                return "unknown";
-            }
+                return string.Empty;
 
             return selectedItem.Content.ToString().ToLower();
+        }
+
+        // **************************************************
+        // Function: IsNoFishLikelyClass
+        // Description: Returns true when the likely class indicates no fish was detected —
+        //              covers "no_fish", "N/A", and null/empty (default placeholder).
+        // **************************************************
+        private bool IsNoFishLikelyClass(string likelyClass)
+        {
+            return string.IsNullOrWhiteSpace(likelyClass)
+                || likelyClass.Equals("no_fish", StringComparison.OrdinalIgnoreCase)
+                || likelyClass.Equals("N/A",     StringComparison.OrdinalIgnoreCase);
+        }
+
+        // **************************************************
+        // Function: HandleNoFishCsvUpdate
+        // Description: Saves changes for a video that originated from the no-fish CSV.
+        //              If the user marked it as fish-present, the video is moved into the fish
+        //              CSVs and removed from session_no_fish.csv. The DB upsert in the calling
+        //              method then updates the FishDetections row in place.
+        // **************************************************
+        private void HandleNoFishCsvUpdate(FishLens_App.Models.Video track, string videoName, string sourceRun)
+        {
+            string newLikelyClass = GetFishPresentClass();
+            bool convertingToFish = newLikelyClass.Equals("fish", StringComparison.OrdinalIgnoreCase);
+
+            string videoFile  = track?.VideoFilePath ?? videoName;
+            string location   = track?.Location ?? string.Empty;
+            string timestamp  = track?.DetectionTimestamp.HasValue == true
+                ? track.DetectionTimestamp.Value.ToString("yyyy/MM/dd HH:mm:ss")
+                : string.Empty;
+
+            // Build synthetic columns so CreateUpdatedCsvRow can apply UI values on top
+            string[] syntheticCols = { videoFile, location, "", "0", newLikelyClass, "0", "", "0", "0", timestamp, sourceRun };
+            string newRow = CreateUpdatedCsvRow(syntheticCols);
+
+            if (convertingToFish)
+            {
+                AppendRowToCsv(_pathResolver.ResolveRunCsvPath(sourceRun), newRow);
+                AppendRowToCsv(_pathResolver.ResolveAllTimeMasterFishCsvPath(), newRow);
+
+                string sessionFishPath = _pathResolver.ResolveSessionCsvPath(sourceRun);
+                if (File.Exists(sessionFishPath))
+                    AppendRowToCsv(sessionFishPath, newRow);
+
+                string noFishPath = _pathResolver.ResolveSessionNoFishCsvPath(sourceRun);
+                FishLens_App.Services.CsvUtils.RemoveVideoFromCsv(noFishPath, videoName);
+
+                if (track != null)
+                    track.LikelyClass = newLikelyClass;
+            }
+        }
+
+        // **************************************************
+        // Function: AppendRowToCsv
+        // Description: Appends a single data row to an existing CSV file.
+        // **************************************************
+        private void AppendRowToCsv(string csvPath, string row)
+        {
+            if (File.Exists(csvPath))
+            {
+                EnsureCsvHasRunColumn(csvPath, string.Empty);
+                File.AppendAllText(csvPath, row + Environment.NewLine);
+            }
         }
 
         private double ParseConfidenceText(string text)

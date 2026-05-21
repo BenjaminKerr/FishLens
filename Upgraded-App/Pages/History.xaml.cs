@@ -449,7 +449,7 @@ namespace FishLens_App
 
                 // No-fish rows only contribute to NoFishCount and TotalVideoCount.
                 // Skip all fish-specific stats (direction, location, hourly, daily, confidence).
-                if (likelyClass.Equals("no_fish", StringComparison.OrdinalIgnoreCase))
+                if (IsNoFishClass(likelyClass))
                     continue;
 
                 ProcessDirectionData(stats, direction);
@@ -1285,8 +1285,8 @@ namespace FishLens_App
                 // Exclude non-fish rows from the visual table — bird detections
                 // skip the per-detection filters, but still appear in the table.
                 string likelyClassRaw = columns.Length > 4 ? columns[4].Trim() : string.Empty;
-                bool isNoFish = likelyClassRaw.Equals("no_fish", StringComparison.OrdinalIgnoreCase);
-                bool isBird   = likelyClassRaw.Equals("bird",    StringComparison.OrdinalIgnoreCase);
+                bool isNoFish = IsNoFishClass(likelyClassRaw);
+                bool isBird   = likelyClassRaw.Equals("bird", StringComparison.OrdinalIgnoreCase);
 
                 if (isBird) continue; // birds never shown in table
 
@@ -1356,6 +1356,24 @@ namespace FishLens_App
 
 
         // **************************************************
+        // Function: IsNoFishClass
+        // Description: Returns true for any LikelyClass value that represents a "no fish" outcome —
+        //              covers both "no_fish" (YOLO found no tracks) and "not_fish" (YOLO or user
+        //              classified the track as not a fish). Both should count as "no fish" in reports.
+        // **************************************************
+        private static bool IsNoFishClass(string likelyClass)
+        {
+            bool result = false;
+            if (!string.IsNullOrWhiteSpace(likelyClass))
+            {
+                result = likelyClass.Equals("no_fish",  StringComparison.OrdinalIgnoreCase)
+                      || likelyClass.Equals("not_fish", StringComparison.OrdinalIgnoreCase);
+            }
+            return result;
+        }
+
+
+        // **************************************************
         // Function: ProcessSpeciesData
         // Description: Updates statistics with species information from a data row
         private void ProcessSpeciesData(ReportStatistics stats, string species, string likelyClass)
@@ -1367,7 +1385,7 @@ namespace FishLens_App
                     stats.FishCount++;
                 else if (likelyClass.Equals("bird", StringComparison.OrdinalIgnoreCase))
                     stats.BirdCount++;
-                else if (likelyClass.Equals("no_fish", StringComparison.OrdinalIgnoreCase))
+                else if (IsNoFishClass(likelyClass))
                     stats.NoFishCount++;
             }
             else
@@ -2380,9 +2398,8 @@ namespace FishLens_App
                 string ts       = cols.Length > 9 ? cols[9].Trim() : "";
                 string run      = ExtractRunFromColumns(cols);
 
-                // Detect no-fish rows (likely_class col 4 == "no_fish")
-                bool isNoFish = cols.Length > 4 &&
-                    cols[4].Trim().Equals("no_fish", StringComparison.OrdinalIgnoreCase);
+                // Detect no-fish rows (likely_class col 4 == "no_fish" or "not_fish")
+                bool isNoFish = cols.Length > 4 && IsNoFishClass(cols[4].Trim());
 
                 if (isNoFish)
                 {
