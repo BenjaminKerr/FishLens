@@ -101,8 +101,12 @@ namespace FishLens_App
         private void ResetPassword_Click(object sender, RoutedEventArgs e)
         {
             string code = ResetCodeBox.Text.Trim();
-            string newPassword = ResetNewPasswordBox.Password;
-            string confirmPassword = ResetConfirmPasswordBox.Password;
+            string newPassword = ResetNewPasswordVisible.Visibility == Visibility.Visible
+                ? ResetNewPasswordVisible.Text
+                : ResetNewPasswordBox.Password;
+            string confirmPassword = ResetConfirmPasswordVisible.Visibility == Visibility.Visible
+                ? ResetConfirmPasswordVisible.Text
+                : ResetConfirmPasswordBox.Password;
 
             UpdateResetPasswordRequirements(newPassword, confirmPassword);
 

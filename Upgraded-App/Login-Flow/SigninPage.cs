@@ -188,7 +188,10 @@ namespace FishLens_App
 
         private void SigninButton_Click(object sender, RoutedEventArgs e)
         {
-            if (Signin(SignInUsernameBox.Text, SignInPasswordBox.Password))
+            string signInPassword = SignInPasswordVisible.Visibility == Visibility.Visible
+                ? SignInPasswordVisible.Text
+                : SignInPasswordBox.Password;
+            if (Signin(SignInUsernameBox.Text, signInPassword))
             {
                 // Apply this user's saved settings to app resources before MainWindow renders
                 var app = (App)Application.Current;

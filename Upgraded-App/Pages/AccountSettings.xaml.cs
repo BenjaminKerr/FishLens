@@ -93,7 +93,9 @@ namespace FishLens_App
             }
 
             string username = NewUsername.Text.Trim();
-            string password = NewPassword.Password;
+            string password = NewPasswordVisible.Visibility == Visibility.Visible
+                ? NewPasswordVisible.Text
+                : NewPassword.Password;
             string email = NewUserEmail.Text.Trim();
 
             try
@@ -121,6 +123,9 @@ namespace FishLens_App
             {
                 NewUsername.Text = "";
                 NewPassword.Password = "";
+                NewPasswordVisible.Text = "";
+                NewPasswordVisible.Visibility = Visibility.Collapsed;
+                NewPassword.Visibility = Visibility.Visible;
                 RoleComboBox.SelectedIndex = -1;
                 NewUserEmail.Text = "";
                 CreateUserSuccessMessage.Visibility = Visibility.Visible;
