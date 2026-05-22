@@ -1103,6 +1103,7 @@ namespace FishLens_App
 
                 if (e.EventType == "total")
                 {
+                    completedVideos = e.CompletedVideos;
                     Bars.Clear();
                     foreach (var b in _builder.InitialBuild(_totalVideos))
                         Bars.Add(b);
@@ -1154,7 +1155,7 @@ namespace FishLens_App
 
                 if (e.EventType == "video_finished")
                 {
-                    completedVideos++;
+                    completedVideos = e.CompletedVideos;
                     var sections = e.Message.Split("|");
                     int pid = int.Parse(sections[0]);
                     string filename = sections[1];
