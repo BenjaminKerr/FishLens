@@ -1195,15 +1195,27 @@ namespace FishLens_App
                             }
                         }
                     }
-
-                    SetAnalysisFrameInfo(string.Empty); // clear frame line between videos
-
-
-                    //var bars = _builder.Build(_totalVideos, Math.Max(0, e.CompletedVideos - 1));
-                    //Bars.Clear();
-                    //foreach (var b in bars)
-                    //  Bars.Add(b);
                     return;
+                }
+                if(e.EventType == "video_finished")
+                {
+                    var sections = e.Message.Split("|");
+                    int pid = int.Parse(sections[0]);
+                    string filename = sections[1];
+
+                    var threadStatus =
+                        ThreadStatuses.FirstOrDefault(x =>
+                        string.Equals(
+                            x.Filename?.Trim(),
+                            filename,
+                            StringComparison.OrdinalIgnoreCase));
+
+                    if (threadStatus != null &&
+                        threadStatus.VideoIndex >= 0 &&
+                        threadStatus.VideoIndex < Bars.Count)
+                    {
+                        Bars[threadStatus.VideoIndex]?.SetComplete();
+                    }
                 }
             });
             /*

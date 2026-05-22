@@ -139,7 +139,7 @@ namespace FishLens_App.Services
                             TotalVideos = pending.Count,
                             CompletedVideos = Math.Min(done, pending.Count),
                             FileName = filename,
-                            Message = $"Completed {Math.Min(done, pending.Count)}/{pending.Count}"
+                            Message = $"{worker.ProcessID}|{filename}|Completed {Math.Min(done, pending.Count)}/{pending.Count}"
                         });
                     }
                 }
