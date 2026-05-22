@@ -341,6 +341,7 @@ namespace FishLens_App
         // **************************************************
         private void HistoryButtonClick(object sender, RoutedEventArgs e)
         {
+            SideBar.Width = SideBar.ActualWidth;
             CollapseSidebar();
             NavigateToPage(new History(_pathResolver, _fileSystemManager, _logger), "History");
         }
@@ -351,11 +352,13 @@ namespace FishLens_App
         // **************************************************
         private void SettingsButtonClick(object sender, RoutedEventArgs e)
         {
+            SideBar.Width = SideBar.ActualWidth;
             CollapseSidebar();
             NavigateToPage(new Settings(_pathResolver, _fileSystemManager, _logger), "Settings");
         }
         private void AccountSettingsButtonClick(object sender, RoutedEventArgs e)
         {
+            SideBar.Width = SideBar.ActualWidth;
             CollapseSidebar();
             NavigateToPage(new AccountSettings(), "AccountSettings");
         }
