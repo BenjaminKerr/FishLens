@@ -275,7 +275,7 @@
                                         <Border.Style>
                                             <Style TargetType="Border">
 
-                                                <!-- Base state -->
+                                                <!-- BASE STATE -->
                                                 <Setter Property="Background"
                                                     Value="{DynamicResource WindowBackground}" />
                                                 <Setter Property="Opacity" Value="1"/>
@@ -289,7 +289,7 @@
                                                         <Setter Property="Opacity" Value="1"/>
                                                     </DataTrigger>
 
-                                                    <!-- IN PROGRESS (VISIBLE + OBVIOUS ANIMATION) -->
+                                                    <!-- IN PROGRESS -->
                                                     <DataTrigger Binding="{Binding State}" Value="InProgress">
 
                                                         <Setter Property="Background" Value="#E8A038"/>

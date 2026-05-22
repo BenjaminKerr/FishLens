@@ -146,8 +146,6 @@ namespace FishLens_App
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
             var app = Application.Current as App;
 
-
-
             InitializeComponent();
             app.ApplyCurrentSettings();
             _checkBoxes = GetCheckBoxToggleFromApplication();
@@ -1152,25 +1150,24 @@ namespace FishLens_App
                     Bars.Clear();
                     foreach (var b in _builder.InitialBuild(_totalVideos))
                         Bars.Add(b);
-                    SetAnalysisStatus(e.Message);
                     SetAnalysisFrameInfo(string.Empty);
                     return;
                 }
 
                 if (e.EventType == "video_started" && !string.IsNullOrWhiteSpace(e.Message))
                 {
-                    _currentVideoStatus = e.Message;
-                    SetAnalysisStatus(_currentVideoStatus);
                     SetAnalysisFrameInfo(string.Empty);
                     var sections = e.Message.Split("|");
                     int pid = int.Parse(sections[0]);
                     string filename = sections[1];
+                    string vidName = sections[2];
                     var existing = ThreadStatuses.FirstOrDefault(t => t.Pid == pid);
 
                     if (existing == null)
                     {
                         VideoProgressStatus status = new VideoProgressStatus()
                         {
+                            Message = vidName,
                             Pid = pid,
                             Filename = filename
                         };
@@ -1194,6 +1191,7 @@ namespace FishLens_App
                                 bar.SetInProgress();
                             }
                         }
+                        existing.Message = _currentVideoStatus;
                     }
                     return;
                 }
