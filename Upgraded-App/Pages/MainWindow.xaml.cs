@@ -1076,56 +1076,12 @@ namespace FishLens_App
                     lock (_errorBuilder) _errorBuilder.AppendLine(errLine);
             });
 
-            // Start persistent stdout reader
         }
-            /*
-            Dispatcher.Invoke(() =>
-            {
-                if (e.TotalVideos > 0)
-                    _totalVideos = e.TotalVideos;
 
-                if (e.EventType == "total")
-                {
-                    Bars.Clear();
-                    foreach (var b in _builder.Build(_totalVideos, 0))
-                        Bars.Add(b);
-                    SetAnalysisStatus(e.Message);
-                    SetAnalysisFrameInfo(string.Empty);
-                    return;
-                }
-
-                if (e.EventType == "video_started" && !string.IsNullOrWhiteSpace(e.Message))
-                {
-                    _currentVideoStatus = e.Message;
-                    SetAnalysisStatus(_currentVideoStatus);
-                    SetAnalysisFrameInfo(string.Empty);
-                    var bars = _builder.Build(_totalVideos, Math.Max(0, e.CompletedVideos - 1));
-                    Bars.Clear();
-                    foreach (var b in bars)
-                        Bars.Add(b);
-                    return;
-                }
-
-                if (e.EventType == "frame_progress")
-                {
-                    SetAnalysisFrameInfo(e.FrameInfo);
-                    return;
-                }
-
-                if (e.EventType == "video_finished")
-                {
-                    var bars = _builder.Build(_totalVideos, e.CompletedVideos);
-                    Bars.Clear();
-                    foreach (var b in bars)
-                        Bars.Add(b);
-                    SetAnalysisStatus(e.Message);
-                }
-            });
-            */
-            // **************************************************
-            // Function: ReadYoloOutputLoop
-            // Description: Background loop that reads Python stdout for the lifetime of the process
-            // **************************************************
+        // **************************************************
+        // Function: WorkerPool_ProgressChanged
+        // Description: Handler for visual progress updates when processign progress is made
+        // **************************************************
         private void WorkerPool_ProgressChanged(object sender, AnalysisProgressEventArgs e)
         {
             // Snapshot the process, ready-TCS, and kill-count for this Python instance at startup.
@@ -1137,19 +1093,18 @@ namespace FishLens_App
             // must NOT poison _processingTcs (the new analysis is already underway).
 
 
-            Dispatcher.Invoke(()
-                =>
+            Dispatcher.Invoke(() =>
             {
                 if (e.TotalVideos > 0)
                     _totalVideos = e.TotalVideos;
 
-            if (e.EventType == "total")
-            {
-                Bars.Clear();
-                foreach (var b in _builder.InitialBuild(_totalVideos))
-                    Bars.Add(b);
-                SetAnalysisFrameInfo(string.Empty);
-                SetAnalysisStatus("Processed " + completedVideos + "/" + _totalVideos + " videos...");
+                if (e.EventType == "total")
+                {
+                    Bars.Clear();
+                    foreach (var b in _builder.InitialBuild(_totalVideos))
+                        Bars.Add(b);
+                    SetAnalysisFrameInfo(string.Empty);
+                    SetAnalysisStatus("Processed " + completedVideos + "/" + _totalVideos + " videos...");
                     return;
                 }
 
@@ -1193,7 +1148,8 @@ namespace FishLens_App
                     }
                     return;
                 }
-                if(e.EventType == "video_finished")
+
+                if (e.EventType == "video_finished")
                 {
                     completedVideos++;
                     var sections = e.Message.Split("|");
@@ -1218,195 +1174,9 @@ namespace FishLens_App
                     {
                         SetAnalysisStatus("Processed " + completedVideos + "/" + _totalVideos + " videos...");
                     }
-
                 }
             });
-            /*
-            while ((line = myProcess.StandardOutput.ReadLine()) != null)
-            {
-                System.Diagnostics.Debug.Print(line);
-
-                if (line == "[PROGRESS] STARTUP")
-                {
-                    Dispatcher.Invoke(() => SetAnalysisStatus("Starting up, please wait..."));
-                }
-                else if (line == "[PROGRESS] READY")
-                {
-                    myReadyTcs?.TrySetResult(true);
-                }
-                else if (line.StartsWith("[PROGRESS] TOTAL:") &&
-                    int.TryParse(line.Substring("[PROGRESS] TOTAL:".Length), out int total))
-                {
-                    _totalVideos = total;
-
-                    Dispatcher.Invoke(() =>
-                    {
-                        Bars.Clear();
-                        foreach (var b in _builder.InitialBuild(_totalVideos))
-                        {
-                            Bars.Add(b);
-                        }
-                    });
-                }
-                else if (line.StartsWith("[INFO] Skipping"))
-                {
-                    var bar = Bars.FirstOrDefault(b => b.State == VideoProgressState.Empty);
-                    bar.SetComplete();
-                }
-                else if (line.StartsWith("[PROGRESS] VIDEO:"))
-                {
-                    string payload = line.Substring("[PROGRESS] VIDEO:".Length);
-                    var sections = payload.Split('|');
-
-                    if (sections.Length != 3)
-                        continue;
-
-                    string filename = sections[0];
-                    string pidString = sections[1];
-                    string fractionString = sections[2];
-
-                    if (!int.TryParse(pidString, out int pid))
-                        return;
-
-                    var parts = fractionString.Split('/');
-
-                    if (parts.Length != 2 ||
-                        !int.TryParse(parts[0], out int currentFrame) ||
-                        !int.TryParse(parts[1], out int totalFrames))
-                    {
-                        return;
-                    }
-
-                    string currentVideoStatus =
-                        $"Processing {filename} - Frame {currentFrame}/{totalFrames}";
-
-
-                    Dispatcher.BeginInvoke(() =>
-                        {
-                    var existing = ThreadStatuses.FirstOrDefault(t => t.Pid == pid);
-
-                    if (existing == null)
-                    {
-                            VideoProgressStatus status = new VideoProgressStatus()
-                            {
-                                Message = currentVideoStatus,
-                                Pid = pid,
-                                Filename = filename
-                            };
-                        ThreadStatuses.Add(status);
-                        var bar = Bars.FirstOrDefault(b => b.State == VideoProgressState.Empty);
-                            if (bar != null)
-                            {
-                                status.VideoIndex = Bars.IndexOf(bar);
-                                bar.SetInProgress();
-                            }
-                        }
-                        else
-                        {
-                            if (existing.Filename != filename)
-                            {
-                                existing.Filename = filename;
-                                var bar = Bars.FirstOrDefault(b => b.State == VideoProgressState.Empty);
-                                if (bar != null)
-                                {
-                                    existing.VideoIndex = Bars.IndexOf(bar);
-                                    bar.SetInProgress();
-                                }
-                            }
-                            existing.Message = currentVideoStatus;
-                        }
-
-                        SetAnalysisFrameInfo(string.Empty); // clear frame line between videos
-
-                    });
-                    
-                }
-                else if (line.StartsWith("[PROGRESS] FRAME:"))
-                {
-                    string payload = line.Substring("[PROGRESS] FRAME:".Length);
-                    var parts = payload.Split('/');
-                    if (parts.Length == 2)
-                    {
-                        int upper;
-                        int lower;
-                        string frameInfo;
-                        int percentage = 0;
-                        if (parts[1] == "?")
-                        {
-                            frameInfo = $"Frame {parts[0]}";
-                        }
-                        else if (int.TryParse(parts[0], out upper) &&
-                                 int.TryParse(parts[1], out lower) &&
-                                 lower != 0)
-                        {
-                            percentage = upper * 100 / lower;
-                            frameInfo = $"Frame {percentage}%";
-                        }
-                        else
-                        {
-                            frameInfo = "Frame ?";
-                        }
-                        frameInfo = parts[1] == "?"
-                            ? $"Frame {parts[0]}"
-                            : $"Video progress: " + percentage + "%";
-                        Dispatcher.Invoke(() => SetAnalysisFrameInfo(frameInfo));
-                    }
-                }
-                else if (line.StartsWith("[PROGRESS] VIDEO_DONE"))
-                {
-
-
-
-                    Dispatcher.BeginInvoke(() =>
-                    {
-                        string filename = line.Substring("[PROGRESS] VIDEO_DONE:".Length).Trim();
-
-                        var threadStatus =
-                            ThreadStatuses.FirstOrDefault(x =>
-                            string.Equals(
-                                x.Filename?.Trim(),
-                                filename,
-                                StringComparison.OrdinalIgnoreCase));
-
-                        if (threadStatus != null &&
-                            threadStatus.VideoIndex >= 0 &&
-                            threadStatus.VideoIndex < Bars.Count)
-                        {
-                            Bars[threadStatus.VideoIndex]?.SetComplete();
-                        }
-                        
-                    });
-                    threadID++;
-                }
-                else if (line == "[PROGRESS] DONE")
-                {
-                    string error;
-                    lock (_errorBuilder) { error = _errorBuilder.ToString(); _errorBuilder.Clear(); }
-                    Dispatcher.Invoke(() =>
-                    {
-
-                        HideAnalysisProgress();
-                        DisplayProcessOutputIfNeeded(error);
-                    });
-                    _processingTcs?.TrySetResult(true);
-                }
-            
-            }
-
-            // Process exited - fail any pending run or startup wait for THIS instance only.
-            // Using the snapshot myReadyTcs prevents a dying old loop from poisoning a freshly
-            // created TCS that belongs to the new Python process.
-            myReadyTcs?.TrySetException(new Exception("Python process exited unexpectedly."));
-
-            // Only fail _processingTcs if this was NOT an intentional restart kill.
-            // When we kill+restart (run change, location change, fast mode), _yoloKillCount is
-            // incremented before the kill. If the count changed since this loop started, a new
-            // Python process is already loading and we must not poison its _processingTcs.
-            if (_yoloKillCount == myKillCount)
-                _processingTcs?.TrySetException(new Exception("Python process exited unexpectedly."));
-            */
         }
-
 
         // **************************************************
         // Function: ShowAnalysisProgress / HideAnalysisProgress / SetAnalysisStatus
