@@ -235,7 +235,9 @@
                         Background="{DynamicResource SidebarBorder}"
                         CornerRadius="8"
                         Margin="12,0,12,10"
-                        Padding="12,10">
+                        Padding="12,10"
+                        BorderBrush="{DynamicResource AccentButtonDisabledBackground}"
+                        BorderThickness="1">
                     <StackPanel>
                         <Grid Margin="0,0,0,6">
                             <Grid.ColumnDefinitions>
@@ -263,7 +265,7 @@
                                     Margin="8,0,0,0"
                                     Opacity="0.75"/>
                         </Grid>
-                        <ItemsControl ItemsSource="{Binding Bars}">
+                        <ItemsControl ItemsSource="{Binding Bars}" Margin="0,0,0,2">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <UniformGrid Rows="1"/>

@@ -14,7 +14,6 @@ namespace FishLens_App.Services
                 : pendingVideos <= 30
                     ? 2
                     : 3;
-            return 4;
             return Math.Max(1, Math.Min(desired, GetMachineWorkerCap(logicalCpuCount, totalMemoryBytes)));
         }
 
@@ -34,7 +33,6 @@ namespace FishLens_App.Services
                 : cpu < 12
                     ? 2
                     : 3;
-            return 4;
             return Math.Max(1, Math.Min(memoryCap, cpuCap));
         }
     }

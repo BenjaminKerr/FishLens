@@ -1564,6 +1564,7 @@ namespace FishLens_App
             _processingComplete = true;
             UpdateActionButtonState();
             videoLibraryTitle.Visibility = Visibility.Visible;
+            analysisProgressArea.Visibility = Visibility.Collapsed;
         }
 
         // **************************************************
