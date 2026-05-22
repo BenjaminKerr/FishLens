@@ -224,6 +224,7 @@
                                Foreground="{DynamicResource OnAccentForeground}"
                                Opacity="0.55"
                                HorizontalAlignment="Left"
+                               Visibility="Collapsed"
                                Margin="4,0,0,0"/>
                 </StackPanel>
 
@@ -262,7 +263,6 @@
                                     Margin="8,0,0,0"
                                     Opacity="0.75"/>
                         </Grid>
-                        <TextBlock x:Name="analysisFrameText" Text="" Foreground="{DynamicResource OnAccentForeground}" FontSize="11" Opacity="0.6" Margin="0,0,0,8" TextTrimming="CharacterEllipsis"/>
                         <ItemsControl ItemsSource="{Binding Bars}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
@@ -331,7 +331,20 @@
                         <ItemsControl ItemsSource="{Binding ThreadStatuses}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding Message}" />
+                                    <TextBlock Text="{Binding Message}" FontSize="14"
+                                               Foreground="{DynamicResource OnAccentForeground}"
+                                               FontWeight="Medium"
+                                               TextTrimming="CharacterEllipsis">
+                                    <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Message}" Value="">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>

@@ -111,7 +111,7 @@ namespace FishLens_App.Services
                         TotalVideos = pending.Count,
                         CompletedVideos = Math.Min(startedNumber, pending.Count),
                         FileName = filename,
-                        Message = $"{worker.ProcessID}|{filename}| Processing {filename}"
+                        Message = $"{worker.ProcessID}|{filename}|Processing {filename}"
                     });
 
                     try

@@ -1208,8 +1208,16 @@ namespace FishLens_App
                     {
                         Bars[threadStatus.VideoIndex]?.SetComplete();
                     }
+                    threadStatus.Message = ("");
 
-                    SetAnalysisStatus("Processed " + completedVideos + "/" + _totalVideos + " videos...");
+                    if (completedVideos == _totalVideos)
+                    {
+                        SetAnalysisStatus("Finishing Up...");
+                    }
+                    else
+                    {
+                        SetAnalysisStatus("Processed " + completedVideos + "/" + _totalVideos + " videos...");
+                    }
 
                 }
             });
@@ -1408,7 +1416,7 @@ namespace FishLens_App
         {
             analysisProgressArea.Visibility = Visibility.Visible;
             analysisStatusText.Text = "Starting up, please wait...";
-            analysisFrameText.Text = string.Empty;
+            //analysisFrameText.Text = string.Empty;
             App.RaiseAnalysisStateChanged(true);
         }
 
@@ -1425,7 +1433,7 @@ namespace FishLens_App
 
         private void SetAnalysisFrameInfo(string info)
         {
-            analysisFrameText.Text = info;
+            //analysisFrameText.Text = info;
         }
 
 
@@ -1447,7 +1455,6 @@ namespace FishLens_App
             fishPresentConfidence.IsEnabled = _processingComplete;
             fishTravelDirection.IsEnabled = _processingComplete;
             fishSpeciesConfidence.IsEnabled = _processingComplete;
-
         }
 
         // **************************************************
@@ -1556,6 +1563,7 @@ namespace FishLens_App
             }
             _processingComplete = true;
             UpdateActionButtonState();
+            videoLibraryTitle.Visibility = Visibility.Visible;
         }
 
         // **************************************************
