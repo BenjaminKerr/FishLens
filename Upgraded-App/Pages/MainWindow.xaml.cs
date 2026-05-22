@@ -29,6 +29,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Collections.ObjectModel;
+using System.Runtime.InteropServices.ObjectiveC;
 
 namespace FishLens_App
 {
@@ -1077,14 +1078,56 @@ namespace FishLens_App
             });
 
             // Start persistent stdout reader
-            Task.Run(ReadYoloOutputLoop);
         }
+            /*
+            Dispatcher.Invoke(() =>
+            {
+                if (e.TotalVideos > 0)
+                    _totalVideos = e.TotalVideos;
 
-        // **************************************************
-        // Function: ReadYoloOutputLoop
-        // Description: Background loop that reads Python stdout for the lifetime of the process
-        // **************************************************
-        private void ReadYoloOutputLoop()
+                if (e.EventType == "total")
+                {
+                    Bars.Clear();
+                    foreach (var b in _builder.Build(_totalVideos, 0))
+                        Bars.Add(b);
+                    SetAnalysisStatus(e.Message);
+                    SetAnalysisFrameInfo(string.Empty);
+                    return;
+                }
+
+                if (e.EventType == "video_started" && !string.IsNullOrWhiteSpace(e.Message))
+                {
+                    _currentVideoStatus = e.Message;
+                    SetAnalysisStatus(_currentVideoStatus);
+                    SetAnalysisFrameInfo(string.Empty);
+                    var bars = _builder.Build(_totalVideos, Math.Max(0, e.CompletedVideos - 1));
+                    Bars.Clear();
+                    foreach (var b in bars)
+                        Bars.Add(b);
+                    return;
+                }
+
+                if (e.EventType == "frame_progress")
+                {
+                    SetAnalysisFrameInfo(e.FrameInfo);
+                    return;
+                }
+
+                if (e.EventType == "video_finished")
+                {
+                    var bars = _builder.Build(_totalVideos, e.CompletedVideos);
+                    Bars.Clear();
+                    foreach (var b in bars)
+                        Bars.Add(b);
+                    SetAnalysisStatus(e.Message);
+                }
+            });
+            */
+            // **************************************************
+            // Function: ReadYoloOutputLoop
+            // Description: Background loop that reads Python stdout for the lifetime of the process
+            // **************************************************
+        private void WorkerPool_ProgressChanged(object sender, AnalysisProgressEventArgs e)
         {
             // Snapshot the process, ready-TCS, and kill-count for this Python instance at startup.
             // If the process is killed and restarted (e.g. run change), the NEW instance
@@ -1098,6 +1141,23 @@ namespace FishLens_App
             int myKillCount = _yoloKillCount;
 
             string line;
+            Dispatcher.Invoke(()
+                =>
+            {
+                if (e.TotalVideos > 0)
+                    _totalVideos = e.TotalVideos;
+
+                if (e.EventType == "total")
+                {
+                    Bars.Clear();
+                    foreach (var b in _builder.InitialBuild(_totalVideos))
+                        Bars.Add(b);
+                    SetAnalysisStatus(e.Message);
+                    SetAnalysisFrameInfo(string.Empty);
+                    return;
+                }
+            });
+            /*
             while ((line = myProcess.StandardOutput.ReadLine()) != null)
             {
                 System.Diagnostics.Debug.Print(line);
@@ -1266,6 +1326,7 @@ namespace FishLens_App
                     });
                     _processingTcs?.TrySetResult(true);
                 }
+            
             }
 
             // Process exited - fail any pending run or startup wait for THIS instance only.
@@ -1279,6 +1340,7 @@ namespace FishLens_App
             // Python process is already loading and we must not poison its _processingTcs.
             if (_yoloKillCount == myKillCount)
                 _processingTcs?.TrySetException(new Exception("Python process exited unexpectedly."));
+            */
         }
 
 
@@ -1310,53 +1372,6 @@ namespace FishLens_App
             analysisFrameText.Text = info;
         }
 
-        private void WorkerPool_ProgressChanged(object sender, AnalysisProgressEventArgs e)
-        {
-            /*
-            Dispatcher.Invoke(() =>
-            {
-                if (e.TotalVideos > 0)
-                    _totalVideos = e.TotalVideos;
-
-                if (e.EventType == "total")
-                {
-                    Bars.Clear();
-                    foreach (var b in _builder.Build(_totalVideos, 0))
-                        Bars.Add(b);
-                    SetAnalysisStatus(e.Message);
-                    SetAnalysisFrameInfo(string.Empty);
-                    return;
-                }
-
-                if (e.EventType == "video_started" && !string.IsNullOrWhiteSpace(e.Message))
-                {
-                    _currentVideoStatus = e.Message;
-                    SetAnalysisStatus(_currentVideoStatus);
-                    SetAnalysisFrameInfo(string.Empty);
-                    var bars = _builder.Build(_totalVideos, Math.Max(0, e.CompletedVideos - 1));
-                    Bars.Clear();
-                    foreach (var b in bars)
-                        Bars.Add(b);
-                    return;
-                }
-
-                if (e.EventType == "frame_progress")
-                {
-                    SetAnalysisFrameInfo(e.FrameInfo);
-                    return;
-                }
-
-                if (e.EventType == "video_finished")
-                {
-                    var bars = _builder.Build(_totalVideos, e.CompletedVideos);
-                    Bars.Clear();
-                    foreach (var b in bars)
-                        Bars.Add(b);
-                    SetAnalysisStatus(e.Message);
-                }
-            });
-            */
-        }
 
         // **************************************************
         // Function: UpdateActionButtonState
