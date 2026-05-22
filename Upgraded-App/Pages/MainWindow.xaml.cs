@@ -105,6 +105,7 @@ namespace FishLens_App
         private bool _suppressStatusHandler    = false;
         private bool _updatingConfidenceText   = false;
         int threadID = 0;
+        int completedVideos = 0;
 
 
         #endregion
@@ -1134,23 +1135,21 @@ namespace FishLens_App
             // _yoloKillCount is snapshotted so we can tell whether the exit was intentional:
             // if it was incremented since we started, the kill was a deliberate restart and we
             // must NOT poison _processingTcs (the new analysis is already underway).
-            var myProcess = _yoloProcess;
-            var myReadyTcs = _yoloReadyTcs;
-            int myKillCount = _yoloKillCount;
 
-            string line;
+
             Dispatcher.Invoke(()
                 =>
             {
                 if (e.TotalVideos > 0)
                     _totalVideos = e.TotalVideos;
 
-                if (e.EventType == "total")
-                {
-                    Bars.Clear();
-                    foreach (var b in _builder.InitialBuild(_totalVideos))
-                        Bars.Add(b);
-                    SetAnalysisFrameInfo(string.Empty);
+            if (e.EventType == "total")
+            {
+                Bars.Clear();
+                foreach (var b in _builder.InitialBuild(_totalVideos))
+                    Bars.Add(b);
+                SetAnalysisFrameInfo(string.Empty);
+                SetAnalysisStatus("Processed " + completedVideos + "/" + _totalVideos + " videos...");
                     return;
                 }
 
@@ -1183,7 +1182,6 @@ namespace FishLens_App
                     {
                         if (existing.Filename != filename)
                         {
-                            existing.Filename = filename;
                             var bar = Bars.FirstOrDefault(b => b.State == VideoProgressState.Empty);
                             if (bar != null)
                             {
@@ -1191,22 +1189,18 @@ namespace FishLens_App
                                 bar.SetInProgress();
                             }
                         }
-                        existing.Message = _currentVideoStatus;
+                        existing.Message = vidName;
                     }
                     return;
                 }
                 if(e.EventType == "video_finished")
                 {
+                    completedVideos++;
                     var sections = e.Message.Split("|");
                     int pid = int.Parse(sections[0]);
                     string filename = sections[1];
 
-                    var threadStatus =
-                        ThreadStatuses.FirstOrDefault(x =>
-                        string.Equals(
-                            x.Filename?.Trim(),
-                            filename,
-                            StringComparison.OrdinalIgnoreCase));
+                    var threadStatus = ThreadStatuses.FirstOrDefault(x => x.Pid == pid);
 
                     if (threadStatus != null &&
                         threadStatus.VideoIndex >= 0 &&
@@ -1214,6 +1208,9 @@ namespace FishLens_App
                     {
                         Bars[threadStatus.VideoIndex]?.SetComplete();
                     }
+
+                    SetAnalysisStatus("Processed " + completedVideos + "/" + _totalVideos + " videos...");
+
                 }
             });
             /*
