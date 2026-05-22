@@ -111,7 +111,7 @@ namespace FishLens_App.Services
                         TotalVideos = pending.Count,
                         CompletedVideos = Math.Min(startedNumber, pending.Count),
                         FileName = filename,
-                        Message = $"Video {Math.Min(startedNumber, pending.Count)}/{pending.Count} - {filename}"
+                        Message = $"{worker.ProcessID}|{filename}| Video {Math.Min(startedNumber, pending.Count)}/{pending.Count} - {filename}"
                     });
 
                     try
@@ -533,6 +533,7 @@ namespace FishLens_App.Services
             private TaskCompletionSource<PythonVideoResult> _activeTcs;
             private string _activeRequestId;
             private Process _process;
+            public int ProcessID => _process?.Id ?? -1;
 
             public bool IsBusy => _activeTcs != null;
             public bool HasExited => _process == null || _process.HasExited;
@@ -576,6 +577,7 @@ namespace FishLens_App.Services
                 await WaitUntilReadyAsync(token);
                 _activeRequestId = Guid.NewGuid().ToString("N");
                 _activeTcs = new TaskCompletionSource<PythonVideoResult>();
+                System.Diagnostics.Debug.Print("ANALYZING: " + ProcessID.ToString());
 
                 Send(new
                 {

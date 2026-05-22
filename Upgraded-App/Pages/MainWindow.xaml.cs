@@ -1156,6 +1156,55 @@ namespace FishLens_App
                     SetAnalysisFrameInfo(string.Empty);
                     return;
                 }
+
+                if (e.EventType == "video_started" && !string.IsNullOrWhiteSpace(e.Message))
+                {
+                    _currentVideoStatus = e.Message;
+                    SetAnalysisStatus(_currentVideoStatus);
+                    SetAnalysisFrameInfo(string.Empty);
+                    var sections = e.Message.Split("|");
+                    int pid = int.Parse(sections[0]);
+                    string filename = sections[1];
+                    var existing = ThreadStatuses.FirstOrDefault(t => t.Pid == pid);
+
+                    if (existing == null)
+                    {
+                        VideoProgressStatus status = new VideoProgressStatus()
+                        {
+                            Pid = pid,
+                            Filename = filename
+                        };
+                        ThreadStatuses.Add(status);
+                        var bar = Bars.FirstOrDefault(b => b.State == VideoProgressState.Empty);
+                        if (bar != null)
+                        {
+                            status.VideoIndex = Bars.IndexOf(bar);
+                            bar.SetInProgress();
+                        }
+                    }
+                    else
+                    {
+                        if (existing.Filename != filename)
+                        {
+                            existing.Filename = filename;
+                            var bar = Bars.FirstOrDefault(b => b.State == VideoProgressState.Empty);
+                            if (bar != null)
+                            {
+                                existing.VideoIndex = Bars.IndexOf(bar);
+                                bar.SetInProgress();
+                            }
+                        }
+                    }
+
+                    SetAnalysisFrameInfo(string.Empty); // clear frame line between videos
+
+
+                    //var bars = _builder.Build(_totalVideos, Math.Max(0, e.CompletedVideos - 1));
+                    //Bars.Clear();
+                    //foreach (var b in bars)
+                    //  Bars.Add(b);
+                    return;
+                }
             });
             /*
             while ((line = myProcess.StandardOutput.ReadLine()) != null)
