@@ -8,6 +8,7 @@ using FishLens_App.Interfaces;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using System;
+using System.Data.SqlClient;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -44,6 +45,7 @@ namespace FishLens_App
         private string _currentReportStyle = "Standard Report";
         private Dictionary<string, string[]> _lastGroupedLinesByRun = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         private bool _isUpdatingConfidenceControls;
+        private bool _isHistoryLoaded;
 
         // Frozen brush cache avoids creating new SolidColorBrush objects on every report render.
         private static readonly Dictionary<string, SolidColorBrush> _brushCache = new();
@@ -86,9 +88,26 @@ namespace FishLens_App
                 App.AnalysisStateChanged += OnAnalysisStateChanged;
                 // Apply immediately in case analysis was already running when user navigated here
                 ApplyAnalysisLock(App.IsAnalyzing);
+                _isHistoryLoaded = true;
+
+                // Backfill no-fish rows for all runs into DB so "Videos w/ No Fish" reports
+                // work correctly even for runs processed before DB sync was introduced.
+                var bfApp = Application.Current as App;
+                if (bfApp != null && bfApp.CurrentOrganizationId > 0)
+                {
+                    string bfHistoryDir = _pathResolver.ResolveAllHistoryFolder();
+                    int bfOrgId         = bfApp.CurrentOrganizationId;
+                    int bfUserId        = bfApp.CurrentUserId;
+                    string bfConn       = bfApp.connectionString;
+                    _ = System.Threading.Tasks.Task.Run(() =>
+                        FishLens_App.Services.DbSyncService.BackfillNoFishRuns(bfHistoryDir, bfOrgId, bfUserId, bfConn));
+                }
+
+                GenerateReportClick(this, new RoutedEventArgs());
             };
             Unloaded += (s, e) =>
             {
+                _isHistoryLoaded = false;
                 App.LocationChanged -= OnLocationChanged;
                 App.RunChanged -= OnRunChanged;
                 App.AnalysisStateChanged -= OnAnalysisStateChanged;
@@ -103,8 +122,10 @@ namespace FishLens_App
 
         private void ApplyAnalysisLock(bool isAnalyzing)
         {
-            generateReportButton.IsEnabled = !isAnalyzing;
-            historyAnalysisBanner.Visibility = isAnalyzing ? Visibility.Visible : Visibility.Collapsed;
+            if (generateReportButton != null)
+                generateReportButton.IsEnabled = !isAnalyzing;
+            if (historyAnalysisBanner != null)
+                historyAnalysisBanner.Visibility = isAnalyzing ? Visibility.Visible : Visibility.Collapsed;
         }
 
         #endregion
@@ -134,7 +155,7 @@ namespace FishLens_App
 
                 if (dataLines.Length == 0)
                 {
-                    ShowNoDataMessage();
+                    ShowBlankReportState();
                     return;
                 }
 
@@ -143,7 +164,7 @@ namespace FishLens_App
 
                 if (filteredLines.Length == 0)
                 {
-                    ShowNoMatchingDataMessage();
+                    ShowBlankReportState();
                     return;
                 }
 
@@ -266,15 +287,11 @@ namespace FishLens_App
 
         // **************************************************
         // Function: ApplyFiltersClick
-        // Description: Saves current UI filter selections. If a report is already displayed,
-        //              regenerates it immediately with the new filters. If no report exists yet,
-        //              only saves the filters; the user must click Generate Report.
+        // Description: Saves current UI filter selections and regenerates the report.
         public void ApplyFiltersClick(object sender, RoutedEventArgs e)
         {
             UpdateFiltersFromUI();
-
-            if (!string.IsNullOrEmpty(_currentReportText))
-                GenerateReportClick(sender, e);
+            GenerateReportClick(sender, e);
         }
 
         // **************************************************
@@ -307,6 +324,7 @@ namespace FishLens_App
         public void ClearFiltersClick(object sender, RoutedEventArgs e)
         {
             ResetFiltersToDefaults();
+            GenerateReportClick(sender, e);
         }
 
         // **************************************************
@@ -340,6 +358,9 @@ namespace FishLens_App
         {
             if (reportTypeCombo?.SelectedItem is ComboBoxItem item)
                 _currentReportStyle = item.Content?.ToString() ?? "Standard Report";
+
+            if (_isHistoryLoaded)
+                GenerateReportClick(sender, new RoutedEventArgs());
         }
 
         // **************************************************
@@ -385,6 +406,7 @@ namespace FishLens_App
             var stats = InitializeStatistics();
             stats.TotalDetections = csvLines.Length;
             double totalConfidence = 0;
+            int confidenceCount = 0;   // tracks rows that actually have a positive confidence value
             double totalCorrectness = 0;
             int correctnessCount = 0;
             var uniqueDates = new HashSet<DateTime>();
@@ -428,13 +450,18 @@ namespace FishLens_App
 
                 // No-fish rows only contribute to NoFishCount and TotalVideoCount.
                 // Skip all fish-specific stats (direction, location, hourly, daily, confidence).
-                if (likelyClass.Equals("no_fish", StringComparison.OrdinalIgnoreCase))
+                if (IsNoFishClass(likelyClass))
                     continue;
 
                 ProcessDirectionData(stats, direction);
                 // Only track fish detections in VideoDetections (for bar charts)
                 ProcessVideoData(stats, videoName);
-                totalConfidence += ProcessConfidenceData(stats, columns);
+                double rowConf = ProcessConfidenceData(stats, columns);
+                if (rowConf > 0)
+                {
+                    totalConfidence += rowConf;
+                    confidenceCount++;
+                }
 
                 // col 9: video_timestamp (full datetime string)
                 DateTime? timestamp = null;
@@ -495,7 +522,7 @@ namespace FishLens_App
             stats.TotalDetections -= stats.NoFishCount;
             stats.TotalVideoCount  = uniqueVideos.Count;
 
-            stats.AverageConfidence = CalculateAverageConfidence(totalConfidence, stats.TotalDetections);
+            stats.AverageConfidence = CalculateAverageConfidence(totalConfidence, confidenceCount);
             stats.AverageCorrectness = correctnessCount > 0 ? totalCorrectness / correctnessCount : 0;
 
             // Calculate fish per day
@@ -876,67 +903,63 @@ namespace FishLens_App
                 "Current Session"  => "CurrentSession",
                 _                  => selectedRun
             };
-            ConstrainDatePickersForRun(selectedRun);
+            ConstrainDatePickersForRun(_filterRun);
+
+            if (_isHistoryLoaded)
+                GenerateReportClick(sender, new RoutedEventArgs());
         }
 
         // **************************************************
         // Function: ConstrainDatePickersForRun
         // Description: Reads the CSV for a run to find min/max dates and sets picker bounds
-        private void ConstrainDatePickersForRun(string runName)
+        private void ConstrainDatePickersForRun(string filterRun)
         {
-            // Both pickers selectable up to today; the right (To) calendar should open at today.
-            if (endDatePicker != null)
-            {
-                endDatePicker.DisplayDateEnd = DateTime.Today;
-                endDatePicker.DisplayDate    = DateTime.Today;
-            }
-
-            if (string.IsNullOrWhiteSpace(runName) || runName == "All History") return;
-
-            // Resolve the CSV to scan for min/max dates.
-            string csvPath;
-            if (runName == "Current Session")
-            {
-                string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
-                csvPath = string.IsNullOrWhiteSpace(activeRun)
-                    ? string.Empty
-                    : _pathResolver.ResolveSessionCsvPath(activeRun);
-            }
-            else
-            {
-                csvPath = _pathResolver.ResolveRunCsvPath(runName);
-            }
-
             try
             {
-                if (!File.Exists(csvPath)) return;
-
                 DateTime? minDate = null;
+                DateTime? maxDate = null;
 
-                foreach (string line in File.ReadLines(csvPath).Skip(1))
+                foreach (string line in ReadAllDataLines(filterRun))
                 {
                     var cols = line.Split(',');
                     if (cols.Length > 9 && DateTime.TryParse(cols[9].Trim(), out DateTime ts))
                     {
                         if (!minDate.HasValue || ts < minDate.Value) minDate = ts;
+                        if (!maxDate.HasValue || ts > maxDate.Value) maxDate = ts;
                     }
                 }
 
-                if (minDate.HasValue && startDatePicker != null)
-                {
-                    startDatePicker.DisplayDateStart = minDate.Value.Date;
-                    startDatePicker.DisplayDateEnd   = DateTime.Today;
-                    startDatePicker.DisplayDate      = minDate.Value.Date;
-                }
-                if (endDatePicker != null)
-                {
-                    if (minDate.HasValue)
-                        endDatePicker.DisplayDateStart = minDate.Value.Date;
-                    endDatePicker.DisplayDateEnd = DateTime.Today;
-                    endDatePicker.DisplayDate    = DateTime.Today;
-                }
+                ApplyDatePickerBounds(minDate?.Date, maxDate?.Date);
             }
             catch { /* non-critical */ }
+        }
+
+        private void ApplyDatePickerBounds(DateTime? minDate, DateTime? maxDate)
+        {
+            DateTime start = minDate ?? DateTime.Today;
+            DateTime end = maxDate ?? start;
+            if (end < start)
+                end = start;
+
+            if (startDatePicker != null)
+            {
+                startDatePicker.DisplayDateStart = start;
+                startDatePicker.DisplayDateEnd = end;
+                startDatePicker.DisplayDate = start;
+                if (startDatePicker.SelectedDate.HasValue &&
+                    (startDatePicker.SelectedDate.Value.Date < start || startDatePicker.SelectedDate.Value.Date > end))
+                    startDatePicker.SelectedDate = null;
+            }
+
+            if (endDatePicker != null)
+            {
+                endDatePicker.DisplayDateStart = start;
+                endDatePicker.DisplayDateEnd = end;
+                endDatePicker.DisplayDate = end;
+                if (endDatePicker.SelectedDate.HasValue &&
+                    (endDatePicker.SelectedDate.Value.Date < start || endDatePicker.SelectedDate.Value.Date > end))
+                    endDatePicker.SelectedDate = null;
+            }
         }
 
         // **************************************************
@@ -1065,33 +1088,102 @@ namespace FishLens_App
         // **************************************************
         private string[] ReadAllDataLines(string filterRun)
         {
-            string csvPath = GetCsvPathForRun(filterRun);
-            var lines = new List<string>();
+            bool useDb    = string.IsNullOrWhiteSpace(filterRun) || filterRun == "All";
+            bool useRunDb = !useDb && filterRun != "CurrentSession";
+            var app = Application.Current as App;
+            string[] result;
 
-            if (File.Exists(csvPath))
-                lines.AddRange(File.ReadAllLines(csvPath).Skip(1)); // skip header
-
-            if (filterRun == "CurrentSession")
+            if (useDb && app != null && app.CurrentOrganizationId > 0)
             {
-                string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(activeRun))
+                result = ReadAllDataLinesFromDb(app.CurrentOrganizationId, app.connectionString);
+            }
+            else if (useRunDb && app != null && app.CurrentOrganizationId > 0)
+            {
+                result = ReadAllDataLinesFromDb(app.CurrentOrganizationId, app.connectionString, filterRun);
+            }
+            else
+            {
+                string csvPath = GetCsvPathForRun(filterRun);
+                var lines = new List<string>();
+
+                if (File.Exists(csvPath))
+                    lines.AddRange(File.ReadAllLines(csvPath).Skip(1)); // skip header
+
+                if (filterRun == "CurrentSession")
                 {
-                    string noFishPath = _pathResolver.ResolveSessionNoFishCsvPath(activeRun);
-                    if (File.Exists(noFishPath))
+                    string activeRun = app?.ActiveRun ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(activeRun))
                     {
-                        foreach (string line in File.ReadLines(noFishPath).Skip(1))
+                        string noFishPath = _pathResolver.ResolveSessionNoFishCsvPath(activeRun);
+                        if (File.Exists(noFishPath))
                         {
-                            if (string.IsNullOrWhiteSpace(line)) continue;
-                            var parts = line.Split(',');
-                            if (parts.Length < 3) continue;
-                            // Pad to fish schema; timestamp (col 2 in no-fish) moves to col 9 and run to col 10.
-                            string padded = $"{parts[0]},{parts[1]},,0,no_fish,0,,0,0,{parts[2]},{activeRun}";
-                            lines.Add(padded);
+                            foreach (string line in File.ReadLines(noFishPath).Skip(1))
+                            {
+                                if (!string.IsNullOrWhiteSpace(line))
+                                {
+                                    var parts = line.Split(',');
+                                    if (parts.Length >= 3)
+                                    {
+                                        // Pad to fish schema; timestamp (col 2 in no-fish) moves to col 9 and run to col 10.
+                                        string padded = $"{parts[0]},{parts[1]},,0,no_fish,0,,0,0,{parts[2]},{activeRun}";
+                                        lines.Add(padded);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
+
+                result = lines.ToArray();
             }
 
+            return result;
+        }
+
+        // **************************************************
+        // Function: ReadAllDataLinesFromDb
+        // Description: Queries FishDetections for the org and returns rows in the same
+        //              11-column CSV format used by all existing filter and stats logic.
+        // **************************************************
+        private string[] ReadAllDataLinesFromDb(int orgId, string connectionString, string runName = null)
+        {
+            var lines = new List<string>();
+            try
+            {
+                using var conn = new SqlConnection(connectionString);
+                conn.Open();
+                using var cmd = new SqlCommand("kaharra.GetFishDetectionsByOrg", conn);
+                cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                cmd.Parameters.AddWithValue("@pOrgId",        orgId);
+                cmd.Parameters.AddWithValue("@pRunName",      runName != null ? (object)runName : DBNull.Value);
+                cmd.Parameters.AddWithValue("@pLocationName", DBNull.Value);
+
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    string videoFile   = reader["VideoFile"]?.ToString()    ?? string.Empty;
+                    string location    = reader["LocationName"]?.ToString() ?? string.Empty;
+                    string species     = reader["Species"]?.ToString()      ?? string.Empty;
+                    string speciesConf = reader["SpeciesConfidence"] == DBNull.Value
+                        ? "0" : ((double)reader["SpeciesConfidence"]).ToString("F4");
+                    string likelyClass = reader["LikelyClass"]?.ToString()  ?? string.Empty;
+                    string confidence  = reader["Confidence"] == DBNull.Value
+                        ? "0" : ((double)reader["Confidence"]).ToString("F4");
+                    string direction   = reader["Direction"]?.ToString()    ?? string.Empty;
+                    string startTime   = reader["StartTimeSec"]?.ToString() ?? "0";
+                    string endTime     = reader["EndTimeSec"]?.ToString()   ?? "0";
+                    string timestamp   = reader["DetectionTimestamp"] == DBNull.Value
+                        ? string.Empty
+                        : ((DateTime)reader["DetectionTimestamp"]).ToString("yyyy/MM/dd HH:mm:ss");
+                    string run         = reader["RunName"]?.ToString()      ?? string.Empty;
+
+                    lines.Add($"{videoFile},{location},{species},{speciesConf},{likelyClass},{confidence},{direction},{startTime},{endTime},{timestamp},{run}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reading detections from DB for org {OrgId}", orgId);
+            }
             return lines.ToArray();
         }
 
@@ -1199,8 +1291,8 @@ namespace FishLens_App
                 // Exclude non-fish rows from the visual table — bird detections
                 // skip the per-detection filters, but still appear in the table.
                 string likelyClassRaw = columns.Length > 4 ? columns[4].Trim() : string.Empty;
-                bool isNoFish = likelyClassRaw.Equals("no_fish", StringComparison.OrdinalIgnoreCase);
-                bool isBird   = likelyClassRaw.Equals("bird",    StringComparison.OrdinalIgnoreCase);
+                bool isNoFish = IsNoFishClass(likelyClassRaw);
+                bool isBird   = likelyClassRaw.Equals("bird", StringComparison.OrdinalIgnoreCase);
 
                 if (isBird) continue; // birds never shown in table
 
@@ -1270,6 +1362,24 @@ namespace FishLens_App
 
 
         // **************************************************
+        // Function: IsNoFishClass
+        // Description: Returns true for any LikelyClass value that represents a "no fish" outcome —
+        //              covers both "no_fish" (YOLO found no tracks) and "not_fish" (YOLO or user
+        //              classified the track as not a fish). Both should count as "no fish" in reports.
+        // **************************************************
+        private static bool IsNoFishClass(string likelyClass)
+        {
+            bool result = false;
+            if (!string.IsNullOrWhiteSpace(likelyClass))
+            {
+                result = likelyClass.Equals("no_fish",  StringComparison.OrdinalIgnoreCase)
+                      || likelyClass.Equals("not_fish", StringComparison.OrdinalIgnoreCase);
+            }
+            return result;
+        }
+
+
+        // **************************************************
         // Function: ProcessSpeciesData
         // Description: Updates statistics with species information from a data row
         private void ProcessSpeciesData(ReportStatistics stats, string species, string likelyClass)
@@ -1281,7 +1391,7 @@ namespace FishLens_App
                     stats.FishCount++;
                 else if (likelyClass.Equals("bird", StringComparison.OrdinalIgnoreCase))
                     stats.BirdCount++;
-                else if (likelyClass.Equals("no_fish", StringComparison.OrdinalIgnoreCase))
+                else if (IsNoFishClass(likelyClass))
                     stats.NoFishCount++;
             }
             else
@@ -1833,6 +1943,21 @@ namespace FishLens_App
             reportPanel.Children.Clear();
         }
 
+        private void ShowBlankReportState()
+        {
+            _lastFilteredLines = Array.Empty<string>();
+            _lastGroupedLinesByRun.Clear();
+            _lastStats = null;
+            _currentReportText = null;
+
+            ClearPreviousReport();
+            reportScrollViewer.Visibility = Visibility.Collapsed;
+            reportControls.Visibility = Visibility.Collapsed;
+            videoPlayer.Visibility = Visibility.Collapsed;
+            placeholderPanel.Visibility = Visibility.Visible;
+            viewTitle.Text = "Analysis Report";
+        }
+
         #endregion
 
         #region Helper Methods - Message Boxes
@@ -2279,9 +2404,8 @@ namespace FishLens_App
                 string ts       = cols.Length > 9 ? cols[9].Trim() : "";
                 string run      = ExtractRunFromColumns(cols);
 
-                // Detect no-fish rows (likely_class col 4 == "no_fish")
-                bool isNoFish = cols.Length > 4 &&
-                    cols[4].Trim().Equals("no_fish", StringComparison.OrdinalIgnoreCase);
+                // Detect no-fish rows (likely_class col 4 == "no_fish" or "not_fish")
+                bool isNoFish = cols.Length > 4 && IsNoFishClass(cols[4].Trim());
 
                 if (isNoFish)
                 {

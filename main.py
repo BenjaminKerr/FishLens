@@ -10,8 +10,8 @@ import sys
 print("[PROGRESS] STARTUP", flush=True)
 
 import csv
-from concurrent.futures import ProcessPoolExecutor, as_completed
 import importlib
+import json
 import os
 import shutil
 import subprocess
@@ -20,6 +20,7 @@ import warnings
 from collections import Counter
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import List
 
 import cv2
@@ -134,6 +135,8 @@ def _resolve_classifier_model_path():
 # ========================================================================
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+IS_WORKER_MODE = "--worker-json" in sys.argv
+IS_CLASSIFIER_MODE = "--classifier-json" in sys.argv
 
 
 # CSV export schema
@@ -150,11 +153,12 @@ CSV_KEYS = [
     "video_timestamp",    # col 9
     "run",                # col 10
 ]
+WORKER_RESULT_KEYS = CSV_KEYS + ["image_path"]
 NO_FISH_CSV_KEYS = ["video_file", "location", "video_timestamp"]
 TESSERACT_AVAILABLE = check_tesseract()
 
 # Detector configuration
-MODEL = _load_yolo_model("models/fish_detector5.pt")
+MODEL = None if IS_CLASSIFIER_MODE else _load_yolo_model("models/fish_detector5.pt")
 STRICT_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_YOLO_CONFIDENCE_THRESHOLD", "0.42"))
 LOOSE_YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("FISHLENS_LOOSE_YOLO_CONFIDENCE_THRESHOLD", "0.34"))
 ENABLE_LOOSE_RETRY = os.getenv("FISHLENS_ENABLE_LOOSE_RETRY", "1") == "1"
@@ -174,7 +178,7 @@ CORNER_ARTIFACT_MAX_SIZE = 0.20   # box must be < 20 % of frame width AND height
 FPS_DEFAULT = 30 
 MAX_EXPORT_PER_VIDEO = 5
 
-CLI_INPUT_PATH = sys.argv[1].strip() if len(sys.argv) > 1 else ""
+CLI_INPUT_PATH = next((arg.strip() for arg in sys.argv[1:] if not arg.startswith("--")), "")
 
 
 def _resolve_run_folder():
@@ -193,6 +197,7 @@ _RUN_FOLDER = _resolve_run_folder()
 _IS_DEBUG_RUN = _RUN_FOLDER and os.path.basename(_RUN_FOLDER).lower() == "debug"
 OUTPUT_CSV = os.path.join(PROJECT_ROOT, "fish_summary.csv")
 FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
+FISH_IMAGE_PENDING_DIR = ""
 
 
 if not _RUN_FOLDER:
@@ -220,7 +225,10 @@ FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
 
 # Runtime tuning (primarily fed by the WPF app through environment variables)
 FISHLENS_LOCATION = os.getenv("FISHLENS_LOCATION", "Unknown").strip() or "Unknown"
-FAST_MODE = os.getenv("FISHLENS_FAST_MODE", "1") == "1"
+FISHLENS_UPSTREAM_DIRECTION = os.getenv("FISHLENS_UPSTREAM_DIRECTION", "left").strip().lower()
+if FISHLENS_UPSTREAM_DIRECTION not in {"left", "right"}:
+    FISHLENS_UPSTREAM_DIRECTION = "left"
+FAST_MODE = os.getenv("FISHLENS_FAST_MODE", "0") == "1"  # Legacy setting name; true now means Slow Mode.
 # Strict pass is fixed at stride 3 by policy.
 # Loose retry still drops to stride 1 when strict finds no fish.
 STRICT_FRAME_STRIDE = 3
@@ -228,6 +236,33 @@ FRAME_STRIDE = STRICT_FRAME_STRIDE
 
 # Runtime worker count used by CPU-threaded operations.
 RUN_WORKERS = 1
+
+
+def _label_direction_from_dx(dx, min_dx=0.0):
+    """Map horizontal movement into user-configured upstream/downstream labels."""
+    try:
+        dx = float(dx)
+        min_dx = float(min_dx)
+    except Exception:
+        return "indecisive"
+
+    if abs(dx) < min_dx:
+        return "indecisive"
+
+    moving_right = dx > 0
+    if FISHLENS_UPSTREAM_DIRECTION == "right":
+        return "upstream" if moving_right else "downstream"
+    return "downstream" if moving_right else "upstream"
+
+
+def _label_tracker_direction(direction):
+    """Convert DeepSORT's raw left-upstream labels to the configured labels."""
+    direction = str(direction or "").strip().lower()
+    if direction not in {"upstream", "downstream"}:
+        return direction or "unknown"
+    if FISHLENS_UPSTREAM_DIRECTION == "right":
+        return "downstream" if direction == "upstream" else "upstream"
+    return direction
 
 
 def _resolve_run_workers(input_path, video_count):
@@ -254,20 +289,26 @@ def _apply_run_workers(workers):
     except Exception:
         pass
 
-YOLO_IMGSZ = max(320, int(os.getenv("FISHLENS_YOLO_IMGSZ", "448" if FAST_MODE else "512")))
+YOLO_IMGSZ = max(320, int(os.getenv("FISHLENS_YOLO_IMGSZ", "512" if FAST_MODE else "448")))
 SAVE_TIMESTAMP_DEBUG_FRAMES = os.getenv("FISHLENS_SAVE_TIMESTAMP_DEBUG", "0") == "1"
-TIMESTAMP_MAX_ATTEMPTS = max(1, int(os.getenv("FISHLENS_TIMESTAMP_MAX_ATTEMPTS", "4" if FAST_MODE else "8")))
+TIMESTAMP_MAX_ATTEMPTS = max(1, int(os.getenv("FISHLENS_TIMESTAMP_MAX_ATTEMPTS", "8" if FAST_MODE else "4")))
 SUPPRESS_CODEC_WARNINGS = os.getenv("FISHLENS_SUPPRESS_CODEC_WARNINGS", "1") == "1"
-VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRAMES", "6" if FAST_MODE else "12")))
+VIDEO_TIMESTAMP_PROBE_FRAMES = max(1, int(os.getenv("FISHLENS_VIDEO_TS_PROBE_FRAMES", "12" if FAST_MODE else "6")))
 STRICT_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_MIN_TRACK_DURATION_SEC", "0.65")))
 LOOSE_MIN_TRACK_DURATION_SEC = max(0.1, float(os.getenv("FISHLENS_LOOSE_MIN_TRACK_DURATION_SEC", "0.45")))
 MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
 MIN_TRACK_TRAVEL_PX = max(0.0, float(os.getenv("FISHLENS_MIN_TRACK_TRAVEL_PX", "8")))
+OCR_TIMESTAMP_MERGE_TOLERANCE_SEC = max(0.0, float(os.getenv("FISHLENS_OCR_TS_MERGE_TOLERANCE_SEC", "2.0")))
+TRACK_MISSING_GRACE_FRAMES = max(0, int(os.getenv("FISHLENS_TRACK_MISSING_GRACE_FRAMES", "12")))
+TRACK_TIMESTAMP_SANITY_TOLERANCE_SEC = max(0.0, float(os.getenv("FISHLENS_TRACK_TS_SANITY_TOLERANCE_SEC", "5.0")))
+CROP_CANDIDATE_LIMIT = max(1, int(os.getenv("FISHLENS_CROP_CANDIDATE_LIMIT", "5")))
+CROP_MARGIN_RATIO = max(0.0, float(os.getenv("FISHLENS_CROP_MARGIN_RATIO", "0.45")))
+MIN_CROP_SIZE = max(1, int(os.getenv("FISHLENS_MIN_CROP_SIZE", "180")))
 
 # Classifier configuration
 CLASSIFIER_MODEL_PATH = _resolve_classifier_model_path()
-CLASSIFIER_MODEL = _load_classifier_model(CLASSIFIER_MODEL_PATH)
-LOAD_IMG, IMG_TO_ARRAY = _load_keras_image_utils()
+CLASSIFIER_MODEL = None if IS_WORKER_MODE else _load_classifier_model(CLASSIFIER_MODEL_PATH)
+LOAD_IMG, IMG_TO_ARRAY = (None, None) if IS_WORKER_MODE else _load_keras_image_utils()
 CLASS_NAMES = ["Chinook", "Omykiss"]
 IMAGE_SIZE = _get_classifier_input_size(CLASSIFIER_MODEL, default=(150, 150))
 CLASSIFIER_PREPROCESS_MODE = _get_classifier_preprocess_mode(CLASSIFIER_MODEL)
@@ -306,7 +347,8 @@ def _init_csvs():
         for path, keys in [(OUTPUT_CSV, CSV_KEYS), (MASTER_FISH_CSV, CSV_KEYS)]:
             _initialize_csv_header(path, keys, overwrite=False)
 
-_init_csvs()
+if not IS_WORKER_MODE and not IS_CLASSIFIER_MODE:
+    _init_csvs()
 
 # Signal to the host application that models are loaded and we are ready for work.
 print("[PROGRESS] READY", flush=True)
@@ -766,6 +808,7 @@ def _score_species_crop(frame_shape, bbox, conf, track_age_frames):
     min_edge_distance = min(float(x1), float(y1), float(frame_w - x2), float(frame_h - y2))
     edge_clearance_target = max(12.0, min(frame_w, frame_h) * 0.08)
     edge_score = max(0.0, min(1.0, min_edge_distance / edge_clearance_target))
+    clipped = min_edge_distance <= 2.0
 
     # Prefer reasonably large, readable fish, but cap the benefit.
     area_fraction = (box_w * box_h) / max(1.0, float(frame_w * frame_h))
@@ -775,13 +818,59 @@ def _score_species_crop(frame_shape, bbox, conf, track_age_frames):
     maturity_score = min(1.0, max(0, int(track_age_frames)) / 4.0)
 
     conf_score = max(0.0, min(1.0, float(conf)))
-    return (
-        conf_score * 0.35
-        + center_score * 0.30
-        + edge_score * 0.20
+    score = (
+        conf_score * 0.25
+        + center_score * 0.25
+        + edge_score * 0.35
         + area_score * 0.10
         + maturity_score * 0.05
     )
+    if clipped:
+        score *= 0.45
+    return score
+
+def _crop_with_margin(frame, bbox):
+    """Return a crop with context around the detection while staying inside the frame."""
+    x1, y1, x2, y2 = [int(v) for v in bbox]
+    h, w = frame.shape[:2]
+    box_w = max(1, x2 - x1)
+    box_h = max(1, y2 - y1)
+
+    left = x1 - int(box_w * CROP_MARGIN_RATIO)
+    top = y1 - int(box_h * CROP_MARGIN_RATIO)
+    right = x2 + int(box_w * CROP_MARGIN_RATIO)
+    bottom = y2 + int(box_h * CROP_MARGIN_RATIO)
+
+    crop_w = right - left
+    crop_h = bottom - top
+    if crop_w < MIN_CROP_SIZE:
+        extra = MIN_CROP_SIZE - crop_w
+        left -= extra // 2
+        right += extra - (extra // 2)
+    if crop_h < MIN_CROP_SIZE:
+        extra = MIN_CROP_SIZE - crop_h
+        top -= extra // 2
+        bottom += extra - (extra // 2)
+
+    left = max(0, left)
+    top = max(0, top)
+    right = min(w, right)
+    bottom = min(h, bottom)
+    return frame[top:bottom, left:right]
+
+def _remember_crop_candidate(track_data, crop, frame, crop_score, conf):
+    """Keep a small shortlist so final classification can choose the strongest crop."""
+    candidates = track_data.setdefault("crop_candidates", [])
+    candidates.append(
+        {
+            "score": float(crop_score),
+            "confidence": float(conf),
+            "crop": crop.copy(),
+            "frame": frame.copy(),
+        }
+    )
+    candidates.sort(key=lambda c: (c.get("score", 0.0), c.get("confidence", 0.0)), reverse=True)
+    del candidates[CROP_CANDIDATE_LIMIT:]
 
 def deepsort_analysis(tracker, frame, frameData, vidData):
     """Advance DeepSort tracks for the current frame and maintain per-track state."""
@@ -803,6 +892,10 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
             initial_x = float(obj.get("centroid", (0, 0))[0])
             vidData.v_active_tracks[trackId] = {
                 "start_frame": frameData.f_index,
+                "start_ms": frameData.f_pos_ms if frameData.f_pos_ms > 0 else None,
+                "last_seen_frame": frameData.f_index,
+                "last_seen_ms": frameData.f_pos_ms if frameData.f_pos_ms > 0 else None,
+                "missing_frames": 0,
                 "confidences": [],
                 "directions": [],
                 "entry_x": initial_x,
@@ -810,6 +903,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                 "best_conf": -1.0,
                 "best_crop_score": -1.0,
                 "best_crop": None,
+                "crop_candidates": [],
                 "video_timestamp": vidData.v_video_timestamp or "Not detected",
                 "timestamp_confidence": initial_conf,
                 "timestamp_attempts": 0
@@ -845,34 +939,29 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
 
         # Update track data per-frame
         vidData.v_active_tracks[trackId]["confidences"].append(obj["confidence"])
-        vidData.v_active_tracks[trackId]["directions"].append(obj["direction"])
+        vidData.v_active_tracks[trackId]["directions"].append(_label_tracker_direction(obj["direction"]))
+        vidData.v_active_tracks[trackId]["last_seen_frame"] = frameData.f_index
+        vidData.v_active_tracks[trackId]["last_seen_ms"] = frameData.f_pos_ms if frameData.f_pos_ms > 0 else None
+        vidData.v_active_tracks[trackId]["missing_frames"] = 0
 
         x1, y1, x2, y2 = obj["bbox"]
         exit_x = (x1 + x2) / 2  # Center x-position at current frame
         vidData.v_active_tracks[trackId]["last_x"] = exit_x
         
-        # Add 30% margin around the bounding box for zoomed-out view
-        h, w = frame.shape[:2]
-        margin_x = int((x2 - x1) * 0.3)
-        margin_y = int((y2 - y1) * 0.3)
-            
-        x1_zoom = max(0, x1 - margin_x)
-        y1_zoom = max(0, y1 - margin_y)
-        x2_zoom = min(w, x2 + margin_x)
-        y2_zoom = min(h, y2 + margin_y)
-            
-        crop = frame[y1_zoom:y2_zoom, x1_zoom:x2_zoom]
+        crop = _crop_with_margin(frame, (x1, y1, x2, y2))
         conf = obj["confidence"]
 
         if crop is not None and crop.size > 0:
             track_age_frames = len(vidData.v_active_tracks[trackId]["confidences"])
+            track_data = vidData.v_active_tracks[trackId]
             crop_score = _score_species_crop(frame.shape, (x1, y1, x2, y2), conf, track_age_frames)
-            previous_best_conf = vidData.v_active_tracks[trackId].get("best_conf", -1.0)
-            best_crop_score = vidData.v_active_tracks[trackId].get("best_crop_score", -1.0)
+            previous_best_conf = track_data.get("best_conf", -1.0)
+            best_crop_score = track_data.get("best_crop_score", -1.0)
 
             if conf > previous_best_conf:
-                vidData.v_active_tracks[trackId]["best_conf"] = conf
+                track_data["best_conf"] = conf
 
+            _remember_crop_candidate(track_data, crop, frame, crop_score, conf)
             should_replace_crop = (
                 crop_score > best_crop_score
                 or (
@@ -882,9 +971,9 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
             )
 
             if should_replace_crop:
-                vidData.v_active_tracks[trackId]["best_crop_score"] = crop_score
-                vidData.v_active_tracks[trackId]["best_crop"] = crop.copy()
-                vidData.v_active_tracks[trackId]["best_frame"] = frame.copy()
+                track_data["best_crop_score"] = crop_score
+                track_data["best_crop"] = crop.copy()
+                track_data["best_frame"] = frame.copy()
 
 def finalize_tracks(frameData, vidData, termination_reason): 
     """Convert ended active tracks into exportable summaries."""
@@ -895,6 +984,10 @@ def finalize_tracks(frameData, vidData, termination_reason):
     if termination_reason == "disappeared":         
         disappeared_ids = set(vidData.v_active_tracks.keys()) - vidData.v_current_track_ids 
         for tid in disappeared_ids:
+            track_data = vidData.v_active_tracks[tid]
+            track_data["missing_frames"] = int(track_data.get("missing_frames", 0)) + 1
+            if track_data["missing_frames"] <= TRACK_MISSING_GRACE_FRAMES:
+                continue
             track_data = vidData.v_active_tracks.pop(tid)
             track_dict = build_track_summary(tid, track_data, frameData, vidData, None, frame_width=getattr(vidData, "frame_width", 640))
             if track_dict:
@@ -908,7 +1001,9 @@ def finalize_tracks(frameData, vidData, termination_reason):
 
 def build_track_summary(trackId, track_data, frameData, vidData, image_path=None, frame_width=640):
     """Build one export row for a finished track after duration/direction filtering."""
-    duration_sec = (frameData.f_index - track_data["start_frame"]) / vidData.v_fps
+    start_sec = _track_start_seconds(track_data, vidData)
+    end_sec = _track_last_seen_seconds(track_data, frameData, vidData)
+    duration_sec = max(0.0, end_sec - start_sec)
     confidences = [c for c in track_data["confidences"] if c is not None]
 
     # Calculate overall direction inputs early so duration gate can consider motion.
@@ -964,16 +1059,13 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
             overall_direction = "upstream"
         elif downstream_count > upstream_count:
             overall_direction = "downstream"
-        elif net_dx <= -min_net_dx:
-            overall_direction = "upstream"
-        elif net_dx >= min_net_dx:
-            overall_direction = "downstream"
+        else:
+            overall_direction = _label_direction_from_dx(net_dx, min_net_dx)
     else:
         # Same-side tracks can still have clear direction from net movement.
-        if travel_px >= MIN_TRACK_TRAVEL_PX and net_dx <= -min_net_dx:
-            overall_direction = "upstream"
-        elif travel_px >= MIN_TRACK_TRAVEL_PX and net_dx >= min_net_dx:
-            overall_direction = "downstream"
+        motion_direction = _label_direction_from_dx(net_dx, min_net_dx)
+        if travel_px >= MIN_TRACK_TRAVEL_PX and motion_direction != "indecisive":
+            overall_direction = motion_direction
         elif directional_votes >= 3:
             vote_ratio = max(upstream_count, downstream_count) / max(1, directional_votes)
             if vote_ratio >= 0.70:
@@ -985,7 +1077,7 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         return None
     
     # Handle timestamp with confidence flag
-    video_timestamp = track_data.get("video_timestamp") or vidData.v_video_timestamp or "Not detected"
+    video_timestamp = _track_timestamp_for_start(track_data, vidData, start_sec)
     timestamp_confidence = track_data.get("timestamp_confidence")
 
     # Add * only if timestamp is LOW confidence
@@ -997,10 +1089,11 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         "likely_class": vidData.v_most_common_class,
         "confidence": f"{(best_conf_pct / 100):.4f}" if best_conf_pct > 0 else f"{(vidData.v_avg_confidence_YL / 100):.4f}",
         "avg_confidence": f"{(best_conf_pct / 100):.4f}" if best_conf_pct > 0 else f"{(avg_conf_DS / 100):.4f}",
-        "start_time_sec": f"{track_data['start_frame'] / vidData.v_fps:.2f}",
-        "end_time_sec": f"{frameData.f_index / vidData.v_fps:.2f}",
+        "start_time_sec": f"{start_sec:.2f}",
+        "end_time_sec": f"{end_sec:.2f}",
         "direction": overall_direction,
         "best_crop": track_data.get("best_crop"),
+        "crop_candidates": track_data.get("crop_candidates", []),
         "species": "No data",
         "species_confidence": "0.0000",
         "video_timestamp": video_timestamp,
@@ -1012,6 +1105,78 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         "frame_width": frame_width,
         "best_conf_raw": float(best_conf_pct),
     }
+
+def _parse_track_timestamp(value):
+    text = str(value or "").replace("*", "").strip()
+    if not text or text.lower() == "not detected":
+        return None
+    try:
+        return datetime.strptime(text, "%Y/%m/%d %H:%M:%S")
+    except Exception:
+        return None
+
+def _format_track_timestamp(value):
+    return value.strftime("%Y/%m/%d %H:%M:%S")
+
+def _track_start_seconds(track_data, vidData):
+    try:
+        start_ms = track_data.get("start_ms")
+        if start_ms is not None and float(start_ms) > 0:
+            return float(start_ms) / 1000.0
+    except Exception:
+        pass
+    return float(track_data.get("start_frame", 0)) / max(1.0, float(vidData.v_fps or FPS_DEFAULT))
+
+def _track_last_seen_seconds(track_data, frameData, vidData):
+    try:
+        last_seen_ms = track_data.get("last_seen_ms")
+        if last_seen_ms is not None and float(last_seen_ms) > 0:
+            return float(last_seen_ms) / 1000.0
+    except Exception:
+        pass
+    try:
+        last_seen_frame = track_data.get("last_seen_frame")
+        if last_seen_frame is not None:
+            return float(last_seen_frame) / max(1.0, float(vidData.v_fps or FPS_DEFAULT))
+    except Exception:
+        pass
+    try:
+        if frameData.f_pos_ms and frameData.f_pos_ms > 0:
+            return float(frameData.f_pos_ms) / 1000.0
+    except Exception:
+        pass
+    return float(frameData.f_index) / max(1.0, float(vidData.v_fps or FPS_DEFAULT))
+
+def _track_timestamp_for_start(track_data, vidData, start_sec):
+    direct_ts = track_data.get("video_timestamp")
+    timestamp_confidence = str(track_data.get("timestamp_confidence") or "").upper()
+    base_ts = _parse_track_timestamp(vidData.v_video_timestamp)
+
+    if (
+        direct_ts
+        and str(direct_ts).strip().lower() != "not detected"
+        and timestamp_confidence != "LOW"
+    ):
+        direct_dt = _parse_track_timestamp(direct_ts)
+        if base_ts is None or direct_dt is None:
+            return direct_ts
+
+        expected_dt = base_ts + timedelta(seconds=max(0.0, float(start_sec)))
+        if abs((direct_dt - expected_dt).total_seconds()) <= TRACK_TIMESTAMP_SANITY_TOLERANCE_SEC:
+            return direct_ts
+        track_data["timestamp_confidence"] = getattr(vidData, "v_probe_confidence", None) or "LOW"
+
+    if base_ts is None:
+        return direct_ts or vidData.v_video_timestamp or "Not detected"
+
+    return _format_track_timestamp(base_ts + timedelta(seconds=max(0.0, float(start_sec))))
+
+def _timestamps_within_tolerance(a, b, tolerance_sec=OCR_TIMESTAMP_MERGE_TOLERANCE_SEC):
+    a_dt = _parse_track_timestamp(a)
+    b_dt = _parse_track_timestamp(b)
+    if a_dt is None or b_dt is None:
+        return True
+    return abs((a_dt - b_dt).total_seconds()) <= tolerance_sec
 
 def dedupe_fragmented_tracks(finished_tracks):
     """Merge likely duplicate rows created when one fish is split across tracker IDs."""
@@ -1092,15 +1257,15 @@ def dedupe_fragmented_tracks(finished_tracks):
             second_conf = 0.0
 
         if second_conf > first_conf:
-            for key in ("confidence", "avg_confidence", "best_crop", "best_frame", "species", "species_confidence"):
+            for key in ("confidence", "avg_confidence", "best_crop", "best_frame", "crop_candidates", "species", "species_confidence"):
                 if key in second:
                     merged[key] = second[key]
             merged["best_conf_raw"] = second.get("best_conf_raw", merged.get("best_conf_raw"))
 
-        # Prefer the more confident timestamp if they disagree.
-        first_ts_conf = str(first.get("timestamp_confidence", "")).upper()
-        second_ts_conf = str(second.get("timestamp_confidence", "")).upper()
-        if second_ts_conf == "HIGH" and first_ts_conf != "HIGH":
+        # The merged row represents one fish, so keep the timestamp from the
+        # earliest fragment: that is the fish's first detected appearance.
+        first_ts = str(first.get("video_timestamp", "")).replace("*", "").strip()
+        if not first_ts or first_ts.lower() == "not detected":
             merged["video_timestamp"] = second.get("video_timestamp", merged.get("video_timestamp"))
             merged["timestamp_confidence"] = second.get("timestamp_confidence", merged.get("timestamp_confidence"))
 
@@ -1121,11 +1286,7 @@ def dedupe_fragmented_tracks(finished_tracks):
         min_net_dx = max(6.0, width * 0.02)
         net_dx = exit_x - entry_x
 
-        if net_dx <= -min_net_dx:
-            return "upstream"
-        if net_dx >= min_net_dx:
-            return "downstream"
-        return "indecisive"
+        return _label_direction_from_dx(net_dx, min_net_dx)
 
     def _is_turnaround_split(a, b):
         da, db = _direction_pair(a, b)
@@ -1188,7 +1349,7 @@ def dedupe_fragmented_tracks(finished_tracks):
 
         a_ts = str(a.get("video_timestamp", "")).replace("*", "").strip()
         b_ts = str(b.get("video_timestamp", "")).replace("*", "").strip()
-        if a_ts and b_ts and a_ts != b_ts:
+        if a_ts and b_ts and not _timestamps_within_tolerance(a_ts, b_ts):
             return False
 
         if _is_turnaround_split(a, b):
@@ -1352,11 +1513,75 @@ def dedupe_duplicate_track_ids(finished_tracks):
 
     return sorted(kept, key=lambda t: _start(t))
 
-def no_fish_found(video_path, filename):
-    """Log that a video produced no fish tracks after all configured passes."""
+def _probe_video_timestamp_only(video_path):
+    """Open video_path, read a handful of early frames, and return the best OCR timestamp.
+    Used for no-fish videos where the main tracker loop never stored a timestamp.
+    Returns the timestamp string on success, or None if the video cannot be opened
+    or Tesseract finds nothing useful."""
+    ts = None
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if cap.isOpened():
+            ret, frame = cap.read()
+            if ret and frame is not None:
+                result_ts, _ = probe_video_timestamp(
+                    cap, frame,
+                    probe_frames=VIDEO_TIMESTAMP_PROBE_FRAMES,
+                    read_frame_fn=_video_capture_read
+                )
+                ts = result_ts
+            cap.release()
+    except Exception as e:
+        print(f"[WARN] Timestamp probe for no-fish video failed: {e}")
+    return ts
+
+def _probe_no_fish_video_timestamp(video_path):
+    """Probe a no-fish video for an OCR timestamp without writing any CSV rows."""
+    ts = _probe_video_timestamp_only(video_path)
+    if ts:
+        return ts
+
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            return None
+
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+        fps = cap.get(cv2.CAP_PROP_FPS) or FPS_DEFAULT
+        if total_frames > 0:
+            start_frame = max(0, total_frames - int(max(fps * 3, VIDEO_TIMESTAMP_PROBE_FRAMES)))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+
+        attempts = max(1, VIDEO_TIMESTAMP_PROBE_FRAMES)
+        for _ in range(attempts):
+            ret, frame = _video_capture_read(cap)
+            if not ret or frame is None:
+                break
+            result = extractTimestamFromFrame(frame, False)
+            if result and result[0]:
+                cap.release()
+                return result[0]
+
+        cap.release()
+    except Exception as e:
+        print(f"[WARN] Late timestamp probe for no-fish video failed: {e}")
+
+    return None
+
+def no_fish_found(video_path, filename, probe_video_path=None):
+    """Log that a video produced no fish tracks after all configured passes,
+    then persist the result so the C# app and skip-check can find it next run.
+    Runs a lightweight OCR probe so no-fish rows carry a real video timestamp
+    for time-based reporting rather than 'Not detected'."""
     print("***************************************************************")
     print(f"No fish detected in {filename}. Skipping export.")
     print("***************************************************************")
+    ts = _probe_video_timestamp_only(probe_video_path or video_path)
+    if ts:
+        print(f"[INFO] No-fish video timestamp (OCR): {ts}")
+    else:
+        print(f"[INFO] No-fish video timestamp: Not detected (OCR found nothing)")
+    _append_no_fish_row(video_path, ts)
 
 def _append_no_fish_row(video_file_path, video_timestamp):
     """Append a no-fish result to the slim session file and the master CSV outputs."""
@@ -1412,61 +1637,131 @@ def _append_no_fish_row(video_file_path, video_timestamp):
     except Exception as e:
         print(f"[ERROR] Failed to write no-fish row: {e}")
 
-def save_best_image(finished_tracks, filename):
+def save_best_image(finished_tracks, video_path):
     """Save each track's best crop, classify it, and move it into a species subfolder."""
-    for track in finished_tracks:
-        best_crop = track.get("best_crop")
+    video_stem = os.path.splitext(os.path.basename(video_path))[0]
+    safe_video_stem = _safe_path_component(video_stem, default="unknown_video")
 
-        if best_crop is not None:
-            enhanced_crop = enhance_image(best_crop)
-            
-            # Classify the image first to determine species folder
-            temp_image_name = f"{os.path.splitext(filename)[0]}_track_{track['trackId']}.jpg"
-            temp_image_path = os.path.join(FISH_IMAGE_DIR, temp_image_name)
+    for track in finished_tracks:
+        candidates = track.get("crop_candidates") or []
+        if not candidates and track.get("best_crop") is not None:
+            candidates = [{"score": 0.0, "confidence": 0.0, "crop": track.get("best_crop")}]
+
+        start_token = _safe_path_component(str(track.get("start_time_sec", "0")).replace(".", "p"))
+        track_token = _safe_path_component(track.get("trackId"), default="unknown_track")
+        base_image_name = f"{safe_video_stem}_track_{track_token}_start_{start_token}"
+        saved_candidates = []
+
+        for index, candidate in enumerate(candidates[:CROP_CANDIDATE_LIMIT], start=1):
+            crop = candidate.get("crop") if isinstance(candidate, dict) else candidate
+            if crop is None:
+                continue
+
+            enhanced_crop = enhance_image(crop)
+            suffix = "" if index == 1 else f"_candidate_{index}"
+            temp_image_name = f"{base_image_name}{suffix}.jpg"
+            output_dir = FISH_IMAGE_PENDING_DIR if IS_WORKER_MODE and FISH_IMAGE_PENDING_DIR else FISH_IMAGE_DIR
+            os.makedirs(output_dir, exist_ok=True)
+            temp_image_path = os.path.join(output_dir, temp_image_name)
             write_ok = cv2.imwrite(temp_image_path, enhanced_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
             if not write_ok:
                 print(f"Failed to write image at {temp_image_path}. Skipping classification.")
-                track["species"] = "No data"
-                track["species_confidence"] = "0.0000"
-                track["image_path"] = None
-                track.pop("best_crop", None)
                 continue
-            
-            # Classify the saved image
+
+            saved_candidates.append(
+                {
+                    "path": temp_image_path,
+                    "name": temp_image_name,
+                    "crop_score": float(candidate.get("score", 0.0)) if isinstance(candidate, dict) else 0.0,
+                    "confidence": float(candidate.get("confidence", 0.0)) if isinstance(candidate, dict) else 0.0,
+                }
+            )
+
+            if IS_WORKER_MODE:
+                continue
+
+            # Legacy CLI mode still classifies inline. The WPF worker pool does a single
+            # classifier pass after all YOLO workers finish.
             species_data = classify_image(temp_image_path)
             species = species_data[0] if species_data else "No data"
-            track["species"] = species
-            track["species_confidence"] = f"{(species_data[1] / 100):.4f}" if species_data and len(species_data) > 1 else "0.0000"
-            
-            # Create species subfolder and move image
-            if species in CLASS_NAMES:
-                species_folder = os.path.join(FISH_IMAGE_DIR, species)
-                os.makedirs(species_folder, exist_ok=True)
-                final_image_path = os.path.join(species_folder, temp_image_name)
+            species_conf = float(species_data[1]) if species_data and len(species_data) > 1 else 0.0
+            saved_candidates[-1].update(
+                {
+                    "species": species,
+                    "species_conf": species_conf,
+                }
+            )
+
+        if IS_WORKER_MODE:
+            if saved_candidates:
+                saved_candidates.sort(key=lambda c: (c["confidence"], c["crop_score"]), reverse=True)
+                selected = saved_candidates[0]
+                for rejected in saved_candidates[1:]:
+                    try:
+                        if os.path.exists(rejected["path"]):
+                            os.remove(rejected["path"])
+                    except OSError:
+                        pass
+                track["species"] = "No species"
+                track["species_confidence"] = "0.0000"
+                track["image_path"] = selected["path"]
+            else:
+                track["species"] = "No species"
+                track["species_confidence"] = "0.0000"
+                track["image_path"] = ""
+        elif saved_candidates:
+            saved_candidates.sort(
+                key=lambda c: (
+                    c.get("species") in CLASS_NAMES,
+                    c.get("species_conf", 0.0),
+                    c["crop_score"],
+                ),
+                reverse=True,
+            )
+            selected = saved_candidates[0]
+            track["species"] = selected["species"]
+            track["species_confidence"] = f"{(selected['species_conf'] / 100):.4f}"
+
+            for rejected in saved_candidates[1:]:
                 try:
-                    shutil.move(temp_image_path, final_image_path)
+                    if os.path.exists(rejected["path"]):
+                        os.remove(rejected["path"])
+                except OSError:
+                    pass
+
+            if selected["species"] in CLASS_NAMES:
+                species_folder = os.path.join(FISH_IMAGE_DIR, selected["species"])
+                os.makedirs(species_folder, exist_ok=True)
+                final_image_name = f"{base_image_name}.jpg"
+                final_image_path = os.path.join(species_folder, final_image_name)
+                try:
+                    if os.path.exists(final_image_path):
+                        os.remove(final_image_path)
+                    shutil.move(selected["path"], final_image_path)
                     track["image_path"] = final_image_path
                 except Exception as e:
                     print(f"Error moving image to species folder: {e}")
                     track["image_path"] = None
                     try:
-                        if os.path.exists(temp_image_path):
-                            os.remove(temp_image_path)
+                        if os.path.exists(selected["path"]):
+                            os.remove(selected["path"])
                     except OSError:
                         pass
             else:
-                # Do not keep unclassified images in root fish_images.
                 track["image_path"] = None
                 try:
-                    if os.path.exists(temp_image_path):
-                        os.remove(temp_image_path)
+                    if os.path.exists(selected["path"]):
+                        os.remove(selected["path"])
                 except OSError:
                     pass
         else:
-            track["image_path"] = None
+            track["species"] = "No species"
+            track["species_confidence"] = "0.0000"
+            track["image_path"] = ""
         
         # Remove best_crop from track dict (no need to export it)
         track.pop("best_crop", None)
+        track.pop("crop_candidates", None)
 
 # ========================================================================
 # CLASSIFICATION AND TIMESTAMP DEBUG HELPERS
@@ -1703,7 +1998,7 @@ def run_video_tracker(video_path, source_video_path=None):
     return vidData.v_finished_tracks
 
 def _process_video_with_retry(video_path, source_video_path):
-    """Two-pass processing: strict pass, then optional loose retry if fast mode may have skipped fish."""
+    """Two-pass processing: standard stride-3 pass, or slow stride-1 pass when enabled."""
     global FRAME_STRIDE, YOLO_CONFIDENCE_THRESHOLD, MIN_TRACK_DURATION_SEC
 
     original_stride = FRAME_STRIDE
@@ -1725,8 +2020,8 @@ def _process_video_with_retry(video_path, source_video_path):
             return []
 
     try:
-        # Pass 1: strict settings
-        FRAME_STRIDE = STRICT_FRAME_STRIDE
+        # Pass 1: normal analysis samples every third frame; Slow Mode inspects every frame.
+        FRAME_STRIDE = 1 if FAST_MODE else STRICT_FRAME_STRIDE
         YOLO_CONFIDENCE_THRESHOLD = STRICT_YOLO_CONFIDENCE_THRESHOLD
         MIN_TRACK_DURATION_SEC = STRICT_MIN_TRACK_DURATION_SEC
         video_tracks = _run_pass("strict")
@@ -1743,8 +2038,15 @@ def _process_video_with_retry(video_path, source_video_path):
             video_tracks = _run_pass("loose")
 
         # Only mark/copy as no-fish after all passes are exhausted.
-        if not video_tracks:
-            no_fish_found(source_video_path or video_path, os.path.basename(source_video_path or video_path))
+        # Pass video_path (the processed/possibly-transcoded path) as probe_video_path so the
+        # OCR probe uses the same file that YOLO successfully decoded - avoids re-opening a
+        # raw ASF that cv2 may struggle with while the reliable temp MP4 is still on disk.
+        if not video_tracks and not IS_WORKER_MODE:
+            no_fish_found(
+                source_video_path or video_path,
+                os.path.basename(source_video_path or video_path),
+                probe_video_path=video_path
+            )
 
         # Second pass (ffmpeg/ffprobe): enrich export with display duration only.
         # No changes to track creation, filtering, dedupe, or existing fields.
@@ -1773,6 +2075,190 @@ def _process_video_file(item_path):
         track["run"] = _RUN_NAME
 
     return filename, video_tracks
+
+def _apply_worker_context(context):
+    """Apply per-job context supplied by the C# worker-pool coordinator."""
+    global FISHLENS_LOCATION, FISHLENS_UPSTREAM_DIRECTION, FAST_MODE
+    global FRAME_STRIDE, _RUN_FOLDER, _IS_DEBUG_RUN, _ALL_HISTORY_DIR, _RUN_NAME
+    global OUTPUT_CSV, SESSION_CSV, SESSION_NO_FISH_CSV, MASTER_FISH_CSV, FISH_IMAGE_PENDING_DIR
+
+    context = context or {}
+    FISHLENS_LOCATION = str(context.get("location") or "Unknown").strip() or "Unknown"
+    upstream_direction = str(context.get("upstream_direction") or "left").strip().lower()
+    FISHLENS_UPSTREAM_DIRECTION = upstream_direction if upstream_direction in {"left", "right"} else "left"
+    FAST_MODE = bool(context.get("fast_mode", FAST_MODE))
+    FRAME_STRIDE = 1 if FAST_MODE else STRICT_FRAME_STRIDE
+
+    _RUN_FOLDER = str(context.get("run_folder") or "").strip()
+    _IS_DEBUG_RUN = _RUN_FOLDER and os.path.basename(_RUN_FOLDER).lower() == "debug"
+    _ALL_HISTORY_DIR = os.path.dirname(_RUN_FOLDER) if _RUN_FOLDER else PROJECT_ROOT
+    _RUN_NAME = str(context.get("run_name") or (os.path.basename(_RUN_FOLDER) if _RUN_FOLDER else "")).strip()
+    FISH_IMAGE_PENDING_DIR = str(context.get("pending_image_folder") or "").strip()
+    if FISH_IMAGE_PENDING_DIR:
+        os.makedirs(FISH_IMAGE_PENDING_DIR, exist_ok=True)
+
+    if _IS_DEBUG_RUN:
+        OUTPUT_CSV = os.path.join(_RUN_FOLDER, "debug.csv") if _RUN_FOLDER else None
+        SESSION_CSV = None
+        SESSION_NO_FISH_CSV = None
+        MASTER_FISH_CSV = None
+    else:
+        SESSION_CSV = os.path.join(_RUN_FOLDER, "session_fish.csv") if _RUN_FOLDER else None
+        SESSION_NO_FISH_CSV = os.path.join(_RUN_FOLDER, "session_no_fish.csv") if _RUN_FOLDER else None
+        OUTPUT_CSV = os.path.join(_RUN_FOLDER, "run_master.csv") if _RUN_FOLDER else None
+        MASTER_FISH_CSV = os.path.join(_ALL_HISTORY_DIR, "all_history.csv") if _RUN_FOLDER else None
+
+def _worker_emit(event, **payload):
+    message = {"event": event}
+    message.update(payload)
+    print(json.dumps(message, separators=(",", ":")), flush=True)
+
+def _run_worker_server():
+    """Persistent JSON-lines worker server used by the WPF coordinator."""
+    _worker_emit("ready", worker_pid=os.getpid())
+
+    for raw_line in sys.stdin:
+        raw_line = raw_line.strip()
+        if not raw_line:
+            continue
+
+        try:
+            command = json.loads(raw_line)
+        except Exception as exc:
+            _worker_emit("error", message=f"Invalid JSON command: {exc}")
+            continue
+
+        command_name = str(command.get("command") or "").strip().lower()
+        request_id = command.get("request_id")
+
+        if command_name == "ping":
+            _worker_emit("ready", request_id=request_id, worker_pid=os.getpid())
+            continue
+
+        if command_name == "load":
+            # Models are loaded at module startup; this acknowledges readiness.
+            _worker_emit("ready", request_id=request_id, worker_pid=os.getpid())
+            continue
+
+        if command_name == "shutdown":
+            _worker_emit("shutdown_ack", request_id=request_id)
+            return
+
+        if command_name == "cancel":
+            _worker_emit("cancelled", request_id=request_id)
+            continue
+
+        if command_name != "analyze_video":
+            _worker_emit("error", request_id=request_id, message=f"Unknown command: {command_name}")
+            continue
+
+        video_path = str(command.get("video_path") or "").strip()
+        _apply_worker_context(command.get("context") or {})
+        filename = os.path.basename(video_path)
+        _worker_emit("video_started", request_id=request_id, video_file=video_path, filename=filename)
+
+        try:
+            _, tracks = _process_video_file(video_path)
+            export_tracks = [
+                {key: track.get(key, "") for key in WORKER_RESULT_KEYS}
+                for track in tracks
+            ]
+            no_fish_row = None
+            if not export_tracks:
+                no_fish_timestamp = _probe_no_fish_video_timestamp(video_path)
+                no_fish_row = {
+                    "video_file": video_path,
+                    "location": FISHLENS_LOCATION,
+                    "video_timestamp": no_fish_timestamp or "Not detected",
+                    "run": _RUN_NAME,
+                }
+            _worker_emit(
+                "video_finished",
+                request_id=request_id,
+                video_file=video_path,
+                filename=filename,
+                tracks=export_tracks,
+                no_fish_row=no_fish_row,
+            )
+        except Exception as exc:
+            import traceback
+            _worker_emit(
+                "video_failed",
+                request_id=request_id,
+                video_file=video_path,
+                filename=filename,
+                error=str(exc),
+                traceback=traceback.format_exc(),
+            )
+
+def _run_classifier_server():
+    """Persistent JSON-lines classifier used for the final species pass."""
+    _worker_emit("ready", classifier_pid=os.getpid())
+
+    for raw_line in sys.stdin:
+        raw_line = raw_line.strip()
+        if not raw_line:
+            continue
+
+        try:
+            command = json.loads(raw_line)
+        except Exception as exc:
+            _worker_emit("error", message=f"Invalid JSON command: {exc}")
+            continue
+
+        command_name = str(command.get("command") or "").strip().lower()
+        request_id = command.get("request_id")
+
+        if command_name == "ping":
+            _worker_emit("ready", request_id=request_id, classifier_pid=os.getpid())
+            continue
+
+        if command_name == "shutdown":
+            _worker_emit("shutdown_ack", request_id=request_id)
+            return
+
+        if command_name != "classify_batch":
+            _worker_emit("error", request_id=request_id, message=f"Unknown command: {command_name}")
+            continue
+
+        image_paths = command.get("image_paths") or []
+        classified_folder = str(command.get("classified_folder") or os.path.join(FISH_IMAGE_DIR, "classified")).strip()
+        os.makedirs(classified_folder, exist_ok=True)
+        results = []
+
+        for image_path in image_paths:
+            image_path = str(image_path or "").strip()
+            if not image_path:
+                continue
+
+            species_data = classify_image(image_path)
+            species = species_data[0] if species_data else "No species"
+            species_conf = float(species_data[1]) if species_data and len(species_data) > 1 else 0.0
+            safe_species = species if species in CLASS_NAMES else "no_species"
+            species_folder = os.path.join(classified_folder, _safe_path_component(safe_species, default="no_species"))
+            os.makedirs(species_folder, exist_ok=True)
+
+            final_path = image_path
+            try:
+                final_path = os.path.join(species_folder, os.path.basename(image_path))
+                if os.path.exists(final_path):
+                    base, ext = os.path.splitext(final_path)
+                    final_path = f"{base}_{datetime.now().strftime('%H%M%S%f')}{ext}"
+                shutil.move(image_path, final_path)
+            except Exception as exc:
+                print(f"[WARNING] Could not move classified image {image_path}: {exc}", flush=True)
+                final_path = image_path
+
+            results.append(
+                {
+                    "original_path": image_path,
+                    "final_path": final_path,
+                    "species": species if species in CLASS_NAMES else "No species",
+                    "species_confidence": f"{(species_conf / 100):.4f}",
+                }
+            )
+
+        _worker_emit("classification_finished", request_id=request_id, results=results)
 
 def main(input_path=None):
     """Process either one video or every video in a folder and flush results per video."""
@@ -1875,38 +2361,6 @@ def main(input_path=None):
         _apply_run_workers(run_workers)
         print(f"[INFO] Worker policy selected RUN_WORKERS={RUN_WORKERS}")
 
-        if run_workers > 1:
-            with ProcessPoolExecutor(max_workers=run_workers) as executor:
-                future_to_path = {
-                    executor.submit(_process_video_file, item_path): item_path
-                    for item_path in pending_paths
-                }
-
-                completed = 0
-                for future in as_completed(future_to_path):
-                    item_path = future_to_path[future]
-                    filename = os.path.basename(item_path)
-                    completed += 1
-                    print(f"[PROGRESS] VIDEO:{completed}/{pending_total}|{filename}", flush=True)
-
-                    try:
-                        _, video_tracks = future.result()
-                    except Exception as e:
-                        print(f"[ERROR] Failed to process {filename}: {e}")
-                        video_tracks = []
-
-                    if video_tracks:
-                        try:
-                            _flush_tracks_to_csv(video_tracks)
-                            print(f"[SUCCESS] Exported {len(video_tracks)} fish tracks for {filename}.")
-                        except Exception as e:
-                            print(f"[ERROR] Failed to write CSV for {filename}: {e}")
-                    else:
-                        print(f"[INFO] No fish tracks to export for {filename}.")
-
-                    print(f"[PROGRESS] VIDEO_DONE:{filename}", flush=True)
-            return
-
         for video_index, item_path in enumerate(pending_paths, start=1):
             filename = os.path.basename(item_path)
             print(f"[PROGRESS] VIDEO:{video_index}/{pending_total}|{filename}", flush=True)
@@ -1933,7 +2387,11 @@ def main(input_path=None):
 
 if __name__ == "__main__":
     # Persistent server loop: accept one folder path per line from stdin, process it, signal done.
-    if CLI_INPUT_PATH:
+    if IS_CLASSIFIER_MODE:
+        _run_classifier_server()
+    elif IS_WORKER_MODE:
+        _run_worker_server()
+    elif CLI_INPUT_PATH:
         try:
             main(CLI_INPUT_PATH)
         except Exception as e:

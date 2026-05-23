@@ -59,6 +59,26 @@ namespace FishLens_App
         }
 
         // ****************************************************************
+        // Function: NewPasswordEye_Click
+        // Description: Toggles the Create User password field between masked and visible.
+        // Notes: N/A
+        private void NewPasswordEye_Click(object sender, RoutedEventArgs e)
+        {
+            if (NewPasswordVisible.Visibility == Visibility.Collapsed)
+            {
+                NewPasswordVisible.Text = NewPassword.Password;
+                NewPassword.Visibility = Visibility.Collapsed;
+                NewPasswordVisible.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                NewPassword.Password = NewPasswordVisible.Text;
+                NewPasswordVisible.Visibility = Visibility.Collapsed;
+                NewPassword.Visibility = Visibility.Visible;
+            }
+        }
+
+        // ****************************************************************
         // Function: CreateUserClick
         // Description: Handles the Create User button — validates input, attempts signup and updates UI.
         // Notes: Validates via `UserValidationRules`, shows inline errors or success and reloads users on success.
@@ -73,7 +93,9 @@ namespace FishLens_App
             }
 
             string username = NewUsername.Text.Trim();
-            string password = NewPassword.Password;
+            string password = NewPasswordVisible.Visibility == Visibility.Visible
+                ? NewPasswordVisible.Text
+                : NewPassword.Password;
             string email = NewUserEmail.Text.Trim();
 
             try
@@ -101,6 +123,9 @@ namespace FishLens_App
             {
                 NewUsername.Text = "";
                 NewPassword.Password = "";
+                NewPasswordVisible.Text = "";
+                NewPasswordVisible.Visibility = Visibility.Collapsed;
+                NewPassword.Visibility = Visibility.Visible;
                 RoleComboBox.SelectedIndex = -1;
                 NewUserEmail.Text = "";
                 CreateUserSuccessMessage.Visibility = Visibility.Visible;
@@ -111,6 +136,54 @@ namespace FishLens_App
                 ShowCreateUserError(CreateUserUsernameError, "Sign up unsuccessful, please retry.");
             }
         }
+
+        // ****************************************************************
+        // Function: DeleteUser_Click
+        // Description: Handler for the Delete button on each user row.
+        // Notes: Confirms via username retype, then calls DeleteUserInDb. Refreshes the
+        //        list on success or shows an error message inline on failure.
+        private void DeleteUser_Click(object sender, RoutedEventArgs e)
+        {
+            SaveUsersError.Visibility = Visibility.Collapsed;
+            SaveUsersSuccess.Visibility = Visibility.Collapsed;
+
+            if (sender is not Button btn || btn.DataContext is not User user)
+                return;
+
+            var app = Application.Current as App;
+            if (app == null)
+            {
+                SaveUsersError.Text = "Not signed in.";
+                SaveUsersError.Visibility = Visibility.Visible;
+                return;
+            }
+
+            // Defense in depth — UI hides the button, but double-check here.
+            if (user.Id == app.CurrentUserId)
+            {
+                SaveUsersError.Text = "You cannot delete your own account.";
+                SaveUsersError.Visibility = Visibility.Visible;
+                return;
+            }
+
+            if (!ConfirmDeleteUser(user.Username))
+                return;  // user cancelled
+
+            if (DeleteUserInDb(user.Id, out string error))
+            {
+                SaveUsersSuccess.Text = $"Successfully deleted '{user.Username}'.";
+                SaveUsersSuccess.Visibility = Visibility.Visible;
+                LoadUsers();  // refresh the list
+            }
+            else
+            {
+                SaveUsersError.Text = $"Could not delete '{user.Username}': {error}";
+                SaveUsersError.Visibility = Visibility.Visible;
+            }
+        }
+
+
+
 
         // ****************************************************************
         // Function: SaveUserChanges_Click
@@ -281,6 +354,240 @@ namespace FishLens_App
                 return false;
             }
         }
+
+        private bool DeleteUserInDb(int targetUserId, out string errorMessage)
+        {
+            errorMessage = null;
+            var app = Application.Current as App;
+            if (app == null || app.CurrentUserId <= 0)
+            {
+                errorMessage = "Not signed in.";
+                return false;
+            }
+
+            try
+            {
+                using var conn = new System.Data.SqlClient.SqlConnection(app.connectionString);
+                conn.Open();
+                using var cmd = new System.Data.SqlClient.SqlCommand("kaharra.DeleteUser", conn);
+                cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                cmd.Parameters.AddWithValue("@pUserId", targetUserId);
+                cmd.Parameters.AddWithValue("@pRequestingUserId", app.CurrentUserId);
+                cmd.ExecuteNonQuery();
+                return true;
+            }
+            catch (System.Data.SqlClient.SqlException ex)
+            {
+                errorMessage = ex.Message;
+                return false;
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Unexpected error: {ex.Message}";
+                return false;
+            }
+        }
+
+
+        private bool ConfirmDeleteUser(string username)
+        {
+            var dlg = new Window
+            {
+                Width = 460,
+                SizeToContent = SizeToContent.Height,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = Window.GetWindow(this),
+                ResizeMode = ResizeMode.NoResize,
+                WindowStyle = WindowStyle.None,           // remove default title bar
+                AllowsTransparency = true,                 // required for transparent background
+                Background = System.Windows.Media.Brushes.Transparent,
+                ShowInTaskbar = false
+            };
+
+            var cardBorder = new Border
+            {
+                Background = (System.Windows.Media.Brush)Application.Current.Resources["CardBackground"],
+                BorderBrush = (System.Windows.Media.Brush)Application.Current.Resources["BorderBrush"],
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Margin = new Thickness(0),  // gives room for shadow
+             
+            };
+
+            var rootGrid = new Grid();
+            rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });  // header
+            rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });  // body
+
+            var headerBorder = new Border
+            {
+                Background = (System.Windows.Media.Brush)Application.Current.Resources["HeaderBackground"],
+                CornerRadius = new CornerRadius(8, 8, 0, 0),  // round only top corners
+                Padding = new Thickness(24, 16, 24, 16)
+            };
+            headerBorder.Child = new TextBlock
+            {
+                Text = "Confirm Delete",
+                FontSize = 18,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = (System.Windows.Media.Brush)Application.Current.Resources["OnAccentForeground"]
+            };
+            Grid.SetRow(headerBorder, 0);
+            rootGrid.Children.Add(headerBorder);
+
+            // Body
+            var bodyPanel = new StackPanel { Margin = new Thickness(24) };
+
+            bodyPanel.Children.Add(new TextBlock
+            {
+                Text = $"Delete user '{username}'?",
+                FontSize = 14,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = (System.Windows.Media.Brush)Application.Current.Resources["PrimaryText"],
+                Margin = new Thickness(0, 0, 0, 8),
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            bodyPanel.Children.Add(new TextBlock
+            {
+                Text = "This action cannot be undone. The user's account and settings will be permanently removed.",
+                FontSize = 12,
+                Foreground = (System.Windows.Media.Brush)Application.Current.Resources["SecondaryText"],
+                Margin = new Thickness(0, 0, 0, 16),
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            bodyPanel.Children.Add(new TextBlock
+            {
+                Text = $"Type '{username}' to confirm:",
+                FontSize = 12,
+                Foreground = (System.Windows.Media.Brush)Application.Current.Resources["SecondaryText"],
+                Margin = new Thickness(0, 0, 0, 6)
+            });
+
+            var inputBorder = new Border
+            {
+                Background = (System.Windows.Media.Brush)Application.Current.Resources["WindowBackground"],
+                BorderBrush = (System.Windows.Media.Brush)Application.Current.Resources["BorderBrush"],
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Margin = new Thickness(0, 0, 0, 20)
+            };
+            var confirmBox = new TextBox
+            {
+                FontSize = 14,
+                Padding = new Thickness(10, 8, 10, 8),
+                BorderThickness = new Thickness(0),
+                Background = System.Windows.Media.Brushes.Transparent,
+                Foreground = (System.Windows.Media.Brush)Application.Current.Resources["PrimaryText"],
+                CaretBrush = (System.Windows.Media.Brush)Application.Current.Resources["PrimaryText"]
+            };
+            inputBorder.Child = confirmBox;
+            bodyPanel.Children.Add(inputBorder);
+
+            // Button row
+            var btnRow = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+
+            var cancelBtn = CreateThemedDialogButton(
+                "Cancel",
+                (System.Windows.Media.Brush)Application.Current.Resources["WindowBackground"],
+                (System.Windows.Media.Brush)Application.Current.Resources["PrimaryText"],
+                showBorder: true);
+            cancelBtn.Width = 100;
+            cancelBtn.Margin = new Thickness(0, 0, 10, 0);
+            cancelBtn.IsCancel = true;
+
+            var deleteBtn = CreateThemedDialogButton(
+                "Delete User",
+                System.Windows.Media.Brushes.IndianRed,
+                System.Windows.Media.Brushes.White,
+                showBorder: false);
+            deleteBtn.Width = 120;
+            deleteBtn.IsEnabled = false;
+
+            confirmBox.TextChanged += (s, e) =>
+            {
+                deleteBtn.IsEnabled = string.Equals(confirmBox.Text, username, StringComparison.Ordinal);
+            };
+
+            bool confirmed = false;
+            deleteBtn.Click += (s, e) => { confirmed = true; dlg.DialogResult = true; };
+            cancelBtn.Click += (s, e) => { dlg.DialogResult = false; };
+
+            btnRow.Children.Add(cancelBtn);
+            btnRow.Children.Add(deleteBtn);
+            bodyPanel.Children.Add(btnRow);
+
+            Grid.SetRow(bodyPanel, 1);
+            rootGrid.Children.Add(bodyPanel);
+
+            cardBorder.Child = rootGrid;
+            dlg.Content = cardBorder;
+
+            headerBorder.MouseLeftButtonDown += (s, e) =>
+            {
+                if (e.ChangedButton == System.Windows.Input.MouseButton.Left)
+                    dlg.DragMove();
+            };
+
+            dlg.Loaded += (s, e) => confirmBox.Focus();
+            dlg.ShowDialog();
+
+            return confirmed;
+        }
+
+
+        private Button CreateThemedDialogButton(string content, System.Windows.Media.Brush background, System.Windows.Media.Brush foreground, bool showBorder)
+        {
+            var btn = new Button
+            {
+                Content = content,
+                Height = 36,
+                Padding = new Thickness(10, 6, 10, 6),
+                Background = background,
+                Foreground = foreground,
+                FontSize = 13,
+                FontWeight = FontWeights.SemiBold,
+                BorderThickness = showBorder ? new Thickness(1) : new Thickness(0),
+                BorderBrush = (System.Windows.Media.Brush)Application.Current.Resources["BorderBrush"],
+                Cursor = System.Windows.Input.Cursors.Hand
+            };
+
+            var template = new ControlTemplate(typeof(Button));
+            var border = new System.Windows.FrameworkElementFactory(typeof(Border));
+            border.SetValue(Border.BackgroundProperty, new System.Windows.TemplateBindingExtension(Button.BackgroundProperty));
+            border.SetValue(Border.BorderBrushProperty, new System.Windows.TemplateBindingExtension(Button.BorderBrushProperty));
+            border.SetValue(Border.BorderThicknessProperty, new System.Windows.TemplateBindingExtension(Button.BorderThicknessProperty));
+            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(6));
+            border.SetValue(Border.PaddingProperty, new System.Windows.TemplateBindingExtension(Button.PaddingProperty));
+
+            var contentPresenter = new System.Windows.FrameworkElementFactory(typeof(ContentPresenter));
+            contentPresenter.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            contentPresenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+            border.AppendChild(contentPresenter);
+
+            template.VisualTree = border;
+
+            var hoverTrigger = new System.Windows.Trigger { Property = Button.IsMouseOverProperty, Value = true };
+            hoverTrigger.Setters.Add(new System.Windows.Setter(Button.OpacityProperty, 0.85));
+            template.Triggers.Add(hoverTrigger);
+
+            var disabledTrigger = new System.Windows.Trigger { Property = Button.IsEnabledProperty, Value = false };
+            disabledTrigger.Setters.Add(new System.Windows.Setter(Button.OpacityProperty, 0.5));
+            template.Triggers.Add(disabledTrigger);
+
+            btn.Template = template;
+            return btn;
+        }
+
+
+
+
+
+
 
         // ****************************************************************
         // Function: LoadUsers

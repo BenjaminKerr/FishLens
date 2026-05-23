@@ -11,20 +11,44 @@
         PreviewKeyDown="Window_PreviewKeyDown">
 
 
+    <Window.Resources>
+
+        <DataTemplate x:Key="FilledSegment">
+            <Rectangle Fill ="#40842F" Height="10"/>
+        </DataTemplate>
+
+        <DataTemplate x:Key="EmptySegment">
+            <Rectangle Fill="{DynamicResource WindowBackground}" Height="10"/>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ActiveSegment">
+            <Rectangle Fill="#E8A038" Height="10">
+                <Rectangle.Triggers>
+                    <EventTrigger RoutedEvent="Loaded">
+                        <BeginStoryboard>
+                            <Storyboard RepeatBehavior="Forever">
+                                <DoubleAnimation
+                        Storyboard.TargetProperty="Opacity"
+                        From="0.4" To="1"
+                        Duration="0:0:0.6"
+                        AutoReverse="True"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </EventTrigger>
+                </Rectangle.Triggers>
+            </Rectangle>
+        </DataTemplate>
+
+    </Window.Resources>
+
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="SidebarColumn" Width="320"/>
+            <ColumnDefinition x:Name ="SidebarColumn" Width="Auto"/>
             <ColumnDefinition Width="*"/>
-            <!-- etc -->
         </Grid.ColumnDefinitions>
         <Frame x:Name="MainFrame" NavigationUIVisibility="Hidden" Grid.Column="1" Panel.ZIndex="1" Navigated="MainFrame_Navigated"/>
         <!--Sidebar: Media Selector-->
-        <Border x:Name="SideBar" Grid.Column="0"
-        CacheMode="BitmapCache"
-        Background="{DynamicResource AccentBrush}"
-        BorderThickness="0,0,1,0"
-        BorderBrush="{DynamicResource HeaderBackground}">
-            <!-- rest of your content unchanged -->
+        <Border x:Name="SideBar" Width="320" Grid.Column="0" Background="{DynamicResource AccentBrush}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource HeaderBackground}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -147,13 +171,21 @@ Height="70">
                                    Opacity="0.75"
                                    Margin="0,0,0,6"
                                    TextTrimming="CharacterEllipsis"/>
-                        <ProgressBar x:Name="analysisProgressBar"
-                                     Height="6"
-                                     Minimum="0"
-                                     Maximum="100"
-                                     Value="0"
-                                     Background="{DynamicResource CardBackground}"
-                                     Foreground="#E8A038"/>
+                        <ItemsControl ItemsSource="{Binding Bars}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Rows="1"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+
+                            <ItemsControl.ItemTemplateSelector>
+                                <local:VideoProgressSelector
+                                    FilledTemplate="{StaticResource FilledSegment}"
+                                    EmptyTemplate="{StaticResource EmptySegment}"
+                                    ActiveTemplate="{StaticResource ActiveSegment}" />
+                            </ItemsControl.ItemTemplateSelector>
+                        </ItemsControl>
+
                     </StackPanel>
                 </Border>
 
@@ -345,7 +377,7 @@ Height="70">
                           Opacity="0.35"/>
                     </Button.Effect>
 
-                     Sign Out
+                    Sign Out
                 </Button>
             </Grid>
 
@@ -699,31 +731,31 @@ Height="70">
                             CornerRadius="12"
                             BorderThickness="1"
                             BorderBrush="{DynamicResource BorderBrush}">
-                    <Border.Effect>
-                        <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.15"/>
-                    </Border.Effect>
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel x:Name="dataPanel" Margin="30">
-                            <TextBlock Text="Analysis" 
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.15"/>
+                        </Border.Effect>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel x:Name="dataPanel" Margin="30">
+                                <TextBlock Text="Analysis" 
                                        FontSize="{DynamicResource HeaderFontSize}"
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource PrimaryText}"
                                        Margin="0,0,0,8"/>
 
-                            <!-- Track Navigator - hidden when video has only one track -->
-                            <Border x:Name="trackNavigator"
+                                <!-- Track Navigator - hidden when video has only one track -->
+                                <Border x:Name="trackNavigator"
                                     Visibility="Collapsed"
                                     Background="{DynamicResource CardBackground}"
                                     CornerRadius="6"
                                     Padding="8,6"
                                     Margin="0,0,0,12">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Button x:Name="trackPrevButton"
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Button x:Name="trackPrevButton"
                                             Grid.Column="0"
                                             Content="&#x25C0;"
                                             Click="TrackPrevClick"
@@ -733,22 +765,22 @@ Height="70">
                                             Cursor="Hand"
                                             Background="Transparent"
                                             Foreground="{DynamicResource PrimaryText}"/>
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
-                                        <TextBlock x:Name="trackLabel"
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                            <TextBlock x:Name="trackLabel"
                                                    Text="Fish 1 / 1"
                                                    FontSize="{DynamicResource BaseFontSize}"
                                                    FontWeight="SemiBold"
                                                    Foreground="{DynamicResource PrimaryText}"
                                                    HorizontalAlignment="Center"/>
-                                        <TextBlock x:Name="trackVideoLabel"
+                                            <TextBlock x:Name="trackVideoLabel"
                                                    Text=""
                                                    FontSize="11"
                                                    Foreground="{DynamicResource SecondaryText}"
                                                    HorizontalAlignment="Center"
                                                    TextTrimming="CharacterEllipsis"
                                                    MaxWidth="160"/>
-                                    </StackPanel>
-                                    <Button x:Name="trackNextButton"
+                                        </StackPanel>
+                                        <Button x:Name="trackNextButton"
                                             Grid.Column="2"
                                             Content="&#x25B6;"
                                             Click="TrackNextClick"
@@ -758,42 +790,42 @@ Height="70">
                                             Cursor="Hand"
                                             Background="Transparent"
                                             Foreground="{DynamicResource PrimaryText}"/>
-                                </Grid>
-                            </Border>
+                                    </Grid>
+                                </Border>
 
-                            <!-- Video Info - Small and Gray -->
-                            <StackPanel Margin="0,0,0,20">
-                                <TextBlock x:Name="videoName" 
+                                <!-- Video Info - Small and Gray -->
+                                <StackPanel Margin="0,0,0,20">
+                                    <TextBlock x:Name="videoName" 
                                            Text="--" 
                                            FontSize="{DynamicResource BaseFontSize}"
                                            Foreground="{DynamicResource SecondaryText}"
                                            Margin="0,0,0,5"
                                            TextWrapping="Wrap"/>
-                                <TextBlock x:Name="videoLocation"
+                                    <TextBlock x:Name="videoLocation"
                                            Text="--"
                                            FontSize="{DynamicResource BaseFontSize}"
                                            Foreground="{DynamicResource SecondaryText}"
                                            Margin="0,0,0,5"/>
-                                <TextBlock x:Name="videoDateTime" 
+                                    <TextBlock x:Name="videoDateTime" 
                                            Text="--" 
                                            FontSize="{DynamicResource BaseFontSize}"
                                            Foreground="{DynamicResource SecondaryText}"/>
-                            </StackPanel>
+                                </StackPanel>
 
-                            <!-- Fish Present -->
-                            <StackPanel Margin="0,0,0,20">
-                                <TextBlock Text="Fish Present" 
+                                <!-- Fish Present -->
+                                <StackPanel Margin="0,0,0,20">
+                                    <TextBlock Text="Fish Present" 
                                            FontSize="{DynamicResource LargeFontSize}"
                                            FontWeight="SemiBold"
                                            Foreground="{DynamicResource PrimaryText}"
                                            Margin="0,0,0,8"/>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                    <TextBlock Text="Status: " 
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                        <TextBlock Text="Status: " 
                                                FontSize="{DynamicResource BaseFontSize}"
                                                Foreground="{DynamicResource SecondaryText}"
                                                VerticalAlignment="Center"
                                                Margin="0,0,8,0"/>
-                                        <ComboBox x:Name="fishPresentStatus" 
+                                        <ComboBox x:Name="fishPresentStatus"
                                               FontSize="{DynamicResource BaseFontSize}"
                                               FontWeight="Medium"
                                               Foreground="{DynamicResource PrimaryText}"
@@ -801,18 +833,19 @@ Height="70">
                                               BorderThickness="1"
                                               Padding="8,4"
                                               MinWidth="120"
-                                              IsEnabled="False">
+                                              IsEnabled="False"
+                                              SelectionChanged="FishPresentStatus_SelectionChanged">
                                             <ComboBoxItem Content="Present"/>
-                                        <ComboBoxItem Content="Not Present"/>
-                                    </ComboBox>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                    <TextBlock Text="Confidence: " 
+                                            <ComboBoxItem Content="Not Present"/>
+                                        </ComboBox>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                        <TextBlock Text="Confidence: " 
                                                FontSize="{DynamicResource BaseFontSize}"
                                                Foreground="{DynamicResource SecondaryText}"
                                                Margin="0,0,8,0"/>
-                                    <TextBox x:Name="fishPresentConfidence" 
-                                             Text="--" 
+                                        <TextBox x:Name="fishPresentConfidence"
+                                             Text="--"
                                              FontSize="{DynamicResource BaseFontSize}"
                                              FontWeight="Medium"
                                              Foreground="{DynamicResource PrimaryText}"
@@ -821,18 +854,20 @@ Height="70">
                                              Padding="8,4"
                                              Width="80"
                                              IsEnabled="False"
+                                             TextChanged="ConfidenceTextBox_TextChanged"
+                                             PreviewKeyDown="ConfidenceTextBox_PreviewKeyDown"
                                              />
+                                    </StackPanel>
                                 </StackPanel>
-                            </StackPanel>
 
-                            <!-- Direction of Travel -->
-                            <StackPanel Margin="0,0,0,20">
-                                <TextBlock Text="Direction of Travel" 
+                                <!-- Direction of Travel -->
+                                <StackPanel Margin="0,0,0,20">
+                                    <TextBlock Text="Direction of Travel" 
                                            FontSize="{DynamicResource LargeFontSize}"
                                            FontWeight="SemiBold"
                                            Foreground="{DynamicResource PrimaryText}"
                                            Margin="0,0,0,8"/>
-                                <StackPanel Orientation="Horizontal">
+                                    <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="Direction: " 
                                                FontSize="{DynamicResource BaseFontSize}"
                                                Foreground="{DynamicResource SecondaryText}"
@@ -851,24 +886,24 @@ Height="70">
                                         <ComboBoxItem Content="Downstream"/>
                                         <ComboBoxItem Content="Indecisive"/>
                                     </ComboBox>
-                                    </TextBlock>
+                                        </TextBlock>
                                     </StackPanel>
-                            </StackPanel>
+                                </StackPanel>
 
-                            <!-- Fish Species -->
-                            <StackPanel Margin="0,0,0,20">
-                                <TextBlock Text="Fish Species" 
+                                <!-- Fish Species -->
+                                <StackPanel Margin="0,0,0,20">
+                                    <TextBlock Text="Fish Species" 
                                            FontSize="{DynamicResource LargeFontSize}"
                                            FontWeight="SemiBold"
                                            Foreground="{DynamicResource PrimaryText}"
                                            Margin="0,0,0,8"/>
-                                <StackPanel Margin="0,0,0,8"
+                                    <StackPanel Margin="0,0,0,8"
                                             Orientation="Horizontal">
-                                    <TextBlock Text="Species: " 
+                                        <TextBlock Text="Species: " 
                                                FontSize="{DynamicResource BaseFontSize}"
                                                Foreground="{DynamicResource SecondaryText}"
                                                Margin="0,0,0,4"/>
-                                        <ComboBox x:Name="fishSpecies" 
+                                        <ComboBox x:Name="fishSpecies"
                                               FontSize="{DynamicResource BaseFontSize}"
                                               FontWeight="Medium"
                                               Foreground="{DynamicResource PrimaryText}"
@@ -877,17 +912,18 @@ Height="70">
                                               Padding="8,4"
                                               MinWidth="120"
                                               IsEnabled="False">
+                                            <System:String xmlns:System="clr-namespace:System;assembly=netstandard">No data</System:String>
                                             <System:String xmlns:System="clr-namespace:System;assembly=netstandard">Chinook</System:String>
-                                        <System:String xmlns:System="clr-namespace:System;assembly=netstandard">Omykiss</System:String>
-                                    </ComboBox>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                    <TextBlock Text="Confidence: " 
+                                            <System:String xmlns:System="clr-namespace:System;assembly=netstandard">Omykiss</System:String>
+                                        </ComboBox>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                        <TextBlock Text="Confidence: " 
                                                FontSize="{DynamicResource BaseFontSize}"
                                                Foreground="{DynamicResource SecondaryText}"
                                                Margin="0,0,8,0"/>
-                                    <TextBox x:Name="fishSpeciesConfidence" 
-                                             Text="--" 
+                                        <TextBox x:Name="fishSpeciesConfidence"
+                                             Text="--"
                                              FontSize="{DynamicResource BaseFontSize}"
                                              FontWeight="Medium"
                                              Foreground="{DynamicResource PrimaryText}"
@@ -896,12 +932,14 @@ Height="70">
                                              Padding="8,4"
                                              Width="80"
                                              IsEnabled="False"
+                                             TextChanged="ConfidenceTextBox_TextChanged"
+                                             PreviewKeyDown="ConfidenceTextBox_PreviewKeyDown"
                                              />
+                                    </StackPanel>
                                 </StackPanel>
-                            </StackPanel>
 
-                            <!-- Save Button -->
-                            <Button x:Name="saveButton" 
+                                <!-- Save Button -->
+                                <Button x:Name="saveButton" 
                                     Content="Save Changes" 
                                     Click="SaveButtonClick"
                                     Background="{DynamicResource HeaderBackground}"
@@ -914,30 +952,30 @@ Height="70">
                                     HorizontalAlignment="Stretch"
                                     Margin="0,0,0,20"
                                     IsEnabled="False">
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border Background="{TemplateBinding Background}"
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}"
                                                             CornerRadius="6"
                                                             Padding="{TemplateBinding Padding}">
-                                                        <ContentPresenter HorizontalAlignment="Center"
+                                                            <ContentPresenter HorizontalAlignment="Center"
                                                                           VerticalAlignment="Center"/>
-                                                    </Border>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                        <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
-                                            </Trigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
-                        </StackPanel>
-                    </ScrollViewer>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </StackPanel>
+                        </ScrollViewer>
                     </Border>
 
                     <!-- Session Overview Box -->
