@@ -255,7 +255,6 @@ namespace FishLens_App
             if (Application.Current is App createRunApp)
                 createRunApp.EnsureRunStorageInitialized();
             LoadRunsDropdown();
-            UpdateRunStatusText();
             App.RaiseRunChanged();
             ShowInlineActionStatus("Run created and set as active.");
         }
@@ -282,7 +281,6 @@ namespace FishLens_App
             PersistSettingsToDatabase();
             if (Application.Current is App activeRunApp)
                 activeRunApp.EnsureRunStorageInitialized();
-            UpdateRunStatusText();
             App.RaiseRunChanged();
             ShowInlineActionStatus($"Active run set to '{selectedRun}'.");
 
@@ -315,7 +313,6 @@ namespace FishLens_App
                     DbUpdateRunLocked(selectedRun, false);
                     if (Application.Current is App reopenRunApp)
                         reopenRunApp.EnsureRunStorageInitialized();
-                    UpdateRunStatusText();
                 }
                 return;
             }
@@ -342,12 +339,8 @@ namespace FishLens_App
             DbUpdateRunLocked(selectedRun, true);
             if (Application.Current is App endRunApp)
                 endRunApp.EnsureRunStorageInitialized();
-            UpdateRunStatusText();
             ShowInlineActionStatus($"Run '{selectedRun}' ended");
         }
-
-        private void ActiveRunDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
-            UpdateRunStatusText();
 
         private void LoadAll()
         {
@@ -729,37 +722,7 @@ namespace FishLens_App
             else if (names.Count > 0)
                 activeRunDropdown.SelectedIndex = 0;
 
-            UpdateRunStatusText();
         }
-
-        private void UpdateRunStatusText()
-        {
-            if (runStatusText == null)
-                return;
-
-            string selectedDisplay = activeRunDropdown?.SelectedItem as string ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(selectedDisplay))
-            {
-                runStatusText.Text = string.Empty;
-                return;
-            }
-
-            string selected = selectedDisplay == "[Debug]" ? "debug" : selectedDisplay;
-            if (selected == "debug")
-            {
-                bool isActive = string.Equals("debug", _config.ActiveRun, StringComparison.OrdinalIgnoreCase);
-                runStatusText.Text = $"[Debug] - {(isActive ? "Active" : "Inactive")} (testing mode, not saved to history)";
-                return;
-            }
-
-            var entry = _config.Runs.FirstOrDefault(r => r.Name == selected);
-            bool isActiveSeason = string.Equals(selected, _config.ActiveRun, StringComparison.OrdinalIgnoreCase);
-            bool isLocked = entry?.Locked ?? false;
-            string status = isLocked ? "Locked (read-only)" : (isActiveSeason ? "Active" : "Inactive");
-            runStatusText.Text = $"{selected} - {status}";
-        }
-
-     
 
         private void ApplySettingsToMainWindow()
         {

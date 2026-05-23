@@ -332,9 +332,6 @@ namespace FishLens_App
         // **************************************************
         private void SignOutButtonClick(object sender, RoutedEventArgs e)
         {
-            if (IsCurrentPageSettings() /*&& !CheckForUnsavedChanges()*/)
-                return;
-
             ((App)Application.Current).ResetSettingsToDefaults();
             AuthWindow signin = new AuthWindow();
             signin.Show();
@@ -1512,7 +1509,7 @@ namespace FishLens_App
             {
                 Title = "Change Location",
                 Width = 340,
-                Height = 160,
+                Height = 180,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Owner = this,
                 ResizeMode = ResizeMode.NoResize,

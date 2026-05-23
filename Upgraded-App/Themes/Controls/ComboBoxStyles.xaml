@@ -32,41 +32,50 @@
 
                                 <!-- Click area -->
                                 <ToggleButton x:Name="ToggleButton"
-                              IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                              ClickMode="Press"
-                              Background="Transparent"
-                              BorderThickness="0"
-                              Focusable="False">
-
+              IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+              ClickMode="Press"
+              Background="Transparent"
+              BorderThickness="0"
+              Focusable="False">
+                                    <ToggleButton.Template>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border x:Name="bd" Background="Transparent" CornerRadius="8">
+                                                <ContentPresenter/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="bd" Property="Background"
+                            Value="{DynamicResource HoverBackgroundBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="bd" Property="Background"
+                            Value="{DynamicResource HoverBackgroundBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </ToggleButton.Template>
                                     <Grid>
-
-                                        <!-- Selected text -->
                                         <ContentPresenter Margin="12,0,32,0"
-                                          VerticalAlignment="Center"
-                                          HorizontalAlignment="Left"
-                                          RecognizesAccessKey="True"
-                                          Content="{TemplateBinding SelectionBoxItem}"
-                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"/>
-
-                                        <!-- Chevron -->
+                          VerticalAlignment="Center"
+                          HorizontalAlignment="Left"
+                          RecognizesAccessKey="True"
+                          Content="{TemplateBinding SelectionBoxItem}"
+                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"/>
                                         <Path x:Name="Chevron"
-                              Data="M 0 0 L 4 4 L 8 0"
-                              Stroke="{DynamicResource OnAccentForeground}"
-                              StrokeThickness="1.6"
-                              HorizontalAlignment="Right"
-                              VerticalAlignment="Center"
-                              Margin="0,0,12,0"
-                              RenderTransformOrigin="0.5,0.5">
-
+              Data="M 0 0 L 4 4 L 8 0"
+              Stroke="{DynamicResource OnAccentForeground}"
+              StrokeThickness="1.6"
+              HorizontalAlignment="Right"
+              VerticalAlignment="Center"
+              Margin="0,0,12,0"
+              RenderTransformOrigin="0.5,0.5">
                                             <Path.RenderTransform>
                                                 <RotateTransform/>
                                             </Path.RenderTransform>
                                         </Path>
-
                                     </Grid>
                                 </ToggleButton>
-
                             </Grid>
                         </Border>
 

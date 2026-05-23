@@ -115,13 +115,6 @@
                 </Setter>
             </Style>
 
-            <!-- Default TextBox Style -->
-            <!-- Default TextBox — body font -->
-            <Style TargetType="TextBox">
-                <Setter Property="FontFamily" Value="{DynamicResource BodyFont}"/>
-                <Setter Property="FontSize"   Value="{DynamicResource BaseFontSize}"/>
-            </Style>
-
             <!-- ═══════════════════════════════════════════════════
                     NAV BUTTON STYLES
                 ════════════════════════════════════════════════════ -->
@@ -197,6 +190,60 @@
                 <Setter Property="CornerRadius"    Value="0,8,8,0"/>
                 <Setter Property="Padding"         Value="13,11"/>
                 <Setter Property="Margin"          Value="0,0,0,0"/>
+            </Style>
+
+            <Style x:Key="SettingsButton" TargetType="Button">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="bd"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="6"
+                        Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style TargetType="TextBox">
+                <Setter Property="Background"   Value="{DynamicResource CardBackground}"/>
+                <Setter Property="Foreground"   Value="{DynamicResource PrimaryText}"/>
+                <Setter Property="BorderBrush"  Value="{DynamicResource BorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="FontFamily"   Value="{DynamicResource BodyFont}"/>
+                <Setter Property="FontSize"     Value="{DynamicResource BaseFontSize}"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="TextBox">
+                            <Border x:Name="border"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="8">
+                                <ScrollViewer x:Name="PART_ContentHost"
+                                  Margin="10,0"
+                                  VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsFocused" Value="True">
+                                    <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.5"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
             </Style>
         </ResourceDictionary>
     </Application.Resources>
