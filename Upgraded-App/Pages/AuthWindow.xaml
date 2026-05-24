@@ -10,19 +10,17 @@
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         WindowState="Maximized"
-        Background="#0D3640">
+        Background="{DynamicResource WindowBackground}">
 
     <Window.Resources>
 
-        <!-- ── Rounded button (replaces every inline ControlTemplate) ── -->
+        <!-- ── ROUNDED BUTTON BASE ── -->
         <Style x:Key="RoundedButton" TargetType="Button">
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="6"
+                                CornerRadius="8"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
@@ -32,7 +30,10 @@
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Opacity" Value="0.85"/>
+                    <Setter Property="Opacity" Value="0.88"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Opacity" Value="0.75"/>
                 </Trigger>
                 <Trigger Property="IsKeyboardFocused" Value="True">
                     <Setter Property="BorderBrush" Value="Black"/>
@@ -41,29 +42,134 @@
             </Style.Triggers>
         </Style>
 
-        <!-- ── Clickable link text (hover fade) ── -->
+        <!-- ── PRIMARY ACTION BUTTON ── -->
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource RoundedButton}">
+            <Setter Property="Background"      Value="{DynamicResource HeaderBackground}"/>
+            <Setter Property="Foreground"      Value="{DynamicResource OnAccentForeground}"/>
+            <Setter Property="FontSize"        Value="14"/>
+            <Setter Property="FontWeight"      Value="SemiBold"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Height"          Value="44"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="Padding"         Value="0"/>
+        </Style>
+
+        <!-- ── ROUNDED TEXTBOX ── -->
+        <Style x:Key="RoundedTextBox" TargetType="TextBox">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="border"
+                                Background="{DynamicResource CardBackground}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="12,0"
+                                          VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="border" Property="Background" Value="#EEF4F6"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Height"                    Value="42"/>
+            <Setter Property="Foreground"                Value="{DynamicResource PrimaryText}"/>
+            <Setter Property="CaretBrush"                Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="FontSize"                  Value="14"/>
+            <Setter Property="BorderThickness"           Value="1"/>
+            <Setter Property="VerticalContentAlignment"  Value="Center"/>
+        </Style>
+
+        <!-- ── ROUNDED PASSWORDBOX ── -->
+        <Style x:Key="RoundedPasswordBox" TargetType="PasswordBox">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="PasswordBox">
+                        <Border x:Name="border"
+                                Background="{DynamicResource CardBackground}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="12,0"
+                                          VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="border" Property="Background" Value="#EEF4F6"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Height"                    Value="42"/>
+            <Setter Property="Foreground"                Value="{DynamicResource PrimaryText}"/>
+            <Setter Property="CaretBrush"                Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="FontSize"                  Value="14"/>
+            <Setter Property="BorderThickness"           Value="1"/>
+            <Setter Property="VerticalContentAlignment"  Value="Center"/>
+        </Style>
+
+        <!-- ── FIELD LABEL ── -->
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="FontSize"   Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+            <Setter Property="Margin"     Value="0,0,0,6"/>
+        </Style>
+
+        <!-- ── LINK / CLICKABLE TEXT ── -->
         <Style x:Key="LinkText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+            <Setter Property="FontSize"   Value="12"/>
+            <Setter Property="Cursor"     Value="Hand"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Opacity" Value="0.7"/>
+                    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
 
-
         <!-- ── Hyperlink Text ── -->
-                <Style x:Key="HyperLinkText" TargetType="Hyperlink">
+        <Style x:Key="HyperLinkText" TargetType="Hyperlink">
             <Setter Property="Background" Value="Transparent"/>
-
             <Style.Triggers>
                 <Trigger Property="IsKeyboardFocused" Value="True">
                     <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}"/>
-
                 </Trigger>
-                
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}"/>
+                </Trigger>
             </Style.Triggers>
+        </Style>
 
-            </Style>
+        <!-- ── HINT TEXT ── -->
+        <Style x:Key="HintText" TargetType="TextBlock">
+            <Setter Property="FontSize"   Value="11"/>
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+            <Setter Property="Margin"     Value="0,3,0,0"/>
+        </Style>
+
+        <!-- ── ERROR TEXT ── -->
+        <Style x:Key="ErrorText" TargetType="TextBlock">
+            <Setter Property="FontSize"     Value="12"/>
+            <Setter Property="Foreground"   Value="#E53935"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin"       Value="0,4,0,0"/>
+            <Setter Property="Visibility"   Value="Collapsed"/>
+        </Style>
+
+        <!-- ── ACTIVE TAB PILL ── -->
+        <Style x:Key="ActiveTabPill" TargetType="Border">
+            <Setter Property="Background"   Value="{DynamicResource HeaderBackground}"/>
+            <Setter Property="CornerRadius" Value="6"/>
+        </Style>
 
     </Window.Resources>
 
@@ -74,21 +180,29 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- ═══════════════════════════════════════════════════ -->
-        <!--  HEADER  (shared)                                   -->
-        <!-- ═══════════════════════════════════════════════════ -->
+        <!-- ══════════════════════════════════════════════════════ -->
+        <!--  HEADER                                                -->
+        <!-- ══════════════════════════════════════════════════════ -->
         <Border Grid.Row="0"
                 Background="{DynamicResource HeaderBackground}"
-                Padding="30,20">
-            <TextBlock Text="FishLens"
-                       FontSize="{DynamicResource LargeHeaderFontSize}"
-                       FontWeight="SemiBold"
-                       Foreground="{DynamicResource OnAccentForeground}"/>
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="40,18">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Brand wordmark -->
+                <TextBlock VerticalAlignment="Center">
+                    <Run Text="FishLens"
+                         FontFamily="Georgia"
+                         FontSize="22"
+                         FontWeight="SemiBold"
+                         Foreground="{DynamicResource OnAccentForeground}"/>
+                </TextBlock>
+            </StackPanel>
         </Border>
 
-        <!-- ═══════════════════════════════════════════════════ -->
-        <!--  CONTENT  — five panels, one visible at a time      -->
-        <!-- ═══════════════════════════════════════════════════ -->
+        <!-- ══════════════════════════════════════════════════════ -->
+        <!--  CONTENT — five panels, one visible at a time         -->
+        <!-- ══════════════════════════════════════════════════════ -->
         <Grid Grid.Row="1">
 
             <!-- ─────────────────────────────────────────── -->
@@ -99,31 +213,57 @@
                     Background="{DynamicResource CardBackground}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="25"
-                    Margin="30"
+                    CornerRadius="14"
+                    Padding="32,28"
                     Width="400"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
 
                 <StackPanel>
 
-                    <TextBlock Text="Sign in"
-                               FontSize="{DynamicResource LargeHeaderFontSize}"
-                               FontWeight="SemiBold"
+                    <!-- Tab switcher -->
+                    <Border Background="{DynamicResource WindowBackground}"
+                            CornerRadius="8"
+                            Padding="3"
+                            Margin="0,0,0,24">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Style="{StaticResource ActiveTabPill}">
+                                <TextBlock Text="Returning Users"
+                                           FontSize="13"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource OnAccentForeground}"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,8"/>
+                            </Border>
+
+                            <TextBlock Grid.Column="1"
+                                       Text="New Organization"
+                                       FontSize="13"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Margin="0,8"
+                                       Style="{StaticResource LinkText}"
+                                       MouseLeftButtonUp="GoToSignUp_Click"/>
+                        </Grid>
+                    </Border>
+
+                    <TextBlock Text="Sign in to your account"
+                               FontFamily="Georgia"
+                               FontSize="22"
                                Foreground="{DynamicResource PrimaryText}"
                                HorizontalAlignment="Center"
-                               Margin="0,0,0,20"/>
+                               Margin="0,0,0,24"/>
 
-                    <TextBlock Text="Username"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               Foreground="{DynamicResource SecondaryText}"/>
-
+                    <!-- Username -->
+                    <TextBlock Text="USERNAME" Style="{StaticResource FieldLabel}"/>
                     <TextBox x:Name="SignInUsernameBox"
-                             Height="36"
-                             Padding="8"
-                             FontSize="{DynamicResource BaseFontSize}"
-                             Margin="0,5,0,15"
+                             Style="{StaticResource RoundedTextBox}"
+                             Margin="0,0,0,14"
                              TabIndex="0"
                              KeyDown="SignInUsername_KeyDown"
                              GotKeyboardFocus="UsernameBox_GotKeyFocus"/>
@@ -132,13 +272,13 @@
                                FontSize="{DynamicResource BaseFontSize}"
                                Foreground="{DynamicResource SecondaryText}"/>
 
-                    <Grid Margin="0,5,0,20" Height="36">
+                    <Grid Margin="0,5,0,20">
                         <PasswordBox x:Name="SignInPasswordBox"
-                                     Padding="8,8,36,8"
-                                     FontSize="{DynamicResource BaseFontSize}"
-                                     TabIndex="1"
-                                     KeyDown="SignInPassword_KeyDown"
-                                     GotKeyboardFocus="PasswordBox_GotKeyFocus"/>
+                                 Style="{StaticResource RoundedPasswordBox}"
+                                 Padding="8,8,36,8"
+                                 TabIndex="1"
+                                 KeyDown="SignInPassword_KeyDown"
+                                 GotKeyboardFocus="PasswordBox_GotKeyFocus"/>
                         <TextBox x:Name="SignInPasswordVisible"
                                  Padding="8,8,36,8"
                                  FontSize="{DynamicResource BaseFontSize}"
@@ -157,39 +297,28 @@
                     </Grid>
 
                     <TextBlock x:Name="SignInError"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               Foreground="#F44336"
-                               TextWrapping="Wrap"
+                               Style="{StaticResource ErrorText}"
                                HorizontalAlignment="Center"
-                               Margin="0,0,0,10"
-                               Visibility="Collapsed"/>
+                               Margin="0,0,0,8"/>
 
                     <Button Content="Sign In"
-                            Width="140"
-                            Padding="10,6"
-                            Background="{DynamicResource HeaderBackground}"
-                            Foreground="{DynamicResource OnAccentForeground}"
-                            FontSize="{DynamicResource BaseFontSize}"
-                            FontWeight="SemiBold"
-                            HorizontalAlignment="Center"
-                            Cursor="Hand"
+                            Style="{StaticResource PrimaryButton}"
                             TabIndex="2"
-                            Style="{StaticResource RoundedButton}"
                             Click="SigninButton_Click"/>
+
                     <TextBlock FontSize="{DynamicResource BaseFontSize}"
                                FontWeight="SemiBold"
                                Style="{StaticResource LinkText}"
                                HorizontalAlignment="Center"
-                               Margin="0,10,0,0"> 
-                            <Hyperlink Style="{StaticResource HyperLinkText}"
-                               TextDecorations="None"
-                               Foreground="{DynamicResource SecondaryText}"
-                               Click="GoToForgotPassword_Click"
-                               Cursor="Hand">
-                               Forgot Password?
-                            </Hyperlink>
+                               Margin="0,10,0,0">
+                        <Hyperlink TextDecorations="None"
+                                   Foreground="{DynamicResource SecondaryText}"
+                                   Click="GoToForgotPassword_Click"
+                                   Cursor="Hand">
+                            Forgot Password?
+                        </Hyperlink>
+                    </TextBlock>
 
-                        </TextBlock>
                 </StackPanel>
             </Border>
 
@@ -201,9 +330,8 @@
                     Background="{DynamicResource CardBackground}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="25"
-                    Margin="30"
+                    CornerRadius="14"
+                    Padding="32,28"
                     Width="420"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
@@ -212,86 +340,77 @@
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
 
-                        <TextBlock Text="Create your account"
-                                   FontSize="{DynamicResource LargeHeaderFontSize}"
-                                   FontWeight="SemiBold"
+                        <!-- Tab switcher -->
+                        <Border Background="{DynamicResource WindowBackground}"
+                                CornerRadius="8"
+                                Padding="3"
+                                Margin="0,0,0,24">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0"
+                                           Text="New Users"
+                                           FontSize="13"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Margin="0,8"
+                                           Style="{StaticResource LinkText}"
+                                           MouseLeftButtonUp="GoToSignIn_Click"/>
+
+                                <Border Grid.Column="1" Style="{StaticResource ActiveTabPill}">
+                                    <TextBlock Text="Returning Users"
+                                               FontSize="13"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource OnAccentForeground}"
+                                               HorizontalAlignment="Center"
+                                               Margin="0,8"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <TextBlock Text="Create your organization"
+                                   FontFamily="Georgia"
+                                   FontSize="22"
                                    Foreground="{DynamicResource PrimaryText}"
                                    HorizontalAlignment="Center"
-                                   Margin="0,0,0,5"/>
+                                   Margin="0,0,0,24"/>
 
-                        <TextBlock Text="Set up your organization and admin account"
-                                   FontSize="{DynamicResource BaseFontSize}"
-                                   Foreground="{DynamicResource SecondaryText}"
-                                   HorizontalAlignment="Center"
-                                   Margin="0,0,0,25"/>
-
-                        <!-- Organization Name -->
-                        <TextBlock Text="Organization Name"
-                                   FontSize="{DynamicResource BaseFontSize}"
-                                   Foreground="{DynamicResource SecondaryText}"/>
+                        <!-- Org Name -->
+                        <TextBlock Text="ORGANIZATION NAME" Style="{StaticResource FieldLabel}"/>
                         <TextBox x:Name="OrgNameBox"
-                                 Height="36"
-                                 Padding="8"
-                                 FontSize="{DynamicResource BaseFontSize}"
-                                 Margin="0,5,0,15"/>
-                        <TextBlock x:Name="OrgNameError"
-                                   FontSize="11"
-                                   Foreground="#F44336"
-                                   TextWrapping="Wrap"
-                                   Visibility="Collapsed"
-                                   Margin="0,0,0,12"/>
+                                 Style="{StaticResource RoundedTextBox}"
+                                 Margin="0,0,0,4"/>
+                        <TextBlock x:Name="OrgNameError" Style="{StaticResource ErrorText}" Margin="0,0,0,12"/>
 
                         <!-- Email -->
-                        <TextBlock Text="Email"
-                                   FontSize="{DynamicResource BaseFontSize}"
-                                   Foreground="{DynamicResource SecondaryText}"/>
+                        <TextBlock Text="EMAIL" Style="{StaticResource FieldLabel}" Margin="0,8,0,6"/>
                         <TextBox x:Name="NewEmailBox"
-                                 Height="36"
-                                 Padding="8"
-                                 FontSize="{DynamicResource BaseFontSize}"
-                                 Margin="0,5,0,5"/>
-                        <StackPanel Margin="0,0,0,10">
-                            <TextBlock Text="• Must be a valid address (e.g. name@gmail.com)"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource SecondaryText}"/>
-                        </StackPanel>
-                        <TextBlock x:Name="EmailError"
-                                   FontSize="11"
-                                   Foreground="#F44336"
-                                   TextWrapping="Wrap"
-                                   Visibility="Collapsed"
-                                   Margin="0,0,0,12"/>
+                                 Style="{StaticResource RoundedTextBox}"
+                                 Margin="0,0,0,4"/>
+                        <TextBlock Text="• Must be a valid address (e.g. name@gmail.com)"
+                                   Style="{StaticResource HintText}"/>
+                        <TextBlock x:Name="EmailError" Style="{StaticResource ErrorText}" Margin="0,0,0,12"/>
 
                         <!-- Username -->
-                        <TextBlock Text="Username"
-                                   FontSize="{DynamicResource BaseFontSize}"
-                                   Foreground="{DynamicResource SecondaryText}"/>
+                        <TextBlock Text="USERNAME" Style="{StaticResource FieldLabel}" Margin="0,8,0,6"/>
                         <TextBox x:Name="NewUsernameBox"
-                                 Height="36"
-                                 Padding="8"
-                                 FontSize="{DynamicResource BaseFontSize}"
-                                 Margin="0,5,0,5"/>
-                        <StackPanel Margin="0,0,0,10">
-                            <TextBlock x:Name="ReqSignUpUsernameLength"
-                                       Text="• At least 6 characters"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource SecondaryText}"/>
-                        </StackPanel>
-                        <TextBlock x:Name="UsernameError"
-                                   FontSize="11"
-                                   Foreground="#F44336"
-                                   TextWrapping="Wrap"
-                                   Visibility="Collapsed"
-                                   Margin="0,0,0,12"/>
+                                 Style="{StaticResource RoundedTextBox}"
+                                 Margin="0,0,0,4"/>
+                        <TextBlock x:Name="ReqSignUpUsernameLength"
+                                   Text="• At least 6 characters"
+                                   Style="{StaticResource HintText}"/>
+                        <TextBlock x:Name="UsernameError" Style="{StaticResource ErrorText}" Margin="0,0,0,12"/>
 
                         <!-- Password -->
-                        <TextBlock Text="Password"
-                                   FontSize="{DynamicResource BaseFontSize}"
-                                   Foreground="{DynamicResource SecondaryText}"/>
-                        <Grid Margin="0,5,0,5" Height="36">
+                        <TextBlock Text="PASSWORD" Style="{StaticResource FieldLabel}" Margin="0,8,0,6"/>
+                        <Grid Margin="0,0,0,4">
                             <PasswordBox x:Name="NewPasswordBox"
-                                         Padding="8,8,36,8"
-                                         FontSize="{DynamicResource BaseFontSize}"/>
+                                     Style="{StaticResource RoundedPasswordBox}"
+                                     Padding="8,8,36,8"
+                                     FontSize="{DynamicResource BaseFontSize}"/>
                             <TextBox x:Name="NewPasswordVisible"
                                      Padding="8,8,36,8"
                                      FontSize="{DynamicResource BaseFontSize}"
@@ -308,25 +427,16 @@
                                     Cursor="Hand"
                                     Click="NewPasswordEye_Click"/>
                         </Grid>
-                        <StackPanel Margin="0,0,0,10">
-                            <TextBlock x:Name="ReqSignUpPasswordLength"
-                                       Text="• At least 6 characters"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource SecondaryText}"/>
-                        </StackPanel>
-                        <TextBlock x:Name="PasswordError"
-                                   FontSize="11"
-                                   Foreground="#F44336"
-                                   TextWrapping="Wrap"
-                                   Visibility="Collapsed"
-                                   Margin="0,0,0,12"/>
+                        <TextBlock x:Name="ReqSignUpPasswordLength"
+                                   Text="• At least 6 characters"
+                                   Style="{StaticResource HintText}"/>
+                        <TextBlock x:Name="PasswordError" Style="{StaticResource ErrorText}" Margin="0,0,0,12"/>
 
                         <!-- Confirm Password -->
-                        <TextBlock Text="Confirm Password"
-                                   FontSize="{DynamicResource BaseFontSize}"
-                                   Foreground="{DynamicResource SecondaryText}"/>
-                        <Grid Margin="0,5,0,5" Height="36">
+                        <TextBlock Text="CONFIRM PASSWORD" Style="{StaticResource FieldLabel}" Margin="0,8,0,6"/>
+                        <Grid Margin="0,0,0,4">
                             <PasswordBox x:Name="ConfirmPasswordBox"
+                                         Style="{StaticResource RoundedPasswordBox}"
                                          Padding="8,8,36,8"
                                          FontSize="{DynamicResource BaseFontSize}"/>
                             <TextBox x:Name="ConfirmPasswordVisible"
@@ -345,31 +455,14 @@
                                     Cursor="Hand"
                                     Click="ConfirmPasswordEye_Click"/>
                         </Grid>
-                        <StackPanel Margin="0,0,0,10">
-                            <TextBlock x:Name="ReqSignUpPasswordMatch"
-                                       Text="• Passwords must match"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource SecondaryText}"/>
-                        </StackPanel>
-                        <TextBlock x:Name="ConfirmPasswordError"
-                                   FontSize="11"
-                                   Foreground="#F44336"
-                                   TextWrapping="Wrap"
-                                   Visibility="Collapsed"
-                                   Margin="0,0,0,12"/>
+                        <TextBlock x:Name="ReqSignUpPasswordMatch"
+                                   Text="• Passwords must match"
+                                   Style="{StaticResource HintText}"/>
+                        <TextBlock x:Name="ConfirmPasswordError" Style="{StaticResource ErrorText}" Margin="0,0,0,12"/>
 
                         <Button Content="Create Account"
-                                Width="160"
-                                Padding="10,8"
-                                Background="{DynamicResource HeaderBackground}"
-                                Foreground="{DynamicResource OnAccentForeground}"
-                                FontSize="{DynamicResource BaseFontSize}"
-                                FontWeight="SemiBold"
-                                BorderThickness="0"
-                                HorizontalAlignment="Center"
-                                Cursor="Hand"
-                                Margin="0,10,0,0"
-                                Style="{StaticResource RoundedButton}"
+                                Style="{StaticResource PrimaryButton}"
+                                Margin="0,16,0,0"
                                 Click="CreateAccount_Click"/>
 
                     </StackPanel>
@@ -377,220 +470,168 @@
             </Border>
 
             <!-- ─────────────────────────────────────────── -->
-            <!--  PANEL 3 · VERIFY EMAIL  (sign-up flow)    -->
+            <!--  PANEL 3 · VERIFY EMAIL                     -->
             <!-- ─────────────────────────────────────────── -->
             <Border x:Name="VerifyEmailPanel"
                     Visibility="Collapsed"
                     Background="{DynamicResource CardBackground}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="25"
-                    Margin="30"
-                    Width="420"
+                    CornerRadius="14"
+                    Padding="32,28"
+                    Width="400"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
 
                 <StackPanel>
 
                     <TextBlock Text="← Back"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource PrimaryTextBrush}"
-                               Cursor="Hand"
-                               HorizontalAlignment="Left"
-                               Margin="0,0,0,15"
                                Style="{StaticResource LinkText}"
+                               HorizontalAlignment="Left"
+                               Margin="0,0,0,20"
                                MouseLeftButtonUp="BackToSignUpPanel_Click"/>
 
                     <TextBlock Text="Verify your email"
-                               FontSize="{DynamicResource LargeHeaderFontSize}"
-                               FontWeight="SemiBold"
+                               FontFamily="Georgia"
+                               FontSize="22"
                                Foreground="{DynamicResource PrimaryText}"
                                HorizontalAlignment="Center"
-                               Margin="0,0,0,5"/>
+                               Margin="0,0,0,10"/>
 
                     <TextBlock Text="We sent a 6-digit code to your email address. Enter it below to finish creating your account."
-                               FontSize="{DynamicResource BaseFontSize}"
+                               FontSize="13"
                                Foreground="{DynamicResource SecondaryText}"
                                HorizontalAlignment="Center"
                                TextWrapping="Wrap"
                                TextAlignment="Center"
-                               Margin="0,0,0,25"/>
+                               Margin="0,0,0,24"/>
 
-                    <TextBlock Text="Verification Code"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               Foreground="{DynamicResource SecondaryText}"/>
-
+                    <TextBlock Text="VERIFICATION CODE" Style="{StaticResource FieldLabel}"/>
                     <TextBox x:Name="VerificationCodeBox"
-                             Height="36"
-                             Padding="8"
-                             FontSize="{DynamicResource BaseFontSize}"
+                             Style="{StaticResource RoundedTextBox}"
                              MaxLength="6"
-                             Margin="0,5,0,5"/>
+                             Margin="0,0,0,4"/>
 
                     <TextBlock x:Name="VerifyError"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               Foreground="#F44336"
-                               TextWrapping="Wrap"
+                               Style="{StaticResource ErrorText}"
                                HorizontalAlignment="Center"
-                               Margin="0,0,0,10"
-                               Visibility="Collapsed"/>
+                               Margin="0,0,0,8"/>
 
                     <Button Content="Verify &amp; Create Account"
-                            Width="200"
-                            Padding="10,8"
-                            Background="{DynamicResource HeaderBackground}"
-                            Foreground="{DynamicResource OnAccentForeground}"
-                            FontSize="{DynamicResource BaseFontSize}"
-                            FontWeight="SemiBold"
-                            BorderThickness="0"
-                            HorizontalAlignment="Center"
-                            Cursor="Hand"
-                            Margin="0,10,0,15"
-                            Style="{StaticResource RoundedButton}"
+                            Style="{StaticResource PrimaryButton}"
+                            Margin="0,12,0,16"
                             Click="VerifyCode_Click"/>
 
-                    <StackPanel Orientation="Horizontal"
-                                HorizontalAlignment="Center">
-                        <TextBlock Text="Resend code"
-                                   FontSize="{DynamicResource BaseFontSize}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource PrimaryTextBrush}"
-                                   Cursor="Hand"
-                                   Style="{StaticResource LinkText}"
-                                   MouseLeftButtonUp="ResendSignUpCode_Click"/>
-                    </StackPanel>
+                    <TextBlock Text="Resend code"
+                               Style="{StaticResource LinkText}"
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Center"
+                               MouseLeftButtonUp="ResendSignUpCode_Click"/>
 
                 </StackPanel>
             </Border>
 
             <!-- ─────────────────────────────────────────── -->
-            <!--  PANEL 4 · FORGOT PASSWORD (enter username) -->
+            <!--  PANEL 4 · FORGOT PASSWORD                  -->
             <!-- ─────────────────────────────────────────── -->
             <Border x:Name="ForgotPanel"
                     Visibility="Collapsed"
                     Background="{DynamicResource CardBackground}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="25"
-                    Margin="30"
-                    Width="420"
+                    CornerRadius="14"
+                    Padding="32,28"
+                    Width="400"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
 
                 <StackPanel>
 
+                    <TextBlock Text="← Back to Sign In"
+                               Style="{StaticResource LinkText}"
+                               HorizontalAlignment="Left"
+                               Margin="0,0,0,20"
+                               MouseLeftButtonUp="BackToSignInFromForgot_Click"/>
+
                     <TextBlock Text="Reset your password"
-                               FontSize="{DynamicResource LargeHeaderFontSize}"
-                               FontWeight="SemiBold"
+                               FontFamily="Georgia"
+                               FontSize="22"
                                Foreground="{DynamicResource PrimaryText}"
                                HorizontalAlignment="Center"
-                               Margin="0,0,0,5"/>
+                               Margin="0,0,0,10"/>
 
-                    <TextBlock Text="Enter your username to receive a reset code"
-                               FontSize="{DynamicResource BaseFontSize}"
+                    <TextBlock Text="Enter your username and we'll send a reset code to your email."
+                               FontSize="13"
                                Foreground="{DynamicResource SecondaryText}"
                                HorizontalAlignment="Center"
-                               Margin="0,0,0,25"/>
+                               TextWrapping="Wrap"
+                               TextAlignment="Center"
+                               Margin="0,0,0,24"/>
 
-                    <TextBlock Text="Username"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               Foreground="{DynamicResource SecondaryText}"/>
-
+                    <TextBlock Text="USERNAME" Style="{StaticResource FieldLabel}"/>
                     <TextBox x:Name="ForgotUsernameBox"
-                             Height="36"
-                             Padding="8"
-                             FontSize="{DynamicResource BaseFontSize}"
-                             Margin="0,5,0,20"/>
+                             Style="{StaticResource RoundedTextBox}"
+                             Margin="0,0,0,4"/>
 
                     <TextBlock x:Name="ForgotError"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               Foreground="#F44336"
-                               TextWrapping="Wrap"
+                               Style="{StaticResource ErrorText}"
                                HorizontalAlignment="Center"
-                               Margin="0,0,0,10"
-                               Visibility="Collapsed"/>
+                               Margin="0,0,0,8"/>
 
                     <Button Content="Send Reset Code"
-                            Width="160"
-                            Padding="10,8"
-                            Background="{DynamicResource HeaderBackground}"
-                            Foreground="{DynamicResource OnAccentForeground}"
-                            FontSize="{DynamicResource BaseFontSize}"
-                            FontWeight="SemiBold"
-                            BorderThickness="0"
-                            HorizontalAlignment="Center"
-                            Cursor="Hand"
-                            Style="{StaticResource RoundedButton}"
+                            Style="{StaticResource PrimaryButton}"
+                            Margin="0,12,0,0"
                             Click="SendResetCode_Click"/>
 
                 </StackPanel>
             </Border>
 
             <!-- ─────────────────────────────────────────── -->
-            <!--  PANEL 5 · RESET PASSWORD (code + new pw)  -->
+            <!--  PANEL 5 · RESET PASSWORD                   -->
             <!-- ─────────────────────────────────────────── -->
             <Border x:Name="ResetPanel"
                     Visibility="Collapsed"
                     Background="{DynamicResource CardBackground}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="25"
-                    Margin="30"
-                    Width="420"
+                    CornerRadius="14"
+                    Padding="32,28"
+                    Width="400"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
 
                 <StackPanel>
 
                     <TextBlock Text="← Back"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource PrimaryTextBrush}"
-                               Cursor="Hand"
-                               HorizontalAlignment="Left"
-                               Margin="0,0,0,15"
                                Style="{StaticResource LinkText}"
+                               HorizontalAlignment="Left"
+                               Margin="0,0,0,20"
                                MouseLeftButtonUp="BackToForgotFromReset_Click"/>
 
-                    <TextBlock Text="Enter your reset code"
-                               FontSize="{DynamicResource LargeHeaderFontSize}"
-                               FontWeight="SemiBold"
+                    <TextBlock Text="Choose a new password"
+                               FontFamily="Georgia"
+                               FontSize="22"
                                Foreground="{DynamicResource PrimaryText}"
                                HorizontalAlignment="Center"
-                               Margin="0,0,0,5"/>
+                               Margin="0,0,0,10"/>
 
-                    <TextBlock Text="Check your email for the 6-digit code"
-                               FontSize="{DynamicResource BaseFontSize}"
+                    <TextBlock Text="Enter the 6-digit code from your email, then set your new password."
+                               FontSize="13"
                                Foreground="{DynamicResource SecondaryText}"
                                HorizontalAlignment="Center"
-                               Margin="0,0,0,25"/>
+                               TextWrapping="Wrap"
+                               TextAlignment="Center"
+                               Margin="0,0,0,24"/>
 
-                    <TextBlock Text="Reset Code"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               Foreground="{DynamicResource SecondaryText}"/>
-
+                    <TextBlock Text="RESET CODE" Style="{StaticResource FieldLabel}"/>
                     <TextBox x:Name="ResetCodeBox"
-                             Height="36"
-                             Padding="8"
-                             FontSize="{DynamicResource BaseFontSize}"
-                             Margin="0,5,0,15"/>
+                             Style="{StaticResource RoundedTextBox}"
+                             Margin="0,0,0,14"/>
 
-                    <TextBlock Text="New Password"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               Foreground="{DynamicResource SecondaryText}"/>
-
-                    <TextBlock x:Name="ReqResetPasswordLength"
-                               Text="• At least 6 characters"
-                               FontSize="11"
-                               Foreground="#888888"
-                               Margin="0,2,0,10"/>
-
-                    <Grid Margin="0,5,0,15" Height="36">
+                    <TextBlock Text="NEW PASSWORD" Style="{StaticResource FieldLabel}"/>
+                    <Grid Margin="0,0,0,4">
                         <PasswordBox x:Name="ResetNewPasswordBox"
+                                     Style="{StaticResource RoundedPasswordBox}"
                                      Padding="8,8,36,8"
                                      FontSize="{DynamicResource BaseFontSize}"/>
                         <TextBox x:Name="ResetNewPasswordVisible"
@@ -609,21 +650,17 @@
                                 Cursor="Hand"
                                 Click="ResetNewPasswordEye_Click"/>
                     </Grid>
-
-                    <TextBlock Text="Confirm Password"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               Foreground="{DynamicResource SecondaryText}"/>
-
-                    <TextBlock x:Name="ReqResetPasswordMatch"
-                               Text="• Passwords must match"
-                               FontSize="11"
-                               Foreground="#888888"
+                    <TextBlock x:Name="ReqResetPasswordLength"
+                               Text="• At least 6 characters"
+                               Style="{StaticResource HintText}"
                                Margin="0,2,0,10"/>
 
-                    <Grid Margin="0,5,0,5" Height="36">
+                    <TextBlock Text="CONFIRM PASSWORD" Style="{StaticResource FieldLabel}"/>
+                    <Grid Margin="0,0,0,4">
                         <PasswordBox x:Name="ResetConfirmPasswordBox"
-                                     Padding="8,8,36,8"
-                                     FontSize="{DynamicResource BaseFontSize}"/>
+                                 Style="{StaticResource RoundedPasswordBox}"
+                                 Padding="8,8,36,8"
+                                 FontSize="{DynamicResource BaseFontSize}"/>
                         <TextBox x:Name="ResetConfirmPasswordVisible"
                                  Padding="8,8,36,8"
                                  FontSize="{DynamicResource BaseFontSize}"
@@ -640,27 +677,19 @@
                                 Cursor="Hand"
                                 Click="ResetConfirmPasswordEye_Click"/>
                     </Grid>
+                    <TextBlock x:Name="ReqResetPasswordMatch"
+                               Text="• Passwords must match"
+                               Style="{StaticResource HintText}"
+                               Margin="0,2,0,10"/>
 
                     <TextBlock x:Name="ResetError"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               Foreground="#F44336"
-                               TextWrapping="Wrap"
+                               Style="{StaticResource ErrorText}"
                                HorizontalAlignment="Center"
-                               Margin="0,0,0,10"
-                               Visibility="Collapsed"/>
+                               Margin="0,8,0,0"/>
 
                     <Button Content="Reset Password"
-                            Width="160"
-                            Padding="10,8"
-                            Background="{DynamicResource HeaderBackground}"
-                            Foreground="{DynamicResource OnAccentForeground}"
-                            FontSize="{DynamicResource BaseFontSize}"
-                            FontWeight="SemiBold"
-                            BorderThickness="0"
-                            HorizontalAlignment="Center"
-                            Cursor="Hand"
-                            Margin="0,10,0,0"
-                            Style="{StaticResource RoundedButton}"
+                            Style="{StaticResource PrimaryButton}"
+                            Margin="0,16,0,0"
                             Click="ResetPassword_Click"/>
 
                 </StackPanel>
@@ -668,79 +697,41 @@
 
         </Grid>
 
-        <!-- ═══════════════════════════════════════════════════ -->
-        <!--  FOOTER  — three states, swapped by ShowPanel()    -->
-        <!-- ═══════════════════════════════════════════════════ -->
+        <!-- ══════════════════════════════════════════════════════ -->
+        <!--  FOOTER                                                -->
+        <!-- TODO: replace with actual links and icons, and add company info -->
+        <!-- ══════════════════════════════════════════════════════ -->
         <Border Grid.Row="2"
                 Background="{DynamicResource CardBackground}"
                 BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="0,1,0,0"
-                Padding="30,20">
-            <Grid>
+                Padding="40,16">
 
-                <!-- Sign In footer -->
-                <StackPanel x:Name="SignInFooter"
-                            Visibility="Visible"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Center">
-                    <TextBlock Text="Don't have an account?"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               Foreground="{DynamicResource SecondaryText}"
-                               VerticalAlignment="Center"
-                               Margin="0,0,8,0"/>
-                    <TextBlock Text="Sign Up"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource PrimaryText}"
-                               VerticalAlignment="Center"
-                               Cursor="Hand"
-                               Style="{StaticResource LinkText}"
-                               MouseLeftButtonUp="GoToSignUp_Click"/>
-                </StackPanel>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
 
-                <!-- Sign Up + Verify Email footer -->
-                <StackPanel x:Name="SignUpFooter"
-                            Visibility="Collapsed"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Center">
-                    <TextBlock Text="Already have an account?"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               Foreground="{DynamicResource SecondaryText}"
-                               VerticalAlignment="Center"
-                               Margin="0,0,8,0"/>
-                    <TextBlock Text="Sign In"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource PrimaryTextBrush}"
-                               VerticalAlignment="Center"
-                               Cursor="Hand"
-                               Style="{StaticResource LinkText}"
-                               MouseLeftButtonUp="GoToSignIn_Click"/>
-                </StackPanel>
+                <TextBlock Text="Privacy"
+                           Style="{StaticResource LinkText}"
+                           Margin="0,0,20,0"/>
 
-                <!-- Forgot Password + Reset Password footer -->
-                <StackPanel x:Name="ForgotFooter"
-                            Visibility="Collapsed"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Center">
-                    <TextBlock Text="Remember your password?"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               Foreground="{DynamicResource SecondaryText}"
-                               VerticalAlignment="Center"
-                               Margin="0,0,8,0"/>
-                    <TextBlock Text="Back to Sign In"
-                               FontSize="{DynamicResource BaseFontSize}"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource PrimaryTextBrush}"
-                               VerticalAlignment="Center"
-                               Cursor="Hand"
-                               Style="{StaticResource LinkText}"
-                               MouseLeftButtonUp="BackToSignInFromForgot_Click"/>
-                </StackPanel>
+                <Ellipse Width="3" Height="3"
+                         Fill="{DynamicResource BorderBrush}"
+                         VerticalAlignment="Center"
+                         Margin="0,0,20,0"/>
 
-            </Grid>
+                <TextBlock Text="Terms"
+                           Style="{StaticResource LinkText}"
+                           Margin="0,0,20,0"/>
+
+                <Ellipse Width="3" Height="3"
+                         Fill="{DynamicResource BorderBrush}"
+                         VerticalAlignment="Center"
+                         Margin="0,0,20,0"/>
+
+                <TextBlock Text="Support"
+                           Style="{StaticResource LinkText}"/>
+
+            </StackPanel>
         </Border>
 
     </Grid>
 </Window>
-

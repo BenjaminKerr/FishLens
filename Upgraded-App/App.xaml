@@ -6,9 +6,17 @@
              StartupUri="Pages/AuthWindow.xaml">
     <Application.Resources>
         <ResourceDictionary>
-            <!-- Merge the default theme so all XAML can resolve theme resources -->
+            <!-- Merge the default theme and video button styles so XAML can resolve theme resources -->
+
             <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Typography.xaml"/>
                 <ResourceDictionary Source="Themes/NormalTheme.xaml"/>
+                <ResourceDictionary Source="Themes/VideoButtonStyles.xaml"/>
+                <ResourceDictionary Source="Themes/Controls/ComboBoxStyles.xaml"/>
+                <ResourceDictionary Source="Themes/Controls/ScrollBarStyles.xaml"/>
+                <ResourceDictionary Source="Themes/Icons/IconAssets.xaml"/>
+                <ResourceDictionary Source="Themes/Controls/CheckBoxStyles.xaml"/>
+                <ResourceDictionary Source="Themes/Controls/DatePickerStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
 
             <!-- Base font sizes -->
@@ -19,15 +27,18 @@
             <system:Double x:Key="TitleFontSize">56</system:Double>
             <system:Double x:Key="LargeTitleFontSize">72</system:Double>
 
-            <!-- Default TextBlock Style -->
+            <!-- Default TextBlock — body font everywhere -->
             <Style TargetType="TextBlock">
-                <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}"/>
+                <Setter Property="FontFamily" Value="{DynamicResource BodyFont}"/>
+                <Setter Property="FontSize"   Value="{DynamicResource BaseFontSize}"/>
             </Style>
 
-            <!-- Default Button Style -->
+            <!-- Default Button — body font -->
             <Style TargetType="Button">
-                <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}"/>
+                <Setter Property="FontFamily" Value="{DynamicResource BodyFont}"/>
+                <Setter Property="FontSize"   Value="{DynamicResource BaseFontSize}"/>
             </Style>
+
 
             <!-- Accent action button (e.g. Delete Selected) – teal active, darker teal disabled -->
             <Style x:Key="AccentActionButton" TargetType="Button">
@@ -104,14 +115,135 @@
                 </Setter>
             </Style>
 
-            <!-- Default ComboBox Style -->
-            <Style TargetType="ComboBox">
-                <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}"/>
+            <!-- ═══════════════════════════════════════════════════
+                    NAV BUTTON STYLES
+                ════════════════════════════════════════════════════ -->
+            <Style x:Key="NavButton" TargetType="Button">
+                <Setter Property="Background"    Value="Transparent"/>
+                <Setter Property="BorderBrush"   Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Padding"       Value="10"/>
+                <Setter Property="Width"         Value="60"/>
+                <Setter Property="Height"        Value="60"/>
+                <Setter Property="Cursor"        Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <!--
+                    Outer Grid: holds the left-bar active indicator + the button body.
+                    The active pill is a 3 px Rectangle docked to the left edge.
+                    It's visible only when Tag = "Active".
+                -->
+                            <Grid>
+                                <!-- Active left-bar pill -->
+                                <Border x:Name="activePill"
+                                    Width="3"
+                                    CornerRadius="2"
+                                    Background="{DynamicResource OnAccentForeground}"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    Height="24"
+                                    Opacity="0"/>
+
+                                <!-- Button body -->
+                                <Border x:Name="navBd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="10"
+                            Padding="{TemplateBinding Padding}"
+                            Margin="6,0,0,0">
+                                    <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                                </Border>
+                            </Grid>
+
+                            <ControlTemplate.Triggers>
+                                <!-- Hover -->
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="navBd" Property="Background"
+                                Value="{DynamicResource SidebarBorder}"/>
+                                </Trigger>
+                                <!-- Active page — set button.Tag = "Active" from code-behind -->
+                                <Trigger Property="Tag" Value="Active">
+                                    <Setter TargetName="navBd"  Property="Background"
+                                Value="{DynamicResource SidebarBorder}"/>
+                                    <Setter TargetName="activePill" Property="Opacity" Value="1"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
             </Style>
 
-            <!-- Default TextBox Style -->
+            <!-- Status chip — used in the header for Location and Run values -->
+            <Style x:Key="StatusChip" TargetType="Border">
+                <Setter Property="Background"    Value="{DynamicResource WindowBackground}"/>
+                <Setter Property="BorderBrush"   Value="{DynamicResource BorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius"  Value="20"/>
+                <Setter Property="Padding"       Value="12,5"/>
+            </Style>
+
+            <!-- Left-accented section card for the analysis panel -->
+            <Style x:Key="AnalysisSectionCard" TargetType="Border">
+                <Setter Property="Background"      Value="{DynamicResource CardBackground}"/>
+                <Setter Property="BorderThickness" Value="3,0,0,0"/>
+                <Setter Property="CornerRadius"    Value="0,8,8,0"/>
+                <Setter Property="Padding"         Value="13,11"/>
+                <Setter Property="Margin"          Value="0,0,0,0"/>
+            </Style>
+
+            <Style x:Key="SettingsButton" TargetType="Button">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="bd"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="6"
+                        Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <Style TargetType="TextBox">
-                <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}"/>
+                <Setter Property="Background"   Value="{DynamicResource CardBackground}"/>
+                <Setter Property="Foreground"   Value="{DynamicResource PrimaryText}"/>
+                <Setter Property="BorderBrush"  Value="{DynamicResource BorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="FontFamily"   Value="{DynamicResource BodyFont}"/>
+                <Setter Property="FontSize"     Value="{DynamicResource BaseFontSize}"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="TextBox">
+                            <Border x:Name="border"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="8">
+                                <ScrollViewer x:Name="PART_ContentHost"
+                                  Margin="10,0"
+                                  VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsFocused" Value="True">
+                                    <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.5"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
             </Style>
         </ResourceDictionary>
     </Application.Resources>

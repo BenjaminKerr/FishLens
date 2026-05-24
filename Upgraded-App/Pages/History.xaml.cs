@@ -356,7 +356,7 @@ namespace FishLens_App
         //              explicitly clicks Apply Filters or Generate Report.
         public void ReportType_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (reportTypeCombo?.SelectedItem is ComboBoxItem item)
+            if (sender is ComboBox combo && combo.SelectedItem is ComboBoxItem item)
                 _currentReportStyle = item.Content?.ToString() ?? "Standard Report";
 
             if (_isHistoryLoaded)
@@ -523,7 +523,6 @@ namespace FishLens_App
             stats.TotalVideoCount  = uniqueVideos.Count;
 
             stats.AverageConfidence = CalculateAverageConfidence(totalConfidence, confidenceCount);
-            stats.AverageCorrectness = correctnessCount > 0 ? totalCorrectness / correctnessCount : 0;
 
             // Calculate fish per day
             stats.FishPerDay = uniqueDates.Count > 0 ? (double)stats.FishCount / uniqueDates.Count : 0;
@@ -536,7 +535,7 @@ namespace FishLens_App
 
             return stats;
         }
-
+        
         #endregion
 
         #region Report Display

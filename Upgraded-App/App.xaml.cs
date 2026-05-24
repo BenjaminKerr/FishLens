@@ -1,8 +1,10 @@
 using FishLens_App.Models;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Configuration.Internal;
 using System.Windows;
 
 namespace FishLens_App
@@ -114,7 +116,7 @@ namespace FishLens_App
         //     application. Called after sign-in, settings save, and sign-out reset.
         public void ApplyCurrentSettings()
         {
-            ThemeHelper.ApplyHighContrastMode(Configuration.HighContrastMode);
+            ThemeHelper.ThemeSwap(Configuration.HighContrastMode);
 
             if (Configuration.LargeText)
             {
