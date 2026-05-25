@@ -922,11 +922,7 @@ def deepsort_analysis(tracker, frame, frameData, vidData):
                 "best_conf": -1.0,
                 "best_crop_score": -1.0,
                 "best_crop": None,
-<<<<<<< HEAD
-                "species_candidate_crops": [],
-=======
                 "crop_candidates": [],
->>>>>>> 1b5a1b78f7f7326199a87473d99b9c7ba0107b57
                 "video_timestamp": vidData.v_video_timestamp or "Not detected",
                 "timestamp_confidence": initial_conf,
                 "timestamp_attempts": 0
@@ -1118,11 +1114,7 @@ def build_track_summary(trackId, track_data, frameData, vidData, image_path=None
         "end_time_sec": f"{end_sec:.2f}",
         "direction": overall_direction,
         "best_crop": track_data.get("best_crop"),
-<<<<<<< HEAD
-        "species_candidate_crops": track_data.get("species_candidate_crops", []),
-=======
         "crop_candidates": track_data.get("crop_candidates", []),
->>>>>>> 1b5a1b78f7f7326199a87473d99b9c7ba0107b57
         "species": "No data",
         "species_confidence": "0.0000",
         "video_timestamp": video_timestamp,
@@ -1708,99 +1700,6 @@ def _append_no_fish_row(video_file_path, video_timestamp):
 
 def save_best_image(finished_tracks, video_path):
     """Save each track's best crop, classify it, and move it into a species subfolder."""
-<<<<<<< HEAD
-
-    def _classify_candidates(candidate_crops):
-        """Average prediction probabilities over several strong crops from one track."""
-        prob_vectors = []
-
-        for candidate_crop in candidate_crops:
-            result = classify_crop(candidate_crop)
-            probs = result.get("probs") if result else None
-            if probs is None:
-                continue
-            prob_vectors.append(probs)
-
-        if not prob_vectors:
-            return None
-
-        mean_probs = np.mean(np.asarray(prob_vectors, dtype=np.float32), axis=0)
-        if mean_probs.size == 0:
-            return None
-
-        pred_index = int(np.argmax(mean_probs))
-        pred_label = CLASS_NAMES[pred_index]
-        pred_conf = float(mean_probs[pred_index])
-
-        sorted_probs = np.sort(mean_probs)
-        second_best = float(sorted_probs[-2]) if sorted_probs.size >= 2 else 0.0
-        margin = max(0.0, pred_conf - second_best)
-
-        return {
-            "label": pred_label,
-            "confidence": pred_conf,
-            "margin": margin,
-        }
-
-    for track in finished_tracks:
-        best_crop = track.get("best_crop")
-        candidate_entries = track.get("species_candidate_crops") or []
-        candidate_crops = [entry.get("crop") for entry in candidate_entries if entry.get("crop") is not None]
-
-        if not candidate_crops and best_crop is not None:
-            candidate_crops = [best_crop]
-
-        if candidate_crops:
-            enhanced_candidates = [enhance_image(crop) for crop in candidate_crops if crop is not None and crop.size > 0]
-            if not enhanced_candidates:
-                track["species"] = "No data"
-                track["species_confidence"] = "0.0000"
-                track["image_path"] = None
-                track.pop("best_crop", None)
-                track.pop("species_candidate_crops", None)
-                continue
-
-            species_data = _classify_candidates(enhanced_candidates)
-
-            if not species_data:
-                track["species"] = "No data"
-                track["species_confidence"] = "0.0000"
-                track["image_path"] = None
-                track.pop("best_crop", None)
-                track.pop("species_candidate_crops", None)
-                continue
-
-            pred_label = species_data["label"]
-            pred_conf = species_data["confidence"]
-            pred_margin = species_data["margin"]
-
-            if pred_conf < SPECIES_MIN_CONFIDENCE or pred_margin < SPECIES_MIN_MARGIN:
-                species = "Uncertain"
-            else:
-                species = pred_label
-
-            track["species"] = species
-            track["species_confidence"] = f"{pred_conf:.4f}"
-            
-            temp_image_name = f"{os.path.splitext(filename)[0]}_track_{track['trackId']}.jpg"
-            temp_image_path = os.path.join(FISH_IMAGE_DIR, temp_image_name)
-            save_crop = enhanced_candidates[0]
-            write_ok = cv2.imwrite(temp_image_path, save_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
-            if not write_ok:
-                print(f"Failed to write image at {temp_image_path}. Skipping classification.")
-                track["species"] = "No data"
-                track["species_confidence"] = "0.0000"
-                track["image_path"] = None
-                track.pop("best_crop", None)
-                track.pop("species_candidate_crops", None)
-                continue
-
-            # Create species subfolder and move image
-            if species in CLASS_NAMES or species == "Uncertain":
-                species_folder = os.path.join(FISH_IMAGE_DIR, species)
-                os.makedirs(species_folder, exist_ok=True)
-                final_image_path = os.path.join(species_folder, temp_image_name)
-=======
     video_stem = os.path.splitext(os.path.basename(video_path))[0]
     safe_video_stem = _safe_path_component(video_stem, default="unknown_video")
 
@@ -1885,7 +1784,6 @@ def save_best_image(finished_tracks, video_path):
             track["species_confidence"] = f"{(selected['species_conf'] / 100):.4f}"
 
             for rejected in saved_candidates[1:]:
->>>>>>> 1b5a1b78f7f7326199a87473d99b9c7ba0107b57
                 try:
                     if os.path.exists(rejected["path"]):
                         os.remove(rejected["path"])
@@ -1924,11 +1822,7 @@ def save_best_image(finished_tracks, video_path):
         
         # Remove best_crop from track dict (no need to export it)
         track.pop("best_crop", None)
-<<<<<<< HEAD
-        track.pop("species_candidate_crops", None)
-=======
         track.pop("crop_candidates", None)
->>>>>>> 1b5a1b78f7f7326199a87473d99b9c7ba0107b57
 
 # ========================================================================
 # CLASSIFICATION AND TIMESTAMP DEBUG HELPERS
