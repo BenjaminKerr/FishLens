@@ -306,17 +306,7 @@ namespace FishLens_App.Services
                 if (result.NoFishRow.Count > 0)
                 {
                     var slimRow = BuildNoFishCsvRow(result.NoFishRow);
-                    var fullRow = BuildNoFishMasterRow(result.NoFishRow, context.RunName);
-                    if (IsDebug(context))
-                    {
-                        AppendCsvRows(context.RunCsvPath, FishCsvKeys, new[] { fullRow });
-                    }
-                    else
-                    {
-                        AppendCsvRows(context.SessionNoFishCsvPath, NoFishCsvKeys, new[] { slimRow });
-                        AppendCsvRows(context.RunCsvPath, FishCsvKeys, new[] { fullRow });
-                        AppendCsvRows(context.AllHistoryCsvPath, FishCsvKeys, new[] { fullRow });
-                    }
+                    AppendCsvRows(context.SessionNoFishCsvPath, NoFishCsvKeys, new[] { slimRow });
                 }
             }
         }
