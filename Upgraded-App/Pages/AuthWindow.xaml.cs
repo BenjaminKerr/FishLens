@@ -5,6 +5,7 @@
 // ***************************************************************************************************************************
 
 using System.Windows;
+using System.Windows.Controls;
 
 namespace FishLens_App
 {
@@ -42,37 +43,78 @@ namespace FishLens_App
             ForgotPanel.Visibility = Visibility.Collapsed;
             ResetPanel.Visibility = Visibility.Collapsed;
 
-            SignInFooter.Visibility = Visibility.Collapsed;
-            SignUpFooter.Visibility = Visibility.Collapsed;
-            ForgotFooter.Visibility = Visibility.Collapsed;
-
             switch (panelName)
             {
                 case "SignInPanel":
                     SignInPanel.Visibility = Visibility.Visible;
-                    SignInFooter.Visibility = Visibility.Visible;
                     break;
 
                 case "SignUpPanel":
                     SignUpPanel.Visibility = Visibility.Visible;
-                    SignUpFooter.Visibility = Visibility.Visible;
                     break;
 
                 case "VerifyEmailPanel":
                     VerifyEmailPanel.Visibility = Visibility.Visible;
-                    SignUpFooter.Visibility = Visibility.Visible;
                     break;
 
                 case "ForgotPanel":
                     ForgotPanel.Visibility = Visibility.Visible;
-                    ForgotFooter.Visibility = Visibility.Visible;
                     break;
 
                 case "ResetPanel":
                     ResetPanel.Visibility = Visibility.Visible;
-                    ForgotFooter.Visibility = Visibility.Visible;
                     break;
             }
+        }
+
+        private void GoToForgotPassword_Click(object sender, RoutedEventArgs e)
+        {
+            ShowPanel("ForgotPanel");
+        }
+
+        // ****************************************************************
+        // Function: TogglePasswordVisibility
+        // Description: Swaps a PasswordBox with its paired plain TextBox so the user can see what they typed.
+        // Notes: Shared by all eye-toggle handlers in this window.
+        private void TogglePasswordVisibility(PasswordBox pwBox, TextBox pwVisible)
+        {
+            if (pwVisible.Visibility == Visibility.Collapsed)
+            {
+                pwVisible.Text = pwBox.Password;
+                pwBox.Visibility = Visibility.Collapsed;
+                pwVisible.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                pwBox.Password = pwVisible.Text;
+                pwVisible.Visibility = Visibility.Collapsed;
+                pwBox.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void SignInPasswordEye_Click(object sender, RoutedEventArgs e)
+        {
+            TogglePasswordVisibility(SignInPasswordBox, SignInPasswordVisible);
+        }
+
+        private void NewPasswordEye_Click(object sender, RoutedEventArgs e)
+        {
+            TogglePasswordVisibility(NewPasswordBox, NewPasswordVisible);
+        }
+
+        private void ConfirmPasswordEye_Click(object sender, RoutedEventArgs e)
+        {
+            TogglePasswordVisibility(ConfirmPasswordBox, ConfirmPasswordVisible);
+        }
+
+        private void ResetNewPasswordEye_Click(object sender, RoutedEventArgs e)
+        {
+            TogglePasswordVisibility(ResetNewPasswordBox, ResetNewPasswordVisible);
+        }
+
+        private void ResetConfirmPasswordEye_Click(object sender, RoutedEventArgs e)
+        {
+            TogglePasswordVisibility(ResetConfirmPasswordBox, ResetConfirmPasswordVisible);
         }
     }
 }

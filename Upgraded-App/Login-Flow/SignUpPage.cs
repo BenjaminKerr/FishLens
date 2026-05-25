@@ -24,8 +24,12 @@ namespace FishLens_App
             string orgName = OrgNameBox.Text.Trim();
             string email = NewEmailBox.Text.Trim();
             string username = NewUsernameBox.Text.Trim();
-            string password = NewPasswordBox.Password;
-            string confirmPassword = ConfirmPasswordBox.Password;
+            string password = NewPasswordVisible.Visibility == Visibility.Visible
+                ? NewPasswordVisible.Text
+                : NewPasswordBox.Password;
+            string confirmPassword = ConfirmPasswordVisible.Visibility == Visibility.Visible
+                ? ConfirmPasswordVisible.Text
+                : ConfirmPasswordBox.Password;
 
             UpdateSignUpRequirements(username, password, confirmPassword);
 

@@ -1,0 +1,25 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        ═══════════════════════════════════════════════
+        FONT FAMILY KEYS
+        WPF pack URI syntax: /AssemblyName;component/Fonts/#Face Name
+        ═══════════════════════════════════════════════
+    -->
+
+    <!-- Display font — headings, wordmark, section titles -->
+    <FontFamily x:Key="DisplayFont">
+        /Upgraded-App;component/Fonts/#Plus Jakarta Sans
+    </FontFamily>
+
+    <!-- Body font — all UI text, labels, data values -->
+    <FontFamily x:Key="BodyFont">
+        /Upgraded-App;component/Fonts/#DM Sans
+    </FontFamily>
+
+    <!-- Mono — for timestamps, confidence values, frame counters -->
+    <!-- Uses system fallback; swap in JetBrains Mono if desired -->
+    <FontFamily x:Key="MonoFont">Consolas, Courier New</FontFamily>
+
+</ResourceDictionary>

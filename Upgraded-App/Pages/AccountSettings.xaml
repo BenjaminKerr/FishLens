@@ -97,11 +97,26 @@
                                    FontSize="{DynamicResource BaseFontSize}"
                                    Foreground="{DynamicResource SecondaryText}"/>
 
-                        <PasswordBox x:Name="NewPassword"
-                                     Height="36"
-                                     Padding="8"
+                        <Grid Margin="0,5,0,20" Height="36">
+                            <PasswordBox x:Name="NewPassword"
+                                         Padding="8,8,36,8"
+                                         FontSize="{DynamicResource BaseFontSize}"/>
+                            <TextBox x:Name="NewPasswordVisible"
+                                     Padding="8,8,36,8"
                                      FontSize="{DynamicResource BaseFontSize}"
-                                     Margin="0,5,0,20"/>
+                                     Visibility="Collapsed"
+                                     VerticalContentAlignment="Center"/>
+                            <Button Content="👁"
+                                    Width="30" Height="30"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,4,0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    FontSize="14"
+                                    Cursor="Hand"
+                                    Click="NewPasswordEye_Click"/>
+                        </Grid>
                         <TextBlock x:Name="CreateUserPasswordError"
                                    FontSize="11" Foreground="#F44336"
                                    TextWrapping="Wrap"
@@ -559,9 +574,26 @@
                                     </DataGridTemplateColumn.CellEditingTemplate>
                                 </DataGridTemplateColumn>
 
-
+                                <DataGridTemplateColumn Header="" Width="100">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Content="Delete"
+                                                Click="DeleteUser_Click"
+                                                Margin="6,3,6,3"
+                                                Padding="8,4,8,4"
+                                                Background="IndianRed"
+                                                Foreground="White"
+                                                BorderThickness="0"
+                                                FontWeight="SemiBold"
+                                                Cursor="Hand" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
 
                             </DataGrid.Columns>
+
+
+
 
                         </DataGrid>
 

@@ -154,11 +154,11 @@
                                       Height="36"
                                       Padding="8"
                                       FontSize="{DynamicResource BaseFontSize}"
-                                      Margin="0,0,10,0"
-                                      SelectionChanged="ActiveRunDropdown_SelectionChanged"/>
+                                      Margin="0,0,10,0"/>
 
                             <Button Grid.Column="1"
                                     Content="Set Active"
+                                    Style="{StaticResource SettingsButton}"
                                     Height="36"
                                     Padding="14,0"
                                     FontSize="{DynamicResource BaseFontSize}"
@@ -170,6 +170,7 @@
 
                             <Button Grid.Column="2"
                                     Content="End Run"
+                                    Style="{StaticResource SettingsButton}"
                                     Height="36"
                                     Padding="14,0"
                                     FontSize="{DynamicResource BaseFontSize}"
@@ -178,12 +179,6 @@
                                     BorderThickness="0"
                                     Click="EndRun_Click"/>
                         </Grid>
-
-                        <TextBlock x:Name="runStatusText"
-                                   FontSize="{DynamicResource BaseFontSize}"
-                                   Foreground="{DynamicResource SecondaryText}"
-                                   Margin="0,0,0,15"
-                                   TextWrapping="Wrap"/>
 
                         <TextBlock Text="Create New Run"
                                    FontSize="{DynamicResource BaseFontSize}"
@@ -208,6 +203,7 @@
 
                             <Button Grid.Column="1"
                                     Content="Create Run"
+                                    Style="{StaticResource SettingsButton}"
                                     Height="36"
                                     Padding="14,0"
                                     FontSize="{DynamicResource BaseFontSize}"
@@ -301,13 +297,13 @@
                         Margin="0,0,0,30">
                     <StackPanel>
                         <CheckBox x:Name="enableFastMode"
-                                  Content="Enable Fast Mode"
+                                  Content="Enable Slow Mode"
                                   FontSize="{DynamicResource BaseFontSize}"
                                   Foreground="{DynamicResource PrimaryText}"
                                   Margin="0,0,0,8"
                                   Click="ToggleFastMode"/>
 
-                        <TextBlock Text="Process every other frame and use a lower YOLO resolution. This speeds up analysis but may reduce accuracy."
+                        <TextBlock Text="Process every frame with higher analysis settings. This may improve difficult videos but will take longer."
                                    FontSize="{DynamicResource BaseFontSize}"
                                    Foreground="{DynamicResource SecondaryText}"
                                    TextWrapping="Wrap"/>
