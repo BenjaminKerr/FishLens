@@ -7,10 +7,10 @@
 // ***********************************
 // **************************************************
 
+using DocumentFormat.OpenXml.Math;
 using FishLens_App.Interfaces;
 using FishLens_App.Models;
 using FishLens_App.Services;
-using FishLens_App.Helper_Classes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -29,7 +29,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Collections.ObjectModel;
-using System.Windows.Media.Animation;
+using System.Runtime.InteropServices.ObjectiveC;
 
 namespace FishLens_App
 {
@@ -69,9 +69,6 @@ namespace FishLens_App
         private readonly PythonWorkerPoolService _workerPool;
         // Stack of deletion batches for undo support
         private readonly Stack<DeletionBatch> _deletionHistory = new Stack<DeletionBatch>();
-        private static readonly Color COLOR_HIGH = Color.FromRgb(0x5D, 0xCA, 0xA5);
-        private static readonly Color COLOR_MID = Color.FromRgb(0xEF, 0x9F, 0x27);
-        private static readonly Color COLOR_LOW = Color.FromRgb(0xE2, 0x4B, 0x4A);
 
         // Persistent Python process - models stay loaded between runs
         private Process _yoloProcess;
@@ -96,12 +93,9 @@ namespace FishLens_App
         private int _suppressTimerTicks = 0;
         private string _playbackTempPath = null; // temp MP4 created from ASF for accurate scrubbing
         private bool _processingComplete = false;
-        public enum VideoProgressState { Empty, Active, Filled }
-        public ObservableCollection<VideoProgressState> Bars { get; } = new ObservableCollection<VideoProgressState>();
+        public ObservableCollection<VideoProgressStatus> Bars { get; } = new ObservableCollection<VideoProgressStatus>();
+        public ObservableCollection<VideoProgressStatus> ThreadStatuses { get; } = new ObservableCollection<VideoProgressStatus>();
 
-
-        // Sidebar state
-        private bool _sidebarCollapsed = false;
 
         // Multi-track state - all tracks for the currently displayed video
         private List<FishLens_App.Models.Video> _currentTracks = new List<FishLens_App.Models.Video>();
@@ -110,6 +104,8 @@ namespace FishLens_App
         // Guards that prevent UI event handlers from firing during programmatic control updates.
         private bool _suppressStatusHandler    = false;
         private bool _updatingConfidenceText   = false;
+        int threadID = 0;
+        int completedVideos = 0;
 
 
         #endregion
@@ -151,8 +147,6 @@ namespace FishLens_App
             _fileSystemManager = fileSystemManager ?? throw new ArgumentNullException(nameof(fileSystemManager));
             var app = Application.Current as App;
 
-
-
             InitializeComponent();
             app.ApplyCurrentSettings();
             _checkBoxes = GetCheckBoxToggleFromApplication();
@@ -163,6 +157,7 @@ namespace FishLens_App
             Closed += MainWindow_Closed;
 
             AccountSettingsButton.Visibility = app.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
+            DataContext = this;
         }
 
         // **************************************************
@@ -325,19 +320,8 @@ namespace FishLens_App
         // **************************************************
         private void HomeButtonClick(object sender, RoutedEventArgs e)
         {
-            if (IsCurrentPageSettings())
-            {
-                //if (CheckForUnsavedChanges())
-                //{
-                    ExpandSidebar();
-                    MainFrame.Visibility = Visibility.Collapsed;
-                //}
-            }
-            else
-            {
-                ExpandSidebar();
-                MainFrame.Visibility = Visibility.Collapsed;
-            }
+            ExpandSidebar();
+            MainFrame.Visibility = Visibility.Collapsed;
         }
 
         // **************************************************
@@ -351,13 +335,13 @@ namespace FishLens_App
             signin.Show();
             this.Close();
         }
-
         // **************************************************
         // Function: HistoryButtonClick
         // Description: Navigates to the history page
         // **************************************************
         private void HistoryButtonClick(object sender, RoutedEventArgs e)
         {
+            SideBar.Width = SideBar.ActualWidth;
             CollapseSidebar();
             NavigateToPage(new History(_pathResolver, _fileSystemManager, _logger), "History");
         }
@@ -368,21 +352,25 @@ namespace FishLens_App
         // **************************************************
         private void SettingsButtonClick(object sender, RoutedEventArgs e)
         {
+            SideBar.Width = SideBar.ActualWidth;
             CollapseSidebar();
             NavigateToPage(new Settings(_pathResolver, _fileSystemManager, _logger), "Settings");
         }
-
         private void AccountSettingsButtonClick(object sender, RoutedEventArgs e)
         {
+            SideBar.Width = SideBar.ActualWidth;
             CollapseSidebar();
             NavigateToPage(new AccountSettings(), "AccountSettings");
         }
 
-        // **************************************************
-        // Function: IsCurrentPageSettings
-        // Description: Returns true if the current frame content is the Settings page
-        // **************************************************
-        public bool IsCurrentPageSettings() => MainFrame.Content is Settings;
+
+
+
+
+
+
+
+
 
         // **************************************************
         // Function: NavigateToPage
@@ -396,6 +384,7 @@ namespace FishLens_App
             try
             {
                 MainFrame.Navigate(page);
+
             }
             catch (Exception ex)
             {
@@ -1090,119 +1079,107 @@ namespace FishLens_App
                     lock (_errorBuilder) _errorBuilder.AppendLine(errLine);
             });
 
-            // Start persistent stdout reader
-            Task.Run(ReadYoloOutputLoop);
         }
 
         // **************************************************
-        // Function: ReadYoloOutputLoop
-        // Description: Background loop that reads Python stdout for the lifetime of the process
+        // Function: WorkerPool_ProgressChanged
+        // Description: Handler for visual progress updates when processign progress is made
         // **************************************************
-        private void ReadYoloOutputLoop()
+        private void WorkerPool_ProgressChanged(object sender, AnalysisProgressEventArgs e)
         {
-            var myProcess = _yoloProcess;
-            var myReadyTcs = _yoloReadyTcs;
-            int myKillCount = _yoloKillCount;
+            // Snapshot the process, ready-TCS, and kill-count for this Python instance at startup.
+            // If the process is killed and restarted (e.g. run change), the NEW instance
+            // sets _yoloProcess and _yoloReadyTcs to fresh objects.  Without snapshots here,
+            // this dying loop would TrySetException on the NEW TCS and crash the next run.
+            // _yoloKillCount is snapshotted so we can tell whether the exit was intentional:
+            // if it was incremented since we started, the kill was a deliberate restart and we
+            // must NOT poison _processingTcs (the new analysis is already underway).
 
-            string line;
-            while ((line = myProcess.StandardOutput.ReadLine()) != null)
+
+            Dispatcher.Invoke(() =>
             {
-                if (line == "[PROGRESS] STARTUP")
-                {
-                    Dispatcher.Invoke(() => SetAnalysisStatus("Starting up, please wait..."));
-                }
-                else if (line == "[PROGRESS] READY")
-                {
-                    myReadyTcs?.TrySetResult(true);
-                }
-                else if (line.StartsWith("[PROGRESS] TOTAL:") &&
-                    int.TryParse(line.Substring("[PROGRESS] TOTAL:".Length), out int total))
-                {
-                    _totalVideos = total;
+                if (e.TotalVideos > 0)
+                    _totalVideos = e.TotalVideos;
 
-                    Dispatcher.Invoke(() =>
+                if (e.EventType == "total")
+                {
+                    completedVideos = e.CompletedVideos;
+                    Bars.Clear();
+                    foreach (var b in _builder.InitialBuild(_totalVideos))
+                        Bars.Add(b);
+                    SetAnalysisFrameInfo(string.Empty);
+                    SetAnalysisStatus("Processed " + completedVideos + "/" + _totalVideos + " videos...");
+                    return;
+                }
+
+                if (e.EventType == "video_started" && !string.IsNullOrWhiteSpace(e.Message))
+                {
+                    SetAnalysisFrameInfo(string.Empty);
+                    var sections = e.Message.Split("|");
+                    int pid = int.Parse(sections[0]);
+                    string filename = sections[1];
+                    string vidName = sections[2];
+                    var existing = ThreadStatuses.FirstOrDefault(t => t.Pid == pid);
+
+                    if (existing == null)
                     {
-                        Bars.Clear();
-                        foreach (var b in _builder.Build(_totalVideos, 0))
+                        VideoProgressStatus status = new VideoProgressStatus()
                         {
-                            Bars.Add(b);
+                            Message = vidName,
+                            Pid = pid,
+                            Filename = filename
+                        };
+                        ThreadStatuses.Add(status);
+                        var bar = Bars.FirstOrDefault(b => b.State == VideoProgressState.Empty);
+                        if (bar != null)
+                        {
+                            status.VideoIndex = Bars.IndexOf(bar);
+                            bar.SetInProgress();
                         }
-                    });
-                }
-                else if (line.StartsWith("[PROGRESS] VIDEO:"))
-                {
-                    string payload = line.Substring("[PROGRESS] VIDEO:".Length);
-                    int sep = payload.IndexOf('|');
-                    string fraction = sep >= 0 ? payload.Substring(0, sep) : payload;
-                    string filename = sep >= 0 ? payload.Substring(sep + 1) : string.Empty;
-                    var parts = fraction.Split('/');
-                    if (parts.Length == 2 && int.TryParse(parts[0], out int current))
+                    }
+                    else
                     {
-                        _currentVideoStatus = $"Video {fraction} - {filename}";
-                        int capturedCurrent = current;
-                        Dispatcher.Invoke(() =>
+                        if (existing.Filename != filename)
                         {
-                            SetAnalysisStatus(_currentVideoStatus);
-                            SetAnalysisFrameInfo(string.Empty); // clear frame line between videos
-
-                            var newBars = _builder.Build(_totalVideos, capturedCurrent - 1);
-
-                            Bars.Clear();
-                            foreach (var b in newBars)
+                            var bar = Bars.FirstOrDefault(b => b.State == VideoProgressState.Empty);
+                            if (bar != null)
                             {
-                                Bars.Add(b);
+                                existing.VideoIndex = Bars.IndexOf(bar);
+                                bar.SetInProgress();
                             }
-                        });
+                        }
+                        existing.Message = vidName;
+                    }
+                    return;
+                }
+
+                if (e.EventType == "video_finished")
+                {
+                    completedVideos = e.CompletedVideos;
+                    var sections = e.Message.Split("|");
+                    int pid = int.Parse(sections[0]);
+                    string filename = sections[1];
+
+                    var threadStatus = ThreadStatuses.FirstOrDefault(x => x.Pid == pid);
+
+                    if (threadStatus != null &&
+                        threadStatus.VideoIndex >= 0 &&
+                        threadStatus.VideoIndex < Bars.Count)
+                    {
+                        Bars[threadStatus.VideoIndex]?.SetComplete();
+                    }
+                    threadStatus.Message = ("");
+
+                    if (completedVideos == _totalVideos)
+                    {
+                        SetAnalysisStatus("Finishing Up...");
+                    }
+                    else
+                    {
+                        SetAnalysisStatus("Processed " + completedVideos + "/" + _totalVideos + " videos...");
                     }
                 }
-                else if (line.StartsWith("[PROGRESS] FRAME:"))
-                {
-                    string payload = line.Substring("[PROGRESS] FRAME:".Length);
-                    var parts = payload.Split('/');
-                    if (parts.Length == 2)
-                    {
-                        int upper;
-                        int lower;
-                        string frameInfo;
-                        int percentage = 0;
-                        if (parts[1] == "?")
-                        {
-                            frameInfo = $"Frame {parts[0]}";
-                        }
-                        else if (int.TryParse(parts[0], out upper) &&
-                                 int.TryParse(parts[1], out lower) &&
-                                 lower != 0)
-                        {
-                            percentage = upper * 100 / lower;
-                            frameInfo = $"Frame {percentage}%";
-                        }
-                        else
-                        {
-                            frameInfo = "Frame ?";
-                        }
-                        frameInfo = parts[1] == "?"
-                            ? $"Frame {parts[0]}"
-                            : $"Video progress: " + percentage + "%";
-                        Dispatcher.Invoke(() => SetAnalysisFrameInfo(frameInfo));
-                    }
-                }
-                else if (line == "[PROGRESS] DONE")
-                {
-                    string error;
-                    lock (_errorBuilder) { error = _errorBuilder.ToString(); _errorBuilder.Clear(); }
-                    Dispatcher.Invoke(() =>
-                    {
-                        HideAnalysisProgress();
-                        DisplayProcessOutputIfNeeded(error);
-                    });
-                    _processingTcs?.TrySetResult(true);
-                }
-            }
-
-            myReadyTcs?.TrySetException(new Exception("Python process exited unexpectedly."));
-
-            if (_yoloKillCount == myKillCount)
-                _processingTcs?.TrySetException(new Exception("Python process exited unexpectedly."));
+            });
         }
 
         // **************************************************
@@ -1213,7 +1190,7 @@ namespace FishLens_App
         {
             analysisProgressArea.Visibility = Visibility.Visible;
             analysisStatusText.Text = "Starting up, please wait...";
-            analysisFrameText.Text = string.Empty;
+            //analysisFrameText.Text = string.Empty;
             App.RaiseAnalysisStateChanged(true);
         }
 
@@ -1230,54 +1207,9 @@ namespace FishLens_App
 
         private void SetAnalysisFrameInfo(string info)
         {
-            analysisFrameText.Text = info;
+            //analysisFrameText.Text = info;
         }
 
-        private void WorkerPool_ProgressChanged(object sender, AnalysisProgressEventArgs e)
-        {
-            Dispatcher.Invoke(() =>
-            {
-                if (e.TotalVideos > 0)
-                    _totalVideos = e.TotalVideos;
-
-                if (e.EventType == "total")
-                {
-                    Bars.Clear();
-                    foreach (var b in _builder.Build(_totalVideos, 0))
-                        Bars.Add(b);
-                    SetAnalysisStatus(e.Message);
-                    SetAnalysisFrameInfo(string.Empty);
-                    return;
-                }
-
-                if (e.EventType == "video_started" && !string.IsNullOrWhiteSpace(e.Message))
-                {
-                    _currentVideoStatus = e.Message;
-                    SetAnalysisStatus(_currentVideoStatus);
-                    SetAnalysisFrameInfo(string.Empty);
-                    var bars = _builder.Build(_totalVideos, Math.Max(0, e.CompletedVideos - 1));
-                    Bars.Clear();
-                    foreach (var b in bars)
-                        Bars.Add(b);
-                    return;
-                }
-
-                if (e.EventType == "frame_progress")
-                {
-                    SetAnalysisFrameInfo(e.FrameInfo);
-                    return;
-                }
-
-                if (e.EventType == "video_finished")
-                {
-                    var bars = _builder.Build(_totalVideos, e.CompletedVideos);
-                    Bars.Clear();
-                    foreach (var b in bars)
-                        Bars.Add(b);
-                    SetAnalysisStatus(e.Message);
-                }
-            });
-        }
 
         // **************************************************
         // Function: UpdateActionButtonState
@@ -1295,6 +1227,7 @@ namespace FishLens_App
             fishSpecies.IsEnabled = _processingComplete;
             saveButton.IsEnabled = _processingComplete;
             fishPresentConfidence.IsEnabled = _processingComplete;
+            fishTravelDirection.IsEnabled = _processingComplete;
             fishSpeciesConfidence.IsEnabled = _processingComplete;
         }
 
@@ -1383,6 +1316,8 @@ namespace FishLens_App
                 await RunYolo(inputFolder);
 
                 // Step 2: read CSV - always populate from whatever is in the CSV now.
+                // If the user cancelled, videos processed before cancel are still in the
+                // CSV and should appear. If nothing was processed, the list stays as-is.
                 List<(FileInfo vid, FishLens_App.Models.Video data)> videoDataList = CreateSortedListOfVideos(inputFolder);
 
                 if (videoDataList.Count > 0)
@@ -1402,6 +1337,8 @@ namespace FishLens_App
             }
             _processingComplete = true;
             UpdateActionButtonState();
+            videoLibraryTitle.Visibility = Visibility.Visible;
+            analysisProgressArea.Visibility = Visibility.Collapsed;
         }
 
         // **************************************************
@@ -1522,6 +1459,7 @@ namespace FishLens_App
         // **************************************************
         // Function: ChangeLocationForSelectedClick
         // Description: Updates the location column in all CSVs for the checked videos only.
+        //              Mirrors the delete workflow: user checks videos, clicks the button.
         // **************************************************
         public void ChangeLocationForSelectedClick(object sender, RoutedEventArgs e)
         {
@@ -1529,7 +1467,7 @@ namespace FishLens_App
             if (selected.Count == 0)
             {
                 MessageBox.Show("No videos selected. Use the checkboxes to select one or more videos first.",
-                    "Change Location", MessageBoxButton.OK);
+                    "Change Location", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
@@ -1542,7 +1480,7 @@ namespace FishLens_App
 
             MessageBox.Show(
                 $"Location updated to \"{newLocation}\" for {selected.Count} video(s).",
-                "Location Updated", MessageBoxButton.OK);
+                "Location Updated", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         // **************************************************
@@ -1559,7 +1497,7 @@ namespace FishLens_App
             {
                 Title = "Change Location",
                 Width = 340,
-                Height = 180,
+                Height = 160,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Owner = this,
                 ResizeMode = ResizeMode.NoResize,
@@ -1608,16 +1546,22 @@ namespace FishLens_App
             {
                 if (child is Grid g)
                 {
-                    Button btn = g.Children.OfType<Button>().FirstOrDefault();
-                    if (btn == null) continue;
-
-                    var innerGrid = btn.Content as Grid;
-                    var cb = innerGrid?.Children.OfType<CheckBox>()
-                                                .FirstOrDefault(c => c.Tag as string == "selectionCheck");
-
-                    if (cb != null && cb.IsChecked == true && btn.Tag is string path)
+                    CheckBox cb = null;
+                    Button btn = null;
+                    FishLens_App.Models.Video video = null;
+                    foreach (var elem in g.Children)
                     {
-                        result.Add((g, path, btn.DataContext as FishLens_App.Models.Video));
+                        if (elem is CheckBox c) cb = c;
+                        if (elem is Button b)
+                        {
+                            btn = b;
+                            video = b.DataContext as FishLens_App.Models.Video;
+                        }
+                    }
+
+                    if (cb != null && cb.IsChecked == true && btn != null && btn.Tag is string path)
+                    {
+                        result.Add((g, path, video));
                     }
                 }
             }
@@ -1700,6 +1644,7 @@ namespace FishLens_App
         // **************************************************
         // Function: UndoLastDeleteClick
         // Description: Restores the most recently hidden batch back into the UI list.
+        //              No files are moved and no CSV rows are changed.
         // **************************************************
         public void UndoLastDeleteClick(object sender, EventArgs e)
         {
@@ -1718,7 +1663,9 @@ namespace FishLens_App
 
         // **************************************************
         // Function: RestoreUiForFiles
-        // Description: Puts the saved Grid elements from a DeletionBatch back into the video list.
+        // Description: Puts the saved Grid elements from a DeletionBatch back into the
+        //              video list.  The original Grid is reused so button handlers and
+        //              tags are all preserved without re-creating anything.
         // **************************************************
         private void RestoreUiForFiles(DeletionBatch batch)
         {
@@ -1741,11 +1688,17 @@ namespace FishLens_App
                     CreateFolderHeader(sectionContext, batch.FolderHeaderTexts.TryGetValue(item.folder, out var saved) ? saved : null);
                 }
 
+                // Re-add the original grid at its correct confidence-sorted position
+                // (ascending: lowest confidence at the top, highest at the bottom).
                 if (item.grid.Parent == null)
                 {
                     foreach (var elem in item.grid.Children)
                         if (elem is CheckBox cb) cb.IsChecked = false;
 
+                    // Walk the list to find where this item belongs within its section.
+                    // Stop as soon as we find the first existing item whose confidence
+                    // is greater than the restored item's — insert before that item.
+                    // If no such item exists, fall through and append (Add) instead.
                     double restoredConf  = item.video.AvgConfidence;
                     int    insertIndex   = -1;
                     bool   inTargetSection = false;
@@ -1760,12 +1713,15 @@ namespace FishLens_App
                             }
                             else if (inTargetSection && t.StartsWith("header:", StringComparison.OrdinalIgnoreCase))
                             {
+                                // Crossed into the next section without finding a higher-confidence
+                                // item — insert at the end of our section, just before this header.
                                 insertIndex = idx;
                             }
                             else if (inTargetSection
                                      && !t.StartsWith("header:", StringComparison.OrdinalIgnoreCase)
                                      && t.Equals(item.folder, StringComparison.OrdinalIgnoreCase))
                             {
+                                // Video item in our section: compare confidences.
                                 double existingConf = 0;
                                 bool   confFound    = false;
                                 foreach (var elem in g.Children)
@@ -1831,6 +1787,8 @@ namespace FishLens_App
         // **************************************************
         // Function: GetData
         // Description: Retrieves summary data for a library video card.
+        //              For multi-fish videos, the card uses the lowest track confidence
+        //              so the whole video is flagged if any fish falls below threshold.
         // **************************************************
         private FishLens_App.Models.Video GetData(string videoFileName, string videoFilePath = null, string sourceRun = null)
         {
@@ -1846,6 +1804,7 @@ namespace FishLens_App
         // **************************************************
         // Function: GetAllTracks
         // Description: Returns all CSV rows (tracks) for a given video filename.
+        //              A video with N detected fish will have N tracks.
         // **************************************************
         private List<FishLens_App.Models.Video> GetAllTracks(string videoFileName, string sourceRun = null, string videoFilePath = null)
         {
@@ -1870,6 +1829,9 @@ namespace FishLens_App
             {
                 var tracks = FishLens_App.Services.CsvUtils.ReadAllTracksFromCsv(csvPath, videoFileName, effectiveRun, videoFilePath);
 
+                // If the only result is the default placeholder (video not in fish CSV),
+                // check the no-fish CSV. If it's there, mark it correctly so the detail
+                // panel shows "Not Present" instead of "Present / 0%".
                 if (tracks.Count == 1 && tracks[0].LikelyClass == "N/A")
                 {
                     string noFishPath = _pathResolver.ResolveSessionNoFishCsvPath(effectiveRun);
@@ -1904,8 +1866,9 @@ namespace FishLens_App
         {
             try
             {
+                // Show scope selection dialog
                 string scope = ShowExportScopeDialog();
-                if (scope == null) return;
+                if (scope == null) return; // user cancelled
 
                 string csvPath = ResolveExportCsvPath(scope);
                 string noFishPath = ResolveExportNoFishCsvPath(scope);
@@ -1933,6 +1896,7 @@ namespace FishLens_App
         // **************************************************
         // Function: ShowExportScopeDialog
         // Description: Shows a popup asking Current Session / Current Run / All History
+        //              Returns the scope string or null if cancelled.
         // **************************************************
         private string ShowExportScopeDialog()
         {
@@ -2006,6 +1970,10 @@ namespace FishLens_App
             return chosen;
         }
 
+        // **************************************************
+        // Function: ResolveExportCsvPath / ResolveExportNoFishCsvPath
+        // Description: Returns the correct CSV path based on export scope
+        // **************************************************
         private string ResolveExportCsvPath(string scope)
         {
             string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
@@ -2028,6 +1996,10 @@ namespace FishLens_App
             };
         }
 
+        // **************************************************
+        // Function: CreateExportSaveDialog
+        // Description: Creates configured SaveFileDialog for Excel export
+        // **************************************************
         private SaveFileDialog CreateExportSaveDialog()
         {
             return new SaveFileDialog
@@ -2038,6 +2010,11 @@ namespace FishLens_App
             };
         }
 
+        // **************************************************
+        // Function: MakeExcelSheetAndInsertData
+        // Description: Creates Excel workbook with Fish Detected, No Fish Detected, and Run Summary sheets
+        // Notes: Helper function for ExportDataClick
+        // **************************************************
         private void MakeExcelSheetAndInsertData(SaveFileDialog saveFileDialog, string csvPath, string noFishCsvPath = null)
         {
             string excelPath = saveFileDialog.FileName;
@@ -2049,14 +2026,17 @@ namespace FishLens_App
 
             using (var workbook = new ClosedXML.Excel.XLWorkbook())
             {
+                // Sheet 1: Fish Detected
                 var fishSheet = workbook.Worksheets.Add("Fish Detected");
                 WriteDataToWorksheet(fishSheet, fishLines);
                 FormatWorksheet(fishSheet, fishLines);
 
+                // Sheet 2: No Fish Detected
                 var noFishSheet = workbook.Worksheets.Add("No Fish Detected");
                 WriteDataToWorksheet(noFishSheet, noFishLines);
                 FormatWorksheet(noFishSheet, noFishLines);
 
+                // Sheet 3: Run Summary
                 var summarySheet = workbook.Worksheets.Add("Run Summary");
                 BuildRunSummarySheet(summarySheet, fishLines, noFishLines);
 
@@ -2067,12 +2047,17 @@ namespace FishLens_App
             PromptToOpenExportedFile(excelPath);
         }
 
+        // **************************************************
+        // Function: BuildRunSummarySheet
+        // Description: Populate the Run Summary sheet with fish tally and totals
+        // **************************************************
         private void BuildRunSummarySheet(ClosedXML.Excel.IXLWorksheet sheet, string[] fishLines, string[] noFishLines)
         {
             int upstream = 0, downstream = 0, indecisive = 0;
             int chinookUp = 0, chinookDown = 0;
             int omykissUp = 0, omykissDown = 0;
 
+            // fishLines[0] is header - skip it
             for (int i = 1; i < fishLines.Length; i++)
             {
                 var cols = fishLines[i].Split(',');
@@ -2124,16 +2109,23 @@ namespace FishLens_App
                 sheet.Cell(r + 1, 2).Value = rows[r][1];
             }
 
+            // Header styling
             sheet.Row(1).Style.Font.Bold = true;
             sheet.Row(1).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightBlue;
+            // Highlight the three net rows
             sheet.Row(7).Style.Font.Bold = true;
             sheet.Row(8).Style.Font.Bold = true;
             sheet.Row(9).Style.Font.Bold = true;
             sheet.Columns().AdjustToContents();
         }
 
+        // **************************************************
+        // Function: WriteDataToWorksheet
+        // Description: Writes CSV data to Excel worksheet
+        // **************************************************
         private void WriteDataToWorksheet(ClosedXML.Excel.IXLWorksheet worksheet, string[] allLines)
         {
+            // Confidence columns (0-based): 3 = species_confidence, 5 = confidence
             var confColumns = new HashSet<int> { 3, 5 };
 
             for (int line = 0; line < allLines.Length; line++)
@@ -2142,16 +2134,18 @@ namespace FishLens_App
                 for (int column = 0; column < columns.Length; column++)
                 {
                     string raw = columns[column].Trim();
+                    // Header row or non-numeric: write as-is
                     if (line == 0 || !confColumns.Contains(column))
                     {
                         worksheet.Cell(line + 1, column + 1).Value = raw;
                         continue;
                     }
+                    // Convert stored decimal (0.9377) or legacy percent (93.77%) to display percent
                     string clean = raw.TrimEnd('%');
                     if (double.TryParse(clean, System.Globalization.NumberStyles.Any,
                             System.Globalization.CultureInfo.InvariantCulture, out double val))
                     {
-                        if (val <= 1.0) val *= 100.0;
+                        if (val <= 1.0) val *= 100.0;  // decimal -> percent
                         worksheet.Cell(line + 1, column + 1).Value = $"{val:F2}%";
                     }
                     else
@@ -2162,6 +2156,10 @@ namespace FishLens_App
             }
         }
 
+        // **************************************************
+        // Function: FormatWorksheet
+        // Description: Applies formatting to Excel worksheet
+        // **************************************************
         private void FormatWorksheet(ClosedXML.Excel.IXLWorksheet worksheet, string[] allLines)
         {
             if (allLines.Length > 0)
@@ -2174,12 +2172,20 @@ namespace FishLens_App
             worksheet.Columns().AdjustToContents();
         }
 
+        // **************************************************
+        // Function: ShowExportSuccessMessage
+        // Description: Displays success message after export
+        // **************************************************
         private void ShowExportSuccessMessage(string excelPath)
         {
             MessageBox.Show($"Data exported successfully to:\n{excelPath}", "Export Successful",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
+        // **************************************************
+        // Function: PromptToOpenExportedFile
+        // Description: Asks user if they want to open the exported file
+        // **************************************************
         private void PromptToOpenExportedFile(string excelPath)
         {
             var result = MessageBox.Show("Would you like to open the exported file?", "Open File",
@@ -2203,15 +2209,15 @@ namespace FishLens_App
             string location = _currentTracks.Count > 0
                 ? _currentTracks[_currentTrackIndex].Location
                 : (locationDropdown.SelectedItem as string ?? "--");
-            sessionRunText.Text = $"{(string.IsNullOrWhiteSpace(sourceRun) ? "--" : sourceRun)}";
-            sessionLocationText.Text = $"{(string.IsNullOrWhiteSpace(location) ? "--" : location)}";
+            sessionRunText.Text = $"Run: {(string.IsNullOrWhiteSpace(sourceRun) ? "--" : sourceRun)}";
+            sessionLocationText.Text = $"Location: {location}";
 
             string csvPath = string.IsNullOrWhiteSpace(sourceRun)
                 ? _pathResolver.ResolveCsvScriptPath()
                 : _pathResolver.ResolveRunCsvPath(sourceRun);
             if (!File.Exists(csvPath))
             {
-                sessionNetUpstreamText.Text = "--";
+                sessionNetUpstreamText.Text = "Net Upstream: --";
                 return;
             }
 
@@ -2222,6 +2228,7 @@ namespace FishLens_App
             {
                 var cols = lines[i].Split(',');
                 if (cols.Length <= 6) continue;
+                // Filter to the currently selected location (col 1)
                 if (cols.Length > 1 && !string.Equals(cols[1].Trim(), location, StringComparison.OrdinalIgnoreCase)) continue;
                 string likelyClass = cols[4].Trim().ToLower();
                 if (likelyClass == "bird" || likelyClass == "no_fish" || likelyClass == "n/a") continue;
@@ -2231,7 +2238,7 @@ namespace FishLens_App
             }
 
             int net = upstreamCount - downstreamCount;
-            sessionNetUpstreamText.Text = $"{net}";
+            sessionNetUpstreamText.Text = $"Net Upstream: {net}";
         }
 
         // **************************************************
@@ -2251,6 +2258,8 @@ namespace FishLens_App
                     return;
                 }
 
+                // Identify the specific track to save by its start_time_sec.
+                // This ensures edits to Fish 2 don't overwrite Fish 1's row.
                 var currentTrack = (_currentTracks.Count > _currentTrackIndex)
                     ? _currentTracks[_currentTrackIndex]
                     : null;
@@ -2259,6 +2268,8 @@ namespace FishLens_App
                 if (string.IsNullOrWhiteSpace(sourceRun))
                     sourceRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
 
+                // run_master.csv and all_history.csv are written together during analysis
+                // and must stay in sync - the save must succeed in both.
                 string runMasterPath  = _pathResolver.ResolveRunCsvPath(sourceRun);
                 bool fishRowExists    = File.Exists(runMasterPath) && UpdateCsvFile(runMasterPath, currentTrack, currentVideoName, startTimeSec);
                 bool trackIsNoFish    = IsNoFishLikelyClass(currentTrack?.LikelyClass);
@@ -2278,6 +2289,8 @@ namespace FishLens_App
                 if (File.Exists(allHistoryPath))
                     UpdateCsvFile(allHistoryPath, currentTrack, currentVideoName, startTimeSec);
 
+                // session_fish.csv is best-effort - only populated for the current session,
+                // so prior-session videos won't be present. Silently skip if row is absent.
                 string sessionPath = _pathResolver.ResolveSessionCsvPath(sourceRun);
                 if (File.Exists(sessionPath))
                     UpdateCsvFile(sessionPath, currentTrack, currentVideoName, startTimeSec);
@@ -2310,10 +2323,15 @@ namespace FishLens_App
 
                 RefreshSessionOverview();
 
+                // Update the in-memory track confidence so the library re-sort uses the
+                // saved value rather than the stale CSV-loaded one.
                 double savedPresConf = ParseConfidenceText(fishPresentConfidence.Text);
                 if (_currentTracks.Count > _currentTrackIndex && _currentTracks[_currentTrackIndex] != null)
                     _currentTracks[_currentTrackIndex].AvgConfidence = savedPresConf;
 
+                // The library shows one entry per video file whose AvgConfidence is the
+                // minimum across all of that file's tracks.  Recalculate and push the new
+                // value into the library button's DataContext, then re-sort and re-colour.
                 double newLibConf    = _currentTracks.Count > 0
                     ? _currentTracks.Min(t => t.AvgConfidence)
                     : savedPresConf;
@@ -2345,6 +2363,9 @@ namespace FishLens_App
                 if (!string.IsNullOrEmpty(libSectionKey))
                     ResortLibrarySection(libSectionKey);
 
+                // Refresh the analysis panel immediately so direction, status, and
+                // all other fields reflect exactly what was just written to the CSV/DB
+                // without requiring the user to navigate away and back.
                 if (_currentTracks.Count > _currentTrackIndex && _currentTracks[_currentTrackIndex] != null)
                 {
                     var savedTrack           = _currentTracks[_currentTrackIndex];
@@ -2369,7 +2390,7 @@ namespace FishLens_App
         // **************************************************
         // Function: UpdateCsvFile
         // Description: Updates exactly the current track's CSV row (identified by start_time_sec).
-        //              Returns true if the row was found and updated.
+        //              Returns true if the row was found and updated, false if not present in this file.
         // **************************************************
         private bool UpdateCsvFile(string csvPath, FishLens_App.Models.Video track, string videoFileName, string startTimeSec)
         {
@@ -2397,6 +2418,7 @@ namespace FishLens_App
                 }
             }
 
+            // Row not present in this file - skip silently (e.g. session_fish.csv for old-run data)
             if (columns == null) return false;
 
             string updatedRow = CreateUpdatedCsvRow(columns);
@@ -2406,6 +2428,7 @@ namespace FishLens_App
         // **************************************************
         // Function: EnsureCsvHasRunColumn
         // Description: Upgrades older 10-column CSVs in place by appending a run column.
+        //              Existing rows keep blank run values unless a default run is provided.
         // **************************************************
         private void EnsureCsvHasRunColumn(string csvPath, string defaultRun)
         {
@@ -2434,16 +2457,20 @@ namespace FishLens_App
             File.WriteAllLines(csvPath, lines);
         }
 
+        // CSV removal moved to CsvUtils for reuse and testability
+
         // **************************************************
         // Function: CreateUpdatedCsvRow
         // Description: Creates updated CSV row from UI values
         // **************************************************
         private string CreateUpdatedCsvRow(string[] originalColumns)
         {
+            // Get values from UI controls
             string likelyClass = GetFishPresentClass();
             string direction = GetTravelDirectionValue();
             string species = fishSpecies.Text.Trim();
 
+            // Keep original values for fields not editable in UI
             string videoFile = originalColumns[0].Trim();
             string location = originalColumns.Length > 1 ? originalColumns[1].Trim() : string.Empty;
             string confidence = originalColumns.Length > 5 ? originalColumns[5].Trim() : string.Empty;
@@ -2453,22 +2480,36 @@ namespace FishLens_App
             string vidTimeStamp = originalColumns.Length > 9 ? originalColumns[9].Trim() : string.Empty;
             string run = originalColumns.Length > 10 ? originalColumns[10].Trim() : string.Empty;
 
+            // Read and validate confidence values from UI TextBoxes
+            // fishPresentConfidence is displayed as percentage (e.g., "88.00%")
+            // confidence in CSV is stored as decimal (e.g., 0.88)
             string presentConfText = fishPresentConfidence.Text.Trim();
             if (!string.IsNullOrEmpty(presentConfText) && presentConfText != "--")
             {
+                // Remove % sign and convert percentage back to decimal
                 string cleanValue = presentConfText.Replace("%", "").Trim();
                 if (double.TryParse(cleanValue, out double presentConfValue))
+                {
+                    // Convert from percentage (0-100) back to decimal (0-1)
                     confidence = (presentConfValue / 100).ToString("F4");
+                }
             }
 
+            // fishSpeciesConfidence is displayed as percentage (e.g., "92.45%")
+            // species_confidence in CSV is stored as decimal (e.g., 0.9245)
             string speciesConfText = fishSpeciesConfidence.Text.Trim();
             if (!string.IsNullOrEmpty(speciesConfText) && speciesConfText != "--")
             {
+                // Remove % sign and convert percentage back to decimal
                 string cleanValue = speciesConfText.Replace("%", "").Trim();
                 if (double.TryParse(cleanValue, out double speciesConfValue))
+                {
+                    // Convert from percentage (0-100) back to decimal (0-1)
                     species_confidence = (speciesConfValue / 100).ToString("F4");
+                }
             }
 
+            // Build the CSV row
             return $"{videoFile},{location},{species},{species_confidence},{likelyClass},{confidence},{direction},{startTime},{endTime},{vidTimeStamp},{run}";
         }
 
@@ -2503,7 +2544,8 @@ namespace FishLens_App
 
         // **************************************************
         // Function: IsNoFishLikelyClass
-        // Description: Returns true when the likely class indicates no fish was detected
+        // Description: Returns true when the likely class indicates no fish was detected —
+        //              covers "no_fish", "N/A", and null/empty (default placeholder).
         // **************************************************
         private bool IsNoFishLikelyClass(string likelyClass)
         {
@@ -2515,6 +2557,9 @@ namespace FishLens_App
         // **************************************************
         // Function: HandleNoFishCsvUpdate
         // Description: Saves changes for a video that originated from the no-fish CSV.
+        //              If the user marked it as fish-present, the video is moved into the fish
+        //              CSVs and removed from session_no_fish.csv. The DB upsert in the calling
+        //              method then updates the FishDetections row in place.
         // **************************************************
         private void HandleNoFishCsvUpdate(FishLens_App.Models.Video track, string videoName, string sourceRun)
         {
@@ -2523,6 +2568,9 @@ namespace FishLens_App
 
             string videoFile  = track?.VideoFilePath ?? videoName;
 
+            // Prefer the track's own location. Fall back to the session-active location when
+            // the track location is absent or still the generic default written by Python on
+            // first analysis (before the user explicitly set a location).
             string location = track?.Location ?? string.Empty;
             if (string.IsNullOrWhiteSpace(location) || location.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
             {
@@ -2538,6 +2586,7 @@ namespace FishLens_App
                 ? track.DetectionTimestamp.Value.ToString("yyyy/MM/dd HH:mm:ss")
                 : string.Empty;
 
+            // Build synthetic columns so CreateUpdatedCsvRow can apply UI values on top
             string[] syntheticCols = { videoFile, location, "", "0", newLikelyClass, "0", "", "0", "0", timestamp, sourceRun };
             string newRow = CreateUpdatedCsvRow(syntheticCols);
 
@@ -2556,6 +2605,8 @@ namespace FishLens_App
                 if (track != null)
                 {
                     track.LikelyClass = newLikelyClass;
+                    // Propagate the resolved location back onto the in-memory track so that
+                    // the UpsertTrackToDb call in SaveButtonClick stores the correct value.
                     track.Location = location;
                 }
             }
@@ -2576,7 +2627,12 @@ namespace FishLens_App
 
         // **************************************************
         // Function: ConfidenceTextBox_TextChanged
-        // Description: Keeps the "%" suffix permanently visible in both confidence TextBoxes.
+        // Description: Keeps the "%" suffix permanently visible in both confidence
+        //              TextBoxes.  Whenever the user edits the number part the handler
+        //              strips any stray "%" characters and re-appends exactly one,
+        //              then parks the caret just before the "%" so further typing
+        //              naturally extends the number.  The "--" placeholder and empty
+        //              string are left untouched so programmatic clears still work.
         // **************************************************
         private void ConfidenceTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
@@ -2586,6 +2642,7 @@ namespace FishLens_App
                 string text = tb.Text;
                 if (!string.IsNullOrEmpty(text) && text != "--")
                 {
+                    // Strip all "%" instances and re-append exactly one at the end.
                     string stripped = text.Replace("%", "");
                     string desired  = stripped + "%";
                     if (text != desired)
@@ -2603,12 +2660,16 @@ namespace FishLens_App
         // **************************************************
         // Function: ConfidenceTextBox_PreviewKeyDown
         // Description: Prevents accidental edits to the trailing "%" in a confidence TextBox.
+        //              - End key snaps caret to just before the "%".
+        //              - Delete is blocked when the caret is already at the "%" position.
+        //              Left/right arrow keys are intentionally left unhandled so they
+        //              continue to drive the video scrub bar as normal.
         // **************************************************
         private void ConfidenceTextBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
             if (sender is TextBox tb && tb.Text.EndsWith("%"))
             {
-                int lastEditPos = tb.Text.Length - 1;
+                int lastEditPos = tb.Text.Length - 1;   // index of the "%" character
                 if (e.Key == System.Windows.Input.Key.End)
                 {
                     tb.CaretIndex = lastEditPos;
@@ -2626,6 +2687,11 @@ namespace FishLens_App
         // **************************************************
         // Function: FishPresentStatus_SelectionChanged
         // Description: Reacts when the user changes the fish-present dropdown.
+        //              Switching to "Present" auto-fills 100 % confidence unless
+        //              a non-placeholder value is already shown.
+        //              Switching to "Not Present" replaces the confidence with "--".
+        //              The handler is suppressed during programmatic DisplayTrackInUi
+        //              updates via the _suppressStatusHandler flag.
         // **************************************************
         private void FishPresentStatus_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -2655,111 +2721,86 @@ namespace FishLens_App
 
         #region UI Display
 
+        private void CollapseSidebar()
+        {
+            var animation = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                To = 106,
+                Duration = TimeSpan.FromMilliseconds(250),
+                EasingFunction = new System.Windows.Media.Animation.CubicEase()
+            };
+
+            SideBar.BeginAnimation(Border.WidthProperty, animation);
+
+            videoList.Visibility = Visibility.Collapsed;
+            deleteSelectedVideos.Visibility = Visibility.Collapsed;
+            changeLocationForSelected.Visibility = Visibility.Collapsed;
+            undoLastDelete.Visibility = Visibility.Collapsed;
+            sidebarSeperator.Visibility = Visibility.Collapsed;
+            videoLibraryTitle.Visibility = Visibility.Collapsed;
+            // Only hide the progress UI - do NOT raise AnalysisStateChanged(false) here
+            // because analysis may still be running in the background.
+            analysisProgressArea.Visibility = Visibility.Collapsed;
+
+            ButtonGrid.RowDefinitions.Clear();
+            ButtonGrid.ColumnDefinitions.Clear();
+            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            ButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+
+            Grid.SetRow(Home, 0);
+            Grid.SetColumn(Home, 0);
+            Grid.SetRow(History, 1);
+            Grid.SetColumn(History, 0);
+            Grid.SetRow(Settings, 2);
+            Grid.SetColumn(Settings, 0);
+            Grid.SetRow(AccountSettingsButton, 3);
+            Grid.SetColumn(AccountSettingsButton, 0);
+        }
+
         private void ExpandSidebar()
         {
-            _sidebarCollapsed = false;
-            SidebarColumn.BeginAnimation(ColumnDefinition.WidthProperty, null);
-
-            videoLibraryTitle.Opacity = 0;
-            videoLibraryTitle.Visibility = Visibility.Visible;
-            var titleFadeIn = new DoubleAnimation
+            var animation = new System.Windows.Media.Animation.DoubleAnimation
             {
-                From = 0,
-                To = 1,
-                BeginTime = TimeSpan.FromMilliseconds(150),
-                Duration = TimeSpan.FromMilliseconds(150),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                To = 320,
+                Duration = TimeSpan.FromMilliseconds(250),
+                EasingFunction = new System.Windows.Media.Animation.CubicEase()
             };
-            videoLibraryTitle.BeginAnimation(UIElement.OpacityProperty, titleFadeIn);
 
-            SidebarDivider.Visibility = Visibility.Visible;
+            SideBar.BeginAnimation(Border.WidthProperty, animation);
+
+            // Show video list
             videoList.Visibility = Visibility.Visible;
             deleteSelectedVideos.Visibility = Visibility.Visible;
             changeLocationForSelected.Visibility = Visibility.Visible;
             undoLastDelete.Visibility = Visibility.Visible;
+            sidebarSeperator.Visibility = Visibility.Visible;
+            videoLibraryTitle.Visibility = Visibility.Visible;
 
+            // If analysis is still running, re-show the progress area so the user
+            // can see progress after navigating back to the main window.
             if (App.IsAnalyzing)
                 analysisProgressArea.Visibility = Visibility.Visible;
 
-            var expandAnim = new GridLengthAnimation
-            {
-                From = new GridLength(SidebarColumn.ActualWidth),
-                To = new GridLength(320),
-                Duration = TimeSpan.FromMilliseconds(280),
-                EasingMode = EasingMode.EaseOut,
-                FillBehavior = FillBehavior.Stop
-            };
-            expandAnim.Completed += (s, e) => SidebarColumn.Width = new GridLength(320);
-            SidebarColumn.BeginAnimation(ColumnDefinition.WidthProperty, expandAnim);
-        }
+            // Restore horizontal button layout
+            ButtonGrid.RowDefinitions.Clear();
+            ButtonGrid.ColumnDefinitions.Clear();
+            ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            ButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        private void CollapseSidebar()
-        {
-            if (!_sidebarCollapsed)
-            {
-                _sidebarCollapsed = true;
 
-                // Fade out videoLibraryTitle before/during collapse
-                var titleFadeOut = new DoubleAnimation
-                {
-                    From = 1,
-                    To = 0,
-                    Duration = TimeSpan.FromMilliseconds(100),
-                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
-                };
-                titleFadeOut.Completed += (s, e) => videoLibraryTitle.Visibility = Visibility.Collapsed;
-                videoLibraryTitle.BeginAnimation(UIElement.OpacityProperty, titleFadeOut);
-
-                // Kill any in-progress animation first
-                SidebarColumn.BeginAnimation(ColumnDefinition.WidthProperty, null);
-
-                var collapseAnim = new GridLengthAnimation
-                {
-                    From = new GridLength(SidebarColumn.ActualWidth),
-                    To = new GridLength(106),
-                    Duration = TimeSpan.FromMilliseconds(250),
-                    EasingMode = EasingMode.EaseInOut,
-                    FillBehavior = FillBehavior.HoldEnd
-                };
-
-                collapseAnim.Completed += (s, e) =>
-                {
-                    SidebarColumn.BeginAnimation(ColumnDefinition.WidthProperty, null);
-                    SidebarColumn.Width = new GridLength(106);
-
-                    videoList.Visibility = Visibility.Collapsed;
-                    deleteSelectedVideos.Visibility = Visibility.Collapsed;
-                    changeLocationForSelected.Visibility = Visibility.Collapsed;
-                    undoLastDelete.Visibility = Visibility.Collapsed;
-                    analysisProgressArea.Visibility = Visibility.Collapsed;
-                    SidebarDivider.Visibility = Visibility.Collapsed;
-                };
-
-                SidebarColumn.BeginAnimation(ColumnDefinition.WidthProperty, collapseAnim);
-            }
-        }
-
-        private static void SetRingArc(System.Windows.Shapes.Path arc, TextBlock label, double confidence)
-        {
-            var color = confidence >= 75 ? Color.FromRgb(0x0F, 0x6E, 0x56)
-                      : confidence >= 45 ? Color.FromRgb(0xBA, 0x75, 0x17)
-                                         : Color.FromRgb(0xC0, 0x39, 0x2B);
-            var brush = new SolidColorBrush(color);
-            arc.Stroke = brush;
-            label.Foreground = brush;
-
-            if (confidence <= 0) { arc.Data = Geometry.Empty; return; }
-
-            double pct = Math.Min(confidence / 100.0, 0.9999);
-            double angle = pct * 360.0 - 90.0;
-            double rad = angle * Math.PI / 180.0;
-            double cx = 22, cy = 22, r = 17;
-            double ex = cx + r * Math.Cos(rad);
-            double ey = cy + r * Math.Sin(rad);
-            int large = pct >= 0.5 ? 1 : 0;
-
-            arc.Data = Geometry.Parse(
-                $"M {cx},{cy - r} A {r},{r},0,{large},1,{ex:F2},{ey:F2}");
+            Grid.SetRow(Home, 0);
+            Grid.SetColumn(Home, 0);
+            Grid.SetRow(History, 0);
+            Grid.SetColumn(History, 1);
+            Grid.SetRow(Settings, 0);
+            Grid.SetColumn(Settings, 2);
+            Grid.SetRow(AccountSettingsButton, 0);
+            Grid.SetColumn(AccountSettingsButton, 3);
         }
 
         // **************************************************
@@ -2772,6 +2813,7 @@ namespace FishLens_App
             string videoPath = clickedButton.Tag.ToString();
             var sourceVideo = clickedButton.DataContext as FishLens_App.Models.Video;
 
+            // Load data first so fish markers are set before MediaOpened fires
             string videoFileName = Path.GetFileName(videoPath);
             string sourceRun = sourceVideo?.Run;
             var data = GetData(videoFileName, videoPath, sourceRun);
@@ -2783,6 +2825,11 @@ namespace FishLens_App
             LoadVideoInPlayer(videoPath);
         }
 
+
+        // **************************************************
+        // Function: LoadVideoInPlayer
+        // Description: Loads video into media player with auto-play preference
+        // **************************************************
         // **************************************************
         // Function: CleanupPlaybackTemp
         // Description: Deletes the temporary MP4 created for ASF scrubbing, if any
@@ -2799,6 +2846,7 @@ namespace FishLens_App
         // **************************************************
         // Function: ConvertAsfToTempMp4
         // Description: Converts an ASF file to a temporary MP4 using ffmpeg for accurate scrubbing.
+        //              Returns the temp path on success, or the original path if conversion fails.
         // **************************************************
         private string ConvertAsfToTempMp4(string asfPath)
         {
@@ -2808,7 +2856,7 @@ namespace FishLens_App
                 var candidate = System.IO.Path.Combine(dir.Trim(), "ffmpeg.exe");
                 if (File.Exists(candidate)) { ffmpeg = candidate; break; }
             }
-            if (ffmpeg == null) return asfPath;
+            if (ffmpeg == null) return asfPath; // ffmpeg not found - use original
 
             string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
                 $"fishlens_play_{System.IO.Path.GetFileNameWithoutExtension(asfPath)}_{System.Guid.NewGuid():N}.mp4");
@@ -2822,20 +2870,25 @@ namespace FishLens_App
                     CreateNoWindow = true
                 };
                 using var proc = System.Diagnostics.Process.Start(psi);
-                proc.WaitForExit(30_000);
+                proc.WaitForExit(30_000); // 30s max
                 if (proc.ExitCode == 0 && File.Exists(tempPath) && new FileInfo(tempPath).Length > 0)
                     return tempPath;
             }
             catch { }
+            // Conversion failed - clean up and fall back to original
             try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
             return asfPath;
         }
 
         private void LoadVideoInPlayer(string videoPath)
         {
+            // Stop and reset timer before loading new video
             _videoTimer?.Stop();
             _isPlaying = false;
 
+            // For ASF files, convert to a temp MP4 so that MediaElement seeking is accurate.
+            // ASF (WMV) only supports keyframe-level seeks; the temp MP4 allows sample-accurate
+            // scrubbing. The temp file is deleted when the next video loads or the app closes.
             CleanupPlaybackTemp();
             if (videoPath.EndsWith(".asf", StringComparison.OrdinalIgnoreCase) ||
                 videoPath.EndsWith(".wmv", StringComparison.OrdinalIgnoreCase))
@@ -2851,9 +2904,11 @@ namespace FishLens_App
             _isPlaying = true;
             playPauseButton.Content = "\u23F8";
 
+            // Show controls, hide placeholder
             placeholderPanel.Visibility = Visibility.Collapsed;
             videoControls.Visibility = Visibility.Visible;
 
+            // Reset scrubber and time only - fish markers are redrawn from _currentTracks by UpdateFishMarkers()
             videoScrubber.Value = 0;
             videoCurrentTimeText.Text = "0:00";
             videoTotalTimeText.Text = "0:00";
@@ -2865,9 +2920,11 @@ namespace FishLens_App
         // **************************************************
         private void VideoPlayer_MediaOpened(object sender, RoutedEventArgs e)
         {
+            // Set total time label
             if (videoPlayer.NaturalDuration.HasTimeSpan)
                 videoTotalTimeText.Text = FormatTime(videoPlayer.NaturalDuration.TimeSpan);
 
+            // Start the position-update timer
             if (_videoTimer == null)
             {
                 _videoTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
@@ -2898,6 +2955,7 @@ namespace FishLens_App
         private void VideoTimer_Tick(object sender, EventArgs e)
         {
             if (_isDraggingScrubber) return;
+            // Suppress ticks briefly after a seek so the timer doesn't jump back to pre-seek position
             if (_suppressTimerTicks > 0) { _suppressTimerTicks--; return; }
             if (!videoPlayer.NaturalDuration.HasTimeSpan) return;
 
@@ -2926,10 +2984,14 @@ namespace FishLens_App
                 videoPlayer.Play();
                 _isPlaying = true;
                 playPauseButton.Content = "\u23F8";
-                _videoTimer?.Start();
+                _videoTimer?.Start(); // restart timer if it was stopped by MediaEnded
             }
         }
 
+        // **************************************************
+        // Function: SkipBackButton_Click / SkipForwardButton_Click
+        // Description: Skip video position by +/-1 second
+        // **************************************************
         private void SkipBackButton_Click(object sender, RoutedEventArgs e) => SkipSeconds(-1.0);
         private void SkipForwardButton_Click(object sender, RoutedEventArgs e) => SkipSeconds(1.0);
 
@@ -2947,6 +3009,7 @@ namespace FishLens_App
         // **************************************************
         // Function: Window_PreviewKeyDown
         // Description: Space = play/pause, Left/Right arrow = skip +/-1s.
+        //              Only active when video controls are visible.
         // **************************************************
         private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
@@ -2969,6 +3032,10 @@ namespace FishLens_App
             }
         }
 
+        // **************************************************
+        // Function: VideoScrubber_PreviewMouseDown/Up
+        // Description: Pauses timer updates while user drags the scrubber
+        // **************************************************
         private void VideoScrubber_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             _isDraggingScrubber = true;
@@ -2998,7 +3065,7 @@ namespace FishLens_App
             if (!videoPlayer.NaturalDuration.HasTimeSpan) return;
             double x = e.GetPosition(videoScrubber).X;
             double w = videoScrubber.ActualWidth;
-            const double thumbHalf = 7.0;
+            const double thumbHalf = 7.0; // custom thumb is 14px wide
             double trackW = Math.Max(1.0, w - 2 * thumbHalf);
             double ratio = Math.Max(0.0, Math.Min(1.0, (x - thumbHalf) / trackW));
             videoScrubber.Value = ratio;
@@ -3021,6 +3088,10 @@ namespace FishLens_App
             videoCurrentTimeText.Text = FormatTime(videoPlayer.Position);
         }
 
+        // **************************************************
+        // Function: FormatTime
+        // Description: Formats a TimeSpan as m:ss
+        // **************************************************
         private static string FormatTime(TimeSpan t)
         {
             return $"{(int)t.TotalMinutes}:{t.Seconds:D2}";
@@ -3028,7 +3099,11 @@ namespace FishLens_App
 
         // **************************************************
         // Function: UpdateFishMarkers
-        // Description: Draws one colored range bar per fish track onto the scrubber canvas.
+        // Description: Draws one colored range bar per fish track onto the scrubber canvas,
+        //              and one directional emoji per track above it.
+        //              The active track is full opacity; inactive tracks are 50% opacity.
+        //              Colors: upstream=#2AB5B5 teal, downstream=#E05C5C coral, indecisive=#E8A038 amber.
+        //              The displayed markers use the escaped emoji strings defined below.
         // **************************************************
         private void UpdateFishMarkers()
         {
@@ -3051,6 +3126,7 @@ namespace FishLens_App
                 return;
             }
 
+            // Clear previous bars and emojis
             canvas.Children.Clear();
             fishEmojiCanvas.Children.Clear();
 
@@ -3071,15 +3147,16 @@ namespace FishLens_App
                 string dir = (track.Direction ?? string.Empty).ToLowerInvariant();
                 var color = dir switch
                 {
-                    "upstream" => System.Windows.Media.Color.FromRgb(0x2A, 0xB5, 0xB5),
-                    "downstream" => System.Windows.Media.Color.FromRgb(0xE0, 0x5C, 0x5C),
-                    _ => System.Windows.Media.Color.FromRgb(0xE8, 0xA0, 0x38),
+                    "upstream" => System.Windows.Media.Color.FromRgb(0x2A, 0xB5, 0xB5), // teal
+                    "downstream" => System.Windows.Media.Color.FromRgb(0xE0, 0x5C, 0x5C), // coral
+                    _ => System.Windows.Media.Color.FromRgb(0xE8, 0xA0, 0x38), // amber
                 };
 
                 double startX = thumbHalf + (fStart / total) * trackW;
                 double endX = thumbHalf + (fEnd / total) * trackW;
                 double barW = Math.Max(4.0, endX - startX);
 
+                // Range bar
                 var bar = new System.Windows.Shapes.Rectangle
                 {
                     Height = 4,
@@ -3092,6 +3169,7 @@ namespace FishLens_App
                 Canvas.SetLeft(bar, startX);
                 canvas.Children.Add(bar);
 
+                // Directional emoji above the bar
                 if (barW >= 14)
                 {
                     string emoji = dir switch
@@ -3131,9 +3209,11 @@ namespace FishLens_App
         // **************************************************
         // Function: DisplayTrackInUi
         // Description: Populates the analysis panel from a single Video/track object.
+        //              Called by DisplayDataInUi (initial load) and by the track navigator (7.2).
         // **************************************************
         private void DisplayTrackInUi(FishLens_App.Models.Video vid)
         {
+            // Location fallback for no-fish rows (no-fish CSVs don't appear in run_master)
             string location = vid.Location;
             if (string.IsNullOrWhiteSpace(location))
             {
@@ -3147,7 +3227,8 @@ namespace FishLens_App
             videoName.Text = vid.Name;
             videoLocation.Text = string.IsNullOrWhiteSpace(location) ? "--" : location;
             videoDateTime.Text = $"Duration: {vid.StartTime}s - {vid.EndTime}s";
-
+            // likely_class can be "fish", a species name ("chinook"), "not_fish", or "no_fish".
+            // Anything other than not_fish/no_fish means a fish was detected.
             bool fishPresent = !string.IsNullOrWhiteSpace(vid.LikelyClass)
                 && !vid.LikelyClass.Equals("not_fish", StringComparison.OrdinalIgnoreCase)
                 && !vid.LikelyClass.Equals("no_fish",  StringComparison.OrdinalIgnoreCase)
@@ -3155,23 +3236,19 @@ namespace FishLens_App
             _suppressStatusHandler            = true;
             fishPresentStatus.SelectedIndex   = fishPresent ? 0 : 1;
             _suppressStatusHandler            = false;
-            fishPresentConfidence.Text        = fishPresent ? $"{Math.Round(vid.AvgConfidence * 100)}%" : "--";
-            SetRingArc(fishPresentRingArc, fishPresentConfidence, vid.AvgConfidence * 100);
-
+            fishPresentConfidence.Text        = fishPresent ? $"{vid.AvgConfidence * 100:F2}%" : "--";
             string dirLower = (vid.Direction ?? string.Empty).ToLower().Trim();
             fishTravelDirection.SelectedIndex = fishPresent
                 ? (dirLower == "upstream" ? 0 : dirLower == "downstream" ? 1 : 2)
                 : -1;
-
             string speciesDisplay = string.IsNullOrWhiteSpace(vid.Species)
                 || vid.Species.Equals("No data", StringComparison.OrdinalIgnoreCase)
                 ? "No data"
                 : CapitalizeFirstLetter(vid.Species);
             fishSpecies.Text           = speciesDisplay;
-            double speciesPct = vid.SpeciesConfidence * 100;
-            fishSpeciesConfidence.Text = vid.SpeciesConfidence > 0 ? $"{speciesPct:F2}%" : "--";
-            SetRingArc(fishSpeciesRingArc, fishSpeciesConfidence, speciesPct);
+            fishSpeciesConfidence.Text = vid.SpeciesConfidence > 0 ? $"{vid.SpeciesConfidence * 100:F2}%" : "--";
 
+            // Refresh all track markers on the scrubber (opacity highlights the active one)
             UpdateFishMarkers();
         }
 
@@ -3198,6 +3275,11 @@ namespace FishLens_App
             nextFishButton.IsEnabled = _currentTrackIndex < total - 1;
         }
 
+        // **************************************************
+        // Function: TrackPrevClick / TrackNextClick
+        // Description: Navigate backwards/forwards through fish tracks for the current video.
+        //              Also seeks the video to that track's start time (7.4).
+        // **************************************************
         private void TrackPrevClick(object sender, RoutedEventArgs e)
         {
             if (_currentTrackIndex > 0)
@@ -3220,6 +3302,7 @@ namespace FishLens_App
             }
         }
 
+        // Transport-bar fish jump buttons - same logic as track navigator arrows
         private void PrevFishButton_Click(object sender, RoutedEventArgs e) => TrackPrevClick(sender, e);
         private void NextFishButton_Click(object sender, RoutedEventArgs e) => TrackNextClick(sender, e);
 
@@ -3239,6 +3322,10 @@ namespace FishLens_App
             }
         }
 
+        // **************************************************
+        // Function: CapitalizeFirstLetter
+        // Description: Capitalizes the first letter of a string
+        // **************************************************
         private string CapitalizeFirstLetter(string text)
         {
             if (string.IsNullOrEmpty(text))
@@ -3273,6 +3360,7 @@ namespace FishLens_App
             folderNameGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             folderNameGrid.DataContext = sectionContext;
 
+            // Folder name (includes run and location context)
             TextBox textBox = new TextBox();
             textBox.Text = displayText ?? GetSectionDisplayText(sectionContext);
             textBox.Foreground = new SolidColorBrush(Colors.White);
@@ -3280,6 +3368,7 @@ namespace FishLens_App
             textBox.BorderThickness = new Thickness(0);
             textBox.IsReadOnly = true;
 
+            // Folder deletion checkbox - this one should select all the checkboxes in the folder
             CheckBox folderCheckBox = new CheckBox();
             folderCheckBox.Padding = new Thickness(5);
             folderCheckBox.VerticalAlignment = VerticalAlignment.Center;
@@ -3287,17 +3376,20 @@ namespace FishLens_App
             string thisSectionKey = sectionContext.SectionKey;
             folderNameGrid.Tag = GetHeaderTag(thisSectionKey);
 
+            // When folder checkbox toggled, check/uncheck all video checkboxes belonging to this folder
             folderCheckBox.Checked += (s, e) =>
             {
                 foreach (var child in videoList.Children)
                 {
                     if (child is Grid g && g.Tag is string t && t == thisSectionKey)
                     {
-                        var btn = g.Children.OfType<Button>().FirstOrDefault();
-                        var innerGrid = btn?.Content as Grid;
-                        var cb = innerGrid?.Children.OfType<CheckBox>()
-                                                    .FirstOrDefault(c => c.Tag as string == "selectionCheck");
-                        if (cb != null) cb.IsChecked = true;
+                        foreach (var elem in g.Children)
+                        {
+                            if (elem is CheckBox cb)
+                            {
+                                cb.IsChecked = true;
+                            }
+                        }
                     }
                 }
                 UpdateActionButtonState();
@@ -3309,26 +3401,34 @@ namespace FishLens_App
                 {
                     if (child is Grid g && g.Tag is string t && t == thisSectionKey)
                     {
-                        var btn = g.Children.OfType<Button>().FirstOrDefault();
-                        var innerGrid = btn?.Content as Grid;
-                        var cb = innerGrid?.Children.OfType<CheckBox>()
-                                                    .FirstOrDefault(c => c.Tag as string == "selectionCheck");
-                        if (cb != null) cb.IsChecked = false;
+                        foreach (var elem in g.Children)
+                        {
+                            if (elem is CheckBox cb)
+                            {
+                                cb.IsChecked = false;
+                            }
+                        }
                     }
                 }
                 UpdateActionButtonState();
             };
 
+            // Add elements
             Grid.SetColumn(folderCheckBox, 1);
             folderNameGrid.Children.Add(textBox);
             folderNameGrid.Children.Add(folderCheckBox);
             videoList.Children.Add(folderNameGrid);
 
+            // Horizontal line separator
             Separator separator = new Separator();
             separator.Margin = new Thickness(0, 5, 0, 5);
             videoList.Children.Add(separator);
         }
 
+        // **************************************************
+        // Function: CreateVideoButtons
+        // Description: Creates individual video buttons with checkboxes
+        // **************************************************
         private void CreateVideoButtons(List<(FileInfo videoFile, FishLens_App.Models.Video videoData)> videoDataList, LibrarySectionContext sectionContext)
         {
             foreach (var (videoFile, videoData) in videoDataList)
@@ -3338,142 +3438,56 @@ namespace FishLens_App
                 grid.DataContext = sectionContext;
                 grid.HorizontalAlignment = HorizontalAlignment.Stretch;
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
+                // Video button
                 Button button = CreateSingleVideoButton(videoFile, videoData);
                 button.Click += VideoButtonClick;
-
-                var internalCheckBox = button.Content is Grid g
-                    ? g.Children.OfType<CheckBox>().FirstOrDefault(c => c.Tag as string == "selectionCheck")
-                    : null;
-
-                if (internalCheckBox != null)
-                {
-                    button.MouseEnter += (s, e) => internalCheckBox.Opacity = 1;
-                    button.MouseLeave += (s, e) => { if (internalCheckBox.IsChecked != true) internalCheckBox.Opacity = 0; };
-                    internalCheckBox.Checked += (s, e) => { internalCheckBox.Opacity = 1; UpdateActionButtonState(); };
-                    internalCheckBox.Unchecked += (s, e) => { internalCheckBox.Opacity = 0; UpdateActionButtonState(); };
-                }
-
                 Grid.SetColumn(button, 0);
+
+                // Video deletion checkbox
+                CheckBox checkBox = new CheckBox();
+                checkBox.Padding = new Thickness(5);
+                checkBox.VerticalAlignment = VerticalAlignment.Center;
+                checkBox.Checked += (s, e) => UpdateActionButtonState();
+                checkBox.Unchecked += (s, e) => UpdateActionButtonState();
+                Grid.SetColumn(checkBox, 1);
+
                 grid.Children.Add(button);
+                grid.Children.Add(checkBox);
                 videoList.Children.Add(grid);
             }
         }
 
+        // **************************************************
+        // Function: CreateSingleVideoButton
+        // Description: Creates styled button for a single video
+        // Notes: Helper function for CreateVideoButtonsList
+        // **************************************************
         private Button CreateSingleVideoButton(FileInfo videoFile, FishLens_App.Models.Video videoData)
         {
-            if (string.IsNullOrWhiteSpace(videoData.VideoFilePath)) videoData.VideoFilePath = videoFile.FullName;
-            if (string.IsNullOrWhiteSpace(videoData.Run)) videoData.Run = (Application.Current as App)?.ActiveRun ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(videoData.Name)) videoData.Name = videoFile.Name;
-
-            var tierColor = GetTierColor(videoData.AvgConfidence);
-            bool isLow = tierColor == COLOR_LOW;
-            var tierBrush = new SolidColorBrush(tierColor);
-
-            var grid = new Grid { Margin = new Thickness(0) };
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
-
-            var stripe = new Border
-            {
-                Tag = "stripe",
-                Background = tierBrush,
-                CornerRadius = new CornerRadius(0),
-                VerticalAlignment = VerticalAlignment.Stretch,
-            };
-            Grid.SetColumn(stripe, 0);
-            grid.Children.Add(stripe);
-
-            string dirText = (videoData.Direction ?? string.Empty).ToLower() switch
-            {
-                "upstream" => "Upstream",
-                "downstream" => "Downstream",
-                _ => "Indecisive",
-            };
-            bool fishPresent = videoData.LikelyClass != "not_fish" && videoData.LikelyClass != "no_fish";
-            string metaText = fishPresent
-                ? $"{dirText} · {CapitalizeFirstLetter(videoData.Species ?? string.Empty)}"
-                : "Not Present";
-
-            var textStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            textStack.Children.Add(new TextBlock
-            {
-                Text = videoFile.Name,
-                FontSize = 12.5,
-                FontWeight = FontWeights.Medium,
-                Foreground = (Brush)Application.Current.Resources["OnAccentForeground"],
-                TextTrimming = TextTrimming.CharacterEllipsis,
-            });
-            textStack.Children.Add(new TextBlock
-            {
-                Text = metaText,
-                FontSize = 11,
-                Foreground = new SolidColorBrush(Color.FromArgb(180, 255, 255, 255)),
-                Margin = new Thickness(0, 1, 0, 0),
-            });
-            Grid.SetColumn(textStack, 2);
-            grid.Children.Add(textStack);
-
-            var pctBlock = new TextBlock
-            {
-                Tag = "pct",
-                Text = $"{videoData.AvgConfidence * 100:0}%",
-                FontSize = 11,
-                FontWeight = FontWeights.Medium,
-                Foreground = tierBrush,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(8, 0, 8, 0),
-            };
-            Grid.SetColumn(pctBlock, 3);
-            grid.Children.Add(pctBlock);
-
-            var checkBox = new CheckBox
-            {
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 6, 0),
-                Opacity = 0,
-                Tag = "selectionCheck",
-            };
-            Grid.SetColumn(checkBox, 4);
-            grid.Children.Add(checkBox);
-
-            var borderFactory = new FrameworkElementFactory(typeof(Border));
-            borderFactory.Name = "bd";
-            borderFactory.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
-            borderFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(BUTTON_CORNER_RADIUS));
-            borderFactory.SetValue(Border.ClipToBoundsProperty, true);
-            var cp = new FrameworkElementFactory(typeof(ContentPresenter));
-            cp.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Stretch);
-            borderFactory.AppendChild(cp);
-
-            var hoverTrigger = new Trigger { Property = Button.IsMouseOverProperty, Value = true };
-            hoverTrigger.Setters.Add(new Setter(Button.BackgroundProperty,
-                new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)), "bd"));
-
-            var template = new ControlTemplate(typeof(Button));
-            template.VisualTree = borderFactory;
-            template.Triggers.Add(hoverTrigger);
+            bool isLowConfidence = IsLowConfidence(videoData.AvgConfidence);
+            if (string.IsNullOrWhiteSpace(videoData.VideoFilePath))
+                videoData.VideoFilePath = videoFile.FullName;
+            if (string.IsNullOrWhiteSpace(videoData.Run))
+                videoData.Run = (Application.Current as App)?.ActiveRun ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(videoData.Name))
+                videoData.Name = videoFile.Name;
 
             return new Button
             {
-                Content = grid,
+                Content = videoFile.Name,
+                Margin = new Thickness(BUTTON_MARGIN),
+                Padding = new Thickness(BUTTON_PADDING_HORIZONTAL, BUTTON_PADDING_VERTICAL,
+                    BUTTON_PADDING_HORIZONTAL, BUTTON_PADDING_VERTICAL),
                 Height = BUTTON_HEIGHT,
                 Tag = videoFile.FullName,
                 DataContext = videoData,
-                Background = isLow
-                    ? new SolidColorBrush(Color.FromArgb(30, 0xE2, 0x4B, 0x4A))
-                    : Brushes.Transparent,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                FontSize = BUTTON_FONT_SIZE,
                 BorderThickness = new Thickness(0),
                 Cursor = Cursors.Hand,
-                Margin = new Thickness(BUTTON_MARGIN),
-                Padding = new Thickness(0),
-                HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                VerticalContentAlignment = VerticalAlignment.Stretch,
-                Template = template,
+                Style = CreateButtonStyle(isLowConfidence)
             };
         }
 
@@ -3493,31 +3507,13 @@ namespace FishLens_App
         {
             foreach (var child in videoList.Children)
             {
-                if (child is not Grid rowGrid) continue;
-                foreach (var elem in rowGrid.Children)
-                {
-                    if (elem is Button button && button.DataContext is FishLens_App.Models.Video video)
-                    {
-                        var tierColor = GetTierColor(video.AvgConfidence);
-                        var tierBrush = new SolidColorBrush(tierColor);
-                        bool isLow = tierColor == COLOR_LOW;
+                if (child is not Grid rowGrid)
+                    continue;
 
-                        if (button.Content is Grid g)
-                        {
-                            foreach (UIElement el in g.Children)
-                            {
-                                if (el is Border b && "stripe".Equals(b.Tag))
-                                    b.Background = tierBrush;
-                                if (el is System.Windows.Shapes.Ellipse e && "dot".Equals(e.Tag))
-                                    e.Fill = tierBrush;
-                                if (el is TextBlock tb && "pct".Equals(tb.Tag))
-                                    tb.Foreground = tierBrush;
-                            }
-                        }
-                        button.Background = isLow
-                            ? new SolidColorBrush(Color.FromArgb(30, 0xE2, 0x4B, 0x4A))
-                            : Brushes.Transparent;
-                    }
+                foreach (var button in rowGrid.Children.OfType<Button>())
+                {
+                    if (button.DataContext is FishLens_App.Models.Video video)
+                        button.Style = CreateButtonStyle(IsLowConfidence(video.AvgConfidence));
                 }
             }
         }
@@ -3526,9 +3522,13 @@ namespace FishLens_App
         // Function: ResortLibrarySection
         // Description: Re-orders the video item rows within a single library section
         //              so they stay sorted ascending by AvgConfidence after a save.
+        //              Collects the section's Grid rows, sorts them, removes them from
+        //              the panel, then re-inserts them in sorted order right after the
+        //              section header and its separator.
         // **************************************************
         private void ResortLibrarySection(string sectionKey)
         {
+            // Collect all video item grids belonging to this section (preserving current order).
             var sectionItems = new List<Grid>();
             foreach (var child in videoList.Children)
             {
@@ -3543,6 +3543,7 @@ namespace FishLens_App
 
             if (sectionItems.Count <= 1) return;
 
+            // Build the desired confidence-ascending order.
             var sorted = sectionItems
                 .OrderBy(g =>
                 {
@@ -3560,6 +3561,7 @@ namespace FishLens_App
                 })
                 .ToList();
 
+            // Short-circuit if order is already correct.
             bool alreadySorted = true;
             int  checkIdx      = 0;
             while (checkIdx < sectionItems.Count && alreadySorted)
@@ -3571,9 +3573,11 @@ namespace FishLens_App
 
             if (alreadySorted) return;
 
+            // Remove all section items from the panel.
             foreach (var g in sectionItems)
                 videoList.Children.Remove(g);
 
+            // Find the header so we can insert right after header + separator.
             int insertAt   = -1;
             int headerSearch = 0;
             while (headerSearch < videoList.Children.Count && insertAt < 0)
@@ -3582,7 +3586,7 @@ namespace FishLens_App
                     && hg.Tag is string ht
                     && ht.Equals(GetHeaderTag(sectionKey), StringComparison.OrdinalIgnoreCase))
                 {
-                    insertAt = headerSearch + 2;
+                    insertAt = headerSearch + 2; // skip header (+0) and separator (+1)
                 }
                 headerSearch++;
             }
@@ -3603,20 +3607,140 @@ namespace FishLens_App
 
         #region Button Styling
 
-        private Color GetTierColor(double confidence)
+        // **************************************************
+        // Function: CreateButtonStyle
+        // Description: Creates styled button with hover effects and appropriate colors
+        // **************************************************
+        private System.Windows.Style CreateButtonStyle(bool isLowConfidence)
         {
-            double threshold = (Application.Current as App)?.Configuration?.ConfidenceThreshold
-                ?? _config?.ConfidenceThreshold
-                ?? DEFAULT_CONFIDENCE_THRESHOLD;
-            if (confidence >= threshold) return COLOR_HIGH;
-            if (confidence >= threshold * 0.6) return COLOR_MID;
-            return COLOR_LOW;
+            var style = new System.Windows.Style(typeof(Button));
+
+            SetButtonDefaultAppearance(style, isLowConfidence);
+
+            var template = CreateButtonControlTemplate(isLowConfidence);
+            style.Setters.Add(new Setter(Button.TemplateProperty, template));
+
+            return style;
         }
 
-        private Style CreateButtonStyle(bool isLowConfidence)
+        // **************************************************
+        // Function: SetButtonDefaultAppearance
+        // Description: Sets default colors and properties for button
+        // **************************************************
+        private void SetButtonDefaultAppearance(System.Windows.Style style, bool isLowConfidence)
         {
-            // Styling is built directly into CreateSingleVideoButton; this is a no-op stub kept for call-site compatibility.
-            return new Style(typeof(Button));
+            style.Setters.Add(new Setter(Button.BackgroundProperty,
+                isLowConfidence
+                    ? new SolidColorBrush(Color.FromRgb(254, 242, 242))
+                    : new SolidColorBrush(Color.FromRgb(249, 250, 251))));
+
+            style.Setters.Add(new Setter(Button.ForegroundProperty,
+                isLowConfidence
+                    ? new SolidColorBrush(Color.FromRgb(185, 28, 28))
+                    : new SolidColorBrush(Color.FromRgb(55, 65, 81))));
+
+            style.Setters.Add(new Setter(Button.BorderBrushProperty,
+                new SolidColorBrush(Color.FromRgb(229, 231, 235))));
+        }
+
+        // **************************************************
+        // Function: CreateButtonControlTemplate
+        // Description: Creates control template with rounded corners and triggers
+        // **************************************************
+        private ControlTemplate CreateButtonControlTemplate(bool isLowConfidence)
+        {
+            var template = new ControlTemplate(typeof(Button));
+
+            var border = CreateButtonBorder();
+            template.VisualTree = border;
+
+            AddButtonTriggers(template, isLowConfidence);
+
+            return template;
+        }
+
+        // **************************************************
+        // Function: CreateButtonBorder
+        // Description: Creates border element for button template
+        // **************************************************
+        private FrameworkElementFactory CreateButtonBorder()
+        {
+            var border = new FrameworkElementFactory(typeof(Border));
+            border.Name = "border";
+            border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
+            border.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
+            border.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
+            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(BUTTON_CORNER_RADIUS));
+
+            var contentPresenter = CreateContentPresenter();
+            border.AppendChild(contentPresenter);
+
+            return border;
+        }
+
+        // **************************************************
+        // Function: CreateContentPresenter
+        // Description: Creates content presenter for button template
+        // **************************************************
+        private FrameworkElementFactory CreateContentPresenter()
+        {
+            var contentPresenter = new FrameworkElementFactory(typeof(ContentPresenter));
+            contentPresenter.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Left);
+            contentPresenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+            contentPresenter.SetValue(ContentPresenter.MarginProperty,
+                new Thickness(CONTENT_PRESENTER_MARGIN, 0, CONTENT_PRESENTER_MARGIN, 0));
+
+            return contentPresenter;
+        }
+
+        // **************************************************
+        // Function: AddButtonTriggers
+        // Description: Adds hover and pressed triggers to button template
+        // **************************************************
+        private void AddButtonTriggers(ControlTemplate template, bool isLowConfidence)
+        {
+            var hoverTrigger = CreateHoverTrigger(isLowConfidence);
+            template.Triggers.Add(hoverTrigger);
+
+            var pressedTrigger = CreatePressedTrigger(isLowConfidence);
+            template.Triggers.Add(pressedTrigger);
+        }
+
+        // **************************************************
+        // Function: CreateHoverTrigger
+        // Description: Creates mouse-over trigger for button
+        // **************************************************
+        private Trigger CreateHoverTrigger(bool isLowConfidence)
+        {
+            var trigger = new Trigger { Property = Button.IsMouseOverProperty, Value = true };
+
+            trigger.Setters.Add(new Setter(Button.BackgroundProperty,
+                isLowConfidence
+                    ? new SolidColorBrush(Color.FromRgb(239, 68, 68))
+                    : new SolidColorBrush(Color.FromRgb(243, 244, 246)), "border"));
+
+            trigger.Setters.Add(new Setter(Button.ForegroundProperty,
+                isLowConfidence
+                    ? new SolidColorBrush(Colors.White)
+                    : new SolidColorBrush(Color.FromRgb(17, 24, 39))));
+
+            return trigger;
+        }
+
+        // **************************************************
+        // Function: CreatePressedTrigger
+        // Description: Creates button pressed trigger
+        // **************************************************
+        private Trigger CreatePressedTrigger(bool isLowConfidence)
+        {
+            var trigger = new Trigger { Property = Button.IsPressedProperty, Value = true };
+
+            trigger.Setters.Add(new Setter(Button.BackgroundProperty,
+                isLowConfidence
+                    ? new SolidColorBrush(Color.FromRgb(220, 38, 38))
+                    : new SolidColorBrush(Color.FromRgb(229, 231, 235)), "border"));
+
+            return trigger;
         }
 
         #endregion

@@ -111,7 +111,7 @@ namespace FishLens_App.Services
                         TotalVideos = pending.Count,
                         CompletedVideos = Math.Min(startedNumber, pending.Count),
                         FileName = filename,
-                        Message = $"Video {Math.Min(startedNumber, pending.Count)}/{pending.Count} - {filename}"
+                        Message = $"{worker.ProcessID}|{filename}|Processing {filename}"
                     });
 
                     try
@@ -139,7 +139,7 @@ namespace FishLens_App.Services
                             TotalVideos = pending.Count,
                             CompletedVideos = Math.Min(done, pending.Count),
                             FileName = filename,
-                            Message = $"Completed {Math.Min(done, pending.Count)}/{pending.Count}"
+                            Message = $"{worker.ProcessID}|{filename}|Completed {Math.Min(done, pending.Count)}/{pending.Count}"
                         });
                     }
                 }
@@ -533,6 +533,7 @@ namespace FishLens_App.Services
             private TaskCompletionSource<PythonVideoResult> _activeTcs;
             private string _activeRequestId;
             private Process _process;
+            public int ProcessID => _process?.Id ?? -1;
 
             public bool IsBusy => _activeTcs != null;
             public bool HasExited => _process == null || _process.HasExited;
@@ -576,6 +577,7 @@ namespace FishLens_App.Services
                 await WaitUntilReadyAsync(token);
                 _activeRequestId = Guid.NewGuid().ToString("N");
                 _activeTcs = new TaskCompletionSource<PythonVideoResult>();
+                System.Diagnostics.Debug.Print("ANALYZING: " + ProcessID.ToString());
 
                 Send(new
                 {
@@ -666,6 +668,8 @@ namespace FishLens_App.Services
                     string line;
                     while ((line = _process.StandardOutput.ReadLine()) != null)
                     {
+                        System.Diagnostics.Debug.Print(line);
+
                         if (line.StartsWith("[PROGRESS] FRAME:", StringComparison.Ordinal))
                         {
                             _raiseProgress(new AnalysisProgressEventArgs
