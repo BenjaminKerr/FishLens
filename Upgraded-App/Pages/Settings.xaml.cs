@@ -746,6 +746,7 @@ namespace FishLens_App
                     {
                         ThemeHelper.ThemeSwap(_config.HighContrastMode);
                         main.RefreshLibraryConfidenceStyles();
+                        main.RefreshTransportButtonIcons();
                     });
                 }
             }

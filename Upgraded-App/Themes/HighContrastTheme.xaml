@@ -18,6 +18,8 @@
     <SolidColorBrush x:Key="HoverBackgroundBrush" Color="#00B3A0"/>
     <SolidColorBrush x:Key="OnAccentForeground" Color="#051210"/>
     <SolidColorBrush x:Key="WhiteBrush" Color="#00E5CC"/>
+    <SolidColorBrush x:Key="WarningBrush" Color="#FFD166"/>
+    <SolidColorBrush x:Key="SuccessBrush" Color="#00E5CC"/>
     <!-- Action button disabled-state colors -->
     <SolidColorBrush x:Key="AccentButtonDisabledBackground" Color="#0D2E2E"/>
     <SolidColorBrush x:Key="AccentButtonDisabledForeground" Color="#2A6B60"/>
@@ -25,4 +27,9 @@
     <SolidColorBrush x:Key="NeutralButtonDisabledForeground" Color="#3A5050"/>
     <SolidColorBrush x:Key="SidebarBorder" Color="#1A3333"/>
     <SolidColorBrush x:Key="SidebarBackground" Color="#0D1A1A"/>
+
+    <!-- Semantic analysis colors -->
+    <SolidColorBrush x:Key="DirectionUpstreamBrush" Color="#00E5CC"/>
+    <SolidColorBrush x:Key="DirectionDownstreamBrush" Color="#FF6B6B"/>
+    <SolidColorBrush x:Key="DirectionUnknownBrush" Color="#FFD166"/>
 </ResourceDictionary>
