@@ -197,6 +197,7 @@ namespace FishLens_App
                 var app = (App)Application.Current;
                 app.ApplyCurrentSettings();
                 app.EnsureRunStorageInitialized();
+                app.ResetSessionCsvFiles();
 
                 new MainWindow().Show();
                 this.Close();

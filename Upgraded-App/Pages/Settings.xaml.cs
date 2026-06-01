@@ -497,6 +497,18 @@ namespace FishLens_App
                 }
                 if (locations.Count > 0)
                     _config.Locations = locations;
+
+                string activeLocation = app.ActiveLocation;
+                if (string.IsNullOrWhiteSpace(activeLocation) ||
+                    !_config.Locations.Any(l => string.Equals(l.Name, activeLocation, StringComparison.OrdinalIgnoreCase)))
+                {
+                    activeLocation = _config.Locations.Any(l => string.Equals(l.Name, _config.ActiveLocation, StringComparison.OrdinalIgnoreCase))
+                        ? _config.ActiveLocation
+                        : (_config.Locations.FirstOrDefault()?.Name ?? "Unknown");
+                }
+
+                _config.ActiveLocation = activeLocation;
+                app.ActiveLocation = activeLocation;
             }
             catch (Exception ex)
             {
