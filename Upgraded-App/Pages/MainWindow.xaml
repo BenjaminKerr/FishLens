@@ -85,7 +85,7 @@
         Style="{StaticResource NavButton}"
         Click="HomeButtonClick"
         ToolTip="Home">
-                            <Viewbox Width="30" Height="30">
+                            <Viewbox Width="36" Height="36">
                                 <Canvas Width="30" Height="30">
                                     <Ellipse Width="30" Height="30"
                      Canvas.Left="0" Canvas.Top="0"
@@ -110,7 +110,7 @@
         Style="{StaticResource NavButton}"
         Click="HistoryButtonClick"
         ToolTip="Reports">
-                            <Viewbox Width="30" Height="30">
+                            <Viewbox Width="36" Height="36">
                                 <Canvas Width="30" Height="30">
                                     <Ellipse Width="30" Height="30"
                      Canvas.Left="0" Canvas.Top="0"
@@ -146,7 +146,7 @@
         Style="{StaticResource NavButton}"
         Click="SettingsButtonClick"
         ToolTip="Settings">
-                            <Viewbox Width="30" Height="30">
+                            <Viewbox Width="36" Height="36">
                                 <Canvas Width="30" Height="30">
                                     <Ellipse Width="30" Height="30"
                      Canvas.Left="0" Canvas.Top="0"
@@ -183,7 +183,7 @@
         Click="AccountSettingsButtonClick"
         Visibility="Collapsed"
         ToolTip="Account Settings">
-                            <Viewbox Width="30" Height="30">
+                            <Viewbox Width="36" Height="36">
                                 <Canvas Width="30" Height="30">
                                     <Ellipse Width="30" Height="30"
                      Canvas.Left="0" Canvas.Top="0"
@@ -383,7 +383,7 @@
                                 <Setter Property="CornerRadius" Value="8"/>
                             </Style>
                         </Button.Resources>
-                        Delete Selected Videos
+                        Remove from Library
                     </Button>
                     <Button x:Name="changeLocationForSelected"
         Style="{StaticResource NeutralActionButton}"
@@ -406,7 +406,7 @@
                                 <Setter Property="CornerRadius" Value="8"/>
                             </Style>
                         </Button.Resources>
-                        Undo Last Delete
+                        Undo Remove
                     </Button>
                 </StackPanel>
             </Grid>
@@ -799,10 +799,10 @@
             <!-- Content area: video player + analysis panel -->
             <Grid Grid.Row="1" Margin="24,20,24,24">
                 <Grid.ColumnDefinitions>
-                    <!-- Video player gets more room; analysis panel is wider than before -->
-                    <ColumnDefinition Width="2*"/>
-                    <ColumnDefinition Width="22"/>
-                    <ColumnDefinition Width="1*" MinWidth="300"/>
+                    <!-- Keep the analysis panel compact so the video remains the primary workspace. -->
+                    <ColumnDefinition Width="2.35*"/>
+                    <ColumnDefinition Width="20"/>
+                    <ColumnDefinition Width="0.85*" MinWidth="280"/>
                 </Grid.ColumnDefinitions>
 
                 <!-- ══ VIDEO PLAYER CARD ══ -->
@@ -1132,13 +1132,6 @@
                                                        FontWeight="SemiBold"
                                                        Foreground="{DynamicResource PrimaryText}"
                                                        HorizontalAlignment="Center"/>
-                                            <TextBlock x:Name="trackVideoLabel"
-                                                       Text=""
-                                                       FontSize="11"
-                                                       Foreground="{DynamicResource SecondaryText}"
-                                                       HorizontalAlignment="Center"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       MaxWidth="160"/>
                                         </StackPanel>
                                         <Button x:Name="trackNextButton"
                                                 Grid.Column="2"
@@ -1166,17 +1159,22 @@
                                                    TextWrapping="Wrap"
                                                    Margin="0,0,0,8"/>
 
-                                        <!-- Chips row -->
-                                        <WrapPanel Orientation="Horizontal">
+                                        <!-- Metadata chips -->
+                                        <StackPanel>
 
                                             <!-- Location chip -->
                                             <Border CornerRadius="12"
                                                     BorderBrush="{DynamicResource BorderBrush}"
                                                     BorderThickness="1"
                                                     Padding="7,3"
-                                                    Margin="0,0,6,4">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <Viewbox Width="11" Height="11" Margin="0,0,4,0">
+                                                    HorizontalAlignment="Left"
+                                                    Margin="0,0,0,5">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Viewbox Grid.Column="0" Width="11" Height="11" Margin="0,0,4,0">
                                                         <Canvas Width="24" Height="24">
                                                             <Path Data="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7z
                                         M12 9m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0"
@@ -1187,11 +1185,12 @@
                                                         </Canvas>
                                                     </Viewbox>
                                                     <TextBlock x:Name="videoLocation"
+                                                               Grid.Column="1"
                                                                Text="--"
                                                                FontFamily="{DynamicResource BodyFont}"
                                                                FontSize="11"
                                                                Foreground="{DynamicResource SecondaryText}"/>
-                                                </StackPanel>
+                                                </Grid>
                                             </Border>
 
                                             <!-- Date chip -->
@@ -1199,9 +1198,14 @@
                                                     BorderBrush="{DynamicResource BorderBrush}"
                                                     BorderThickness="1"
                                                     Padding="7,3"
-                                                    Margin="0,0,6,4">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <Viewbox Width="11" Height="11" Margin="0,0,4,0">
+                                                    HorizontalAlignment="Left"
+                                                    Margin="0,0,0,5">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Viewbox Grid.Column="0" Width="11" Height="11" Margin="0,0,4,0">
                                                         <Canvas Width="24" Height="24">
                                                             <Path Data="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"
                                                                   Stroke="{DynamicResource SecondaryText}"
@@ -1213,11 +1217,12 @@
                                                         </Canvas>
                                                     </Viewbox>
                                                     <TextBlock x:Name="videoDateTime"
+                                                               Grid.Column="1"
                                                                Text="--"
                                                                FontFamily="{DynamicResource BodyFont}"
                                                                FontSize="11"
                                                                Foreground="{DynamicResource SecondaryText}"/>
-                                                </StackPanel>
+                                                </Grid>
                                             </Border>
 
                                             <!-- Duration chip -->
@@ -1225,9 +1230,14 @@
                                                     BorderBrush="{DynamicResource BorderBrush}"
                                                     BorderThickness="1"
                                                     Padding="7,3"
-                                                    Margin="0,0,0,4">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <Viewbox Width="11" Height="11" Margin="0,0,4,0">
+                                                    HorizontalAlignment="Left"
+                                                    Margin="0">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Viewbox Grid.Column="0" Width="11" Height="11" Margin="0,0,4,0">
                                                         <Canvas Width="24" Height="24">
                                                             <Path Data="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2"
                                                                   Stroke="{DynamicResource SecondaryText}"
@@ -1238,13 +1248,14 @@
                                                         </Canvas>
                                                     </Viewbox>
                                                     <TextBlock x:Name="videoDuration"
+                                                               Grid.Column="1"
                                                                Text="--"
                                                                FontFamily="{DynamicResource BodyFont}"
                                                                FontSize="11"
                                                                Foreground="{DynamicResource SecondaryText}"/>
-                                                </StackPanel>
+                                                </Grid>
                                             </Border>
-                                        </WrapPanel>
+                                        </StackPanel>
                                     </StackPanel>
                                 </Border>
 

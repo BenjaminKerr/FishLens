@@ -1533,7 +1533,7 @@ namespace FishLens_App
             var selected = GetSelectedVideoGrids();
             if (selected.Count == 0)
             {
-                MessageBox.Show("No videos selected for deletion.", "Delete Videos", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("No videos selected to remove.", "Remove from Library", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
@@ -2968,7 +2968,6 @@ namespace FishLens_App
             prevFishButton.Visibility = Visibility.Collapsed;
             nextFishButton.Visibility = Visibility.Collapsed;
             trackLabel.Text = "Fish 0 / 0";
-            trackVideoLabel.Text = string.Empty;
             fishEmojiCanvas.Children.Clear();
 
             var markerCanvas = videoScrubber.Template?.FindName("fishMarkersCanvas", videoScrubber) as Canvas;
@@ -3699,7 +3698,6 @@ namespace FishLens_App
             if (!multi) return;
 
             trackLabel.Text = $"Fish {_currentTrackIndex + 1} / {total}";
-            trackVideoLabel.Text = _currentTracks[_currentTrackIndex].Name;
             trackPrevButton.IsEnabled = _currentTrackIndex > 0;
             trackNextButton.IsEnabled = _currentTrackIndex < total - 1;
             prevFishButton.IsEnabled = _currentTrackIndex > 0;
