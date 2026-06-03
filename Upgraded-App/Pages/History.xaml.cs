@@ -20,6 +20,8 @@ using System.Windows.Shapes;
 using System.Text;
 using System.Linq;
 using System.Collections.Generic;
+using System.Threading.Tasks;
+using System.Windows.Threading;
 using FishLens_App.Models;
 
 namespace FishLens_App
@@ -31,6 +33,8 @@ namespace FishLens_App
         private readonly IProjectPathResolver _pathResolver;
         private readonly IFileSystemManager _fileSystemManager;
         private readonly ILogger<MainWindow> _logger;
+        private const int ReportLayoutSettleDelayMs = 300;
+        private int _reportRenderVersion;
         private string _currentReportText;
 
         // Filter state
@@ -46,16 +50,93 @@ namespace FishLens_App
         private Dictionary<string, string[]> _lastGroupedLinesByRun = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         private bool _isUpdatingConfidenceControls;
         private bool _isHistoryLoaded;
+        private StackPanel _printReportPanel;
+        private StackPanel ActiveReportPanel => _printReportPanel ?? reportPanel;
+        private static FrameworkElement _reportResourceScope;
 
-        // Frozen brush cache avoids creating new SolidColorBrush objects on every report render.
+        private static readonly Dictionary<string, string> _reportBrushRoles = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["#0F172A"] = "ReportTitleTextBrush",
+            ["#0D3640"] = "ReportTableHeaderBrush",
+            ["#14171A"] = "ReportBodyTextBrush",
+            ["#1F2937"] = "ReportBodyTextBrush",
+            ["#657786"] = "ReportSecondaryTextBrush",
+            ["#64748B"] = "ReportSecondaryTextBrush",
+            ["#AAB8C2"] = "ReportMutedTextBrush",
+            ["#94A3B8"] = "ReportMutedTextBrush",
+            ["#F5F8FA"] = "ReportSurfaceBrush",
+            ["#F8FAFC"] = "ReportSurfaceBrush",
+            ["#FFFFFF"] = "ReportOnTableHeaderBrush",
+            ["#E1E8ED"] = "ReportBorderBrush",
+            ["#D9E2EC"] = "ReportBorderBrush",
+            ["#E6EDF2"] = "ReportGridBrush",
+            ["#CCDDE6"] = "ReportAxisBrush",
+            ["#244F5A"] = "ReportTableHeaderBorderBrush",
+            ["#1E88E5"] = "ReportInfoBrush",
+            ["#2F80ED"] = "ReportSecondaryInfoBrush",
+            ["#00ACC1"] = "ReportSecondaryInfoBrush",
+            ["#7E57C2"] = "ReportSpecialBrush",
+            ["#FF6F00"] = "ReportTimeBrush",
+            ["#F57C00"] = "ReportWarmTitleBrush",
+            ["#E65100"] = "ReportWarmTitleBrush",
+            ["#8B6914"] = "ReportWarmTextBrush",
+            ["#FFF9E6"] = "ReportWarmSurfaceBrush",
+            ["#FFF7E8"] = "ReportWarmSurfaceBrush",
+            ["#FFE082"] = "ReportWarmBorderBrush",
+            ["#FFD37A"] = "ReportWarmBorderBrush",
+            ["#43A047"] = "ReportConfidenceHighBrush",
+            ["#FB8C00"] = "ReportConfidenceMidBrush",
+            ["#2AB5B5"] = "DirectionUpstreamBrush",
+            ["#E05C5C"] = "DirectionDownstreamBrush",
+            ["#E8A038"] = "DirectionUnknownBrush",
+        };
+
+        // Frozen brush cache avoids creating fallback SolidColorBrush objects on every report render.
         private static readonly Dictionary<string, SolidColorBrush> _brushCache = new();
         private static SolidColorBrush Brush(string hex)
         {
+            if (_reportBrushRoles.TryGetValue(hex, out string resourceKey)
+                && TryFindReportBrush(resourceKey) is SolidColorBrush resourceBrush)
+            {
+                return resourceBrush;
+            }
+
             if (_brushCache.TryGetValue(hex, out var b)) return b;
             var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
             brush.Freeze();
             _brushCache[hex] = brush;
             return brush;
+        }
+
+        private static Color ReportColor(string hex)
+        {
+            if (_reportBrushRoles.TryGetValue(hex, out string resourceKey)
+                && TryFindReportBrush(resourceKey) is SolidColorBrush resourceBrush)
+            {
+                return resourceBrush.Color;
+            }
+
+            return (Color)ColorConverter.ConvertFromString(hex);
+        }
+
+        private static Color ResourceColor(string resourceKey, Color fallback)
+        {
+            return TryFindReportBrush(resourceKey) is SolidColorBrush resourceBrush
+                ? resourceBrush.Color
+                : fallback;
+        }
+
+        private static Brush ResourceBrush(string resourceKey, Brush fallback)
+        {
+            return _reportResourceScope?.TryFindResource(resourceKey) as Brush
+                ?? Application.Current?.Resources[resourceKey] as Brush
+                ?? fallback;
+        }
+
+        private static SolidColorBrush TryFindReportBrush(string resourceKey)
+        {
+            return _reportResourceScope?.TryFindResource(resourceKey) as SolidColorBrush
+                ?? Application.Current?.Resources[resourceKey] as SolidColorBrush;
         }
         private string[] _lastFilteredLines = Array.Empty<string>();
         private ReportStatistics _lastStats;
@@ -145,31 +226,12 @@ namespace FishLens_App
 
         // **************************************************
         // Function: GenerateReportClick
-        // Description: Generates and displays a filtered analysis report from CSV data
+        // Description: Generates and displays a filtered analysis report from the selected data source
         public void GenerateReportClick(object sender, RoutedEventArgs e)
         {
             try
             {
-                // Read all data rows for the selected run scope (may combine fish + no-fish CSVs).
-                string[] dataLines = ReadAllDataLines(_filterRun);
-
-                if (dataLines.Length == 0)
-                {
-                    ShowBlankReportState();
-                    return;
-                }
-
-                // Apply filters to data rows only
-                var filteredLines = ApplyFilters(dataLines);
-
-                if (filteredLines.Length == 0)
-                {
-                    ShowBlankReportState();
-                    return;
-                }
-
-                // Generate and display report
-                DisplayReport(filteredLines);
+                RefreshReportFromSelectedScope(deferDisplay: true);
             }
             catch (Exception ex)
             {
@@ -185,7 +247,7 @@ namespace FishLens_App
         {
             try
             {
-                if (string.IsNullOrEmpty(_currentReportText))
+                if (!RefreshReportFromSelectedScope() || string.IsNullOrEmpty(_currentReportText))
                 {
                     ShowNoReportMessage();
                     return;
@@ -235,9 +297,6 @@ namespace FishLens_App
             _isUpdatingConfidenceControls = true;
             confidenceValueBox.Text = $"{confidenceSlider.Value:F0}";
             _isUpdatingConfidenceControls = false;
-
-            if (reportPanel != null && reportPanel.Children.Count > 0)
-                GenerateReportClick(sender, new RoutedEventArgs());
         }
 
         // **************************************************
@@ -280,9 +339,6 @@ namespace FishLens_App
             _isUpdatingConfidenceControls = false;
 
             _filterMinConfidence = value / 100.0;
-
-            if (reportPanel != null && reportPanel.Children.Count > 0)
-                GenerateReportClick(confidenceValueBox, new RoutedEventArgs());
         }
 
         // **************************************************
@@ -368,7 +424,7 @@ namespace FishLens_App
         // Description: Prints the current report via the system print dialog (includes Print to PDF)
         public void PrintReportClick(object sender, RoutedEventArgs e)
         {
-            if (reportPanel.Children.Count == 0)
+            if (!RefreshReportFromSelectedScope() || ActiveReportPanel.Children.Count == 0)
             {
                 ShowNoReportMessage();
                 return;
@@ -377,21 +433,51 @@ namespace FishLens_App
             var dlg = new PrintDialog();
             if (dlg.ShowDialog() != true) return;
 
-            // Render the actual visual report (charts, stat cards, etc.) rather than plain text
-            var capabilities = dlg.PrintQueue.GetPrintCapabilities(dlg.PrintTicket);
-            double pw = capabilities.PageImageableArea?.ExtentWidth  ?? dlg.PrintableAreaWidth;
-            double ph = capabilities.PageImageableArea?.ExtentHeight ?? dlg.PrintableAreaHeight;
+            string[] screenReportLines = _lastFilteredLines?.ToArray() ?? Array.Empty<string>();
 
-            // The reportPanel lives inside a ScrollViewer whose viewport constrains layout,
-            // so ActualHeight only reflects the visible area.  Force an unconstrained measure+arrange
-            // at the panel's real width so DesiredSize.Height equals the full scrollable content height.
-            double panelW = reportPanel.ActualWidth > 0 ? reportPanel.ActualWidth : pw - 96;
-            reportPanel.Measure(new Size(panelW, double.PositiveInfinity));
-            reportPanel.Arrange(new Rect(0, 0, panelW, reportPanel.DesiredSize.Height));
-            reportPanel.UpdateLayout();
+            try
+            {
+                // Render the actual visual report (charts, stat cards, etc.) rather than plain text.
+                var capabilities = dlg.PrintQueue.GetPrintCapabilities(dlg.PrintTicket);
+                double pw = capabilities.PageImageableArea?.ExtentWidth  ?? dlg.PrintableAreaWidth;
+                double ph = capabilities.PageImageableArea?.ExtentHeight ?? dlg.PrintableAreaHeight;
+                double panelW = ActiveReportPanel.ActualWidth > 0 ? ActiveReportPanel.ActualWidth : pw - 96;
 
-            var paginator = new ReportVisualPaginator(reportPanel, new Size(pw, ph));
-            dlg.PrintDocument(paginator, "FishLens Report");
+                _printReportPanel = CreateLightPrintReportPanel(panelW);
+                _reportResourceScope = _printReportPanel;
+                DisplayReport(screenReportLines);
+
+                // The ActiveReportPanel lives inside a ScrollViewer whose viewport constrains layout,
+                // so ActualHeight only reflects the visible area.  Force an unconstrained measure+arrange
+                // at the panel's real width so DesiredSize.Height equals the full scrollable content height.
+                ActiveReportPanel.Measure(new Size(panelW, double.PositiveInfinity));
+                ActiveReportPanel.Arrange(new Rect(0, 0, panelW, ActiveReportPanel.DesiredSize.Height));
+                ActiveReportPanel.UpdateLayout();
+
+                var paginator = new ReportVisualPaginator(ActiveReportPanel, new Size(pw, ph));
+                dlg.PrintDocument(paginator, "FishLens Report");
+            }
+            finally
+            {
+                _reportResourceScope = null;
+                _printReportPanel = null;
+            }
+        }
+
+        private StackPanel CreateLightPrintReportPanel(double width)
+        {
+            var panel = new StackPanel
+            {
+                Width = Math.Max(720, width),
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+
+            panel.Resources.MergedDictionaries.Add(new ResourceDictionary
+            {
+                Source = new Uri("Themes/NormalTheme.xaml", UriKind.Relative)
+            });
+
+            return panel;
         }
 
         #endregion
@@ -540,6 +626,20 @@ namespace FishLens_App
 
         #region Report Display
 
+        private async void ScheduleDisplayReport(string[] csvLines)
+        {
+            int renderVersion = ++_reportRenderVersion;
+
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ContextIdle);
+            await Task.Delay(ReportLayoutSettleDelayMs);
+
+            if (!_isHistoryLoaded || renderVersion != _reportRenderVersion)
+                return;
+
+            reportScrollViewer.UpdateLayout();
+            DisplayReport(csvLines);
+        }
+
         // **************************************************
         // Function: DisplayReport
         // Description: Renders the enhanced visual report with analytics and charts
@@ -583,7 +683,7 @@ namespace FishLens_App
 
             headerPanel.Children.Add(title);
             headerPanel.Children.Add(subtitle);
-            reportPanel.Children.Add(headerPanel);
+            ActiveReportPanel.Children.Add(headerPanel);
         }
 
         // **************************************************
@@ -609,7 +709,7 @@ namespace FishLens_App
             grid.Children.Add(totalCard);
             grid.Children.Add(confCard);
             grid.Children.Add(highConfCard);
-            reportPanel.Children.Add(grid);
+            ActiveReportPanel.Children.Add(grid);
         }
 
         // **************************************************
@@ -683,7 +783,7 @@ namespace FishLens_App
             };
             Grid.SetColumn(countHeader, 1);
             headerGrid.Children.Add(countHeader);
-            reportPanel.Children.Add(headerGrid);
+            ActiveReportPanel.Children.Add(headerGrid);
 
             foreach (var kvp in stats.VideoDetections.OrderByDescending(x => x.Value).Take(10))
             {
@@ -718,7 +818,7 @@ namespace FishLens_App
 
                 container.Children.Add(labelGrid);
                 container.Children.Add(barContainer);
-                reportPanel.Children.Add(container);
+                ActiveReportPanel.Children.Add(container);
             }
         }
 
@@ -735,8 +835,8 @@ namespace FishLens_App
                 points.Add(($"{hour:D2}:00", count));
             }
 
-            var chart = CreateLineChart(points, "#FF6F00", 140, reportPanel?.ActualWidth ?? 0);
-            reportPanel.Children.Add(chart);
+            var chart = CreateLineChart(points, "#FF6F00", 140, ActiveReportPanel?.ActualWidth ?? 0);
+            ActiveReportPanel.Children.Add(chart);
         }
 
         // **************************************************
@@ -753,7 +853,7 @@ namespace FishLens_App
                 Margin = new Thickness(0, 10, 0, 12),
                 Tag = "section_header"   // used by ReportVisualPaginator for header repetition
             };
-            reportPanel.Children.Add(textBlock);
+            ActiveReportPanel.Children.Add(textBlock);
         }
 
         // **************************************************
@@ -771,7 +871,7 @@ namespace FishLens_App
 
             container.Children.Add(labelGrid);
             container.Children.Add(barContainer);
-            reportPanel.Children.Add(container);
+            ActiveReportPanel.Children.Add(container);
         }
 
         // **************************************************
@@ -779,7 +879,7 @@ namespace FishLens_App
         // Description: Adds vertical spacing between report sections
         private void AddSpacer(int height)
         {
-            reportPanel.Children.Add(new Border { Height = height });
+            ActiveReportPanel.Children.Add(new Border { Height = height });
         }
 
         // **************************************************
@@ -789,7 +889,7 @@ namespace FishLens_App
         {
             var emptyPanel = CreateEmptyStatePanel();
             // Add empty state to the report panel (report area) since historyList was removed
-            reportPanel.Children.Add(emptyPanel);
+            ActiveReportPanel.Children.Add(emptyPanel);
         }
 
         #endregion
@@ -1042,6 +1142,35 @@ namespace FishLens_App
                     "Current Session" => "CurrentSession",
                     _                 => selectedRun
                 };
+        }
+
+        private bool RefreshReportFromSelectedScope(bool deferDisplay = false)
+        {
+            // All History and run-specific scopes use the database when organization context
+            // is available; Current Session remains local to the active session CSVs.
+            string[] dataLines = ReadAllDataLines(_filterRun);
+
+            if (dataLines.Length == 0)
+            {
+                ShowBlankReportState();
+                return false;
+            }
+
+            var filteredLines = ApplyFilters(dataLines);
+
+            if (filteredLines.Length == 0)
+            {
+                ShowBlankReportState();
+                return false;
+            }
+
+            if (deferDisplay)
+                ScheduleDisplayReport(filteredLines);
+            else
+                DisplayReport(filteredLines);
+
+            UpdatePrintReportButtonState(true);
+            return true;
         }
 
         // **************************************************
@@ -1708,8 +1837,7 @@ namespace FishLens_App
         private FrameworkElement CreateLineChart(List<(string label, int value)> points, string color, double height = 180, double availableWidth = 0)
         {
             // Render at actual width or fall back; use an Image that stretches to fill
-            double totalWidth = (availableWidth > 200) ? availableWidth
-                              : (reportPanel?.ActualWidth > 200 ? reportPanel.ActualWidth : 720);
+            double totalWidth = (availableWidth > 200) ? availableWidth : GetReportContentWidth();
 
             const double leftMargin   = 56;
             const double rightMargin  = 40;
@@ -1728,7 +1856,7 @@ namespace FishLens_App
             var axisPen  = new Pen(Brush("#CCDDE6"), 1.5);                                axisPen.Freeze();
             var dataPen  = new Pen(Brush(color), 2);                                      dataPen.Freeze();
             var dotFill  = Brush(color);
-            var dotStroke = new Pen(Brushes.White, 1);                                   dotStroke.Freeze();
+            var dotStroke = new Pen(Brush("#FFFFFF"), 1);                                dotStroke.Freeze();
 
             using (var ctx = dv.RenderOpen())
             {
@@ -1904,10 +2032,24 @@ namespace FishLens_App
             videoPlayer.Visibility = Visibility.Collapsed;
             // 'videoControls' control was removed/renamed in XAML; ensure video player is hidden.
             reportScrollViewer.Visibility = Visibility.Visible;
-            reportControls.Visibility = Visibility.Visible;
-            viewTitle.Text = "Analysis Report";
-            // Force a layout pass so reportPanel.ActualWidth is correct before charts are rendered.
+            ActiveReportPanel.ClearValue(FrameworkElement.WidthProperty);
+            ActiveReportPanel.HorizontalAlignment = HorizontalAlignment.Stretch;
+            // Force a layout pass so ActiveReportPanel.ActualWidth is correct before charts are rendered.
             reportScrollViewer.UpdateLayout();
+        }
+
+        private double GetReportContentWidth()
+        {
+            double viewport = reportScrollViewer?.ViewportWidth ?? 0;
+            if (viewport > 260) return Math.Max(200, viewport - 60);
+
+            double scrollWidth = reportScrollViewer?.ActualWidth ?? 0;
+            if (scrollWidth > 260) return Math.Max(200, scrollWidth - 90);
+
+            double panelWidth = ActiveReportPanel?.ActualWidth ?? 0;
+            if (panelWidth > 200) return panelWidth;
+
+            return 720;
         }
 
         // **************************************************
@@ -1915,22 +2057,28 @@ namespace FishLens_App
         // Description: Clears all children from the report panel
         private void ClearPreviousReport()
         {
-            reportPanel.Children.Clear();
+            ActiveReportPanel.Children.Clear();
+        }
+
+        private void UpdatePrintReportButtonState(bool hasPrintableReport)
+        {
+            if (printReportButton != null)
+                printReportButton.IsEnabled = hasPrintableReport;
         }
 
         private void ShowBlankReportState()
         {
+            _reportRenderVersion++;
             _lastFilteredLines = Array.Empty<string>();
             _lastGroupedLinesByRun.Clear();
             _lastStats = null;
             _currentReportText = null;
+            UpdatePrintReportButtonState(false);
 
             ClearPreviousReport();
             reportScrollViewer.Visibility = Visibility.Collapsed;
-            reportControls.Visibility = Visibility.Collapsed;
             videoPlayer.Visibility = Visibility.Collapsed;
             placeholderPanel.Visibility = Visibility.Visible;
-            viewTitle.Text = "Analysis Report";
         }
 
         #endregion
@@ -2141,7 +2289,7 @@ namespace FishLens_App
                 }
 
                 runPanel.Child = stack;
-                reportPanel.Children.Add(runPanel);
+                ActiveReportPanel.Children.Add(runPanel);
             }
 
             AddSpacer(16);
@@ -2220,7 +2368,7 @@ namespace FishLens_App
             row1.Children.Add(totalCard);
             row1.Children.Add(videosCard);
             row1.Children.Add(netCard);
-            reportPanel.Children.Add(row1);
+            ActiveReportPanel.Children.Add(row1);
 
             // --- Row 2: Upstream | Downstream | Indecisive ---
             var row2 = new Grid { Margin = new Thickness(0, 0, 0, 20) };
@@ -2238,7 +2386,7 @@ namespace FishLens_App
             row2.Children.Add(upCard);
             row2.Children.Add(downCard);
             row2.Children.Add(indCard);
-            reportPanel.Children.Add(row2);
+            ActiveReportPanel.Children.Add(row2);
 
             // --- Date range ---
             if (stats.MinDetectionTimestamp.HasValue && stats.MaxDetectionTimestamp.HasValue)
@@ -2251,7 +2399,7 @@ namespace FishLens_App
                     Foreground = Brush("#14171A"),
                     Margin = new Thickness(0, 0, 0, 16)
                 };
-                reportPanel.Children.Add(dateText);
+                ActiveReportPanel.Children.Add(dateText);
             }
 
             // --- Location summary ---
@@ -2287,7 +2435,7 @@ namespace FishLens_App
                         Foreground = Brush("#1E88E5"),
                         VerticalAlignment = VerticalAlignment.Center
                     });
-                    reportPanel.Children.Add(row);
+                    ActiveReportPanel.Children.Add(row);
                 }
             }
         }
@@ -2354,7 +2502,7 @@ namespace FishLens_App
                         Text = headers[c],
                         FontWeight = FontWeights.SemiBold,
                         FontSize = 12,
-                        Foreground = Brushes.White,
+                        Foreground = Brush("#FFFFFF"),
                         Margin = new Thickness(8, 5, 16, 5)
                     }
                 };
@@ -2398,8 +2546,8 @@ namespace FishLens_App
 
                 string[] cells = { run, ShortenVideoPath(video), location, species, dir, conf, start, end, ts };
                 var rowBgColor = row % 2 == 0
-                    ? (Color)ColorConverter.ConvertFromString("#F5F8FA")
-                    : Colors.White;
+                    ? ReportColor("#F5F8FA")
+                    : ResourceColor("ReportSurfaceAltBrush", Colors.White);
 
                 table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
                 for (int c = 0; c < cells.Length; c++)
@@ -2429,7 +2577,7 @@ namespace FishLens_App
             }
 
             outerScroll.Content = table;
-            reportPanel.Children.Add(outerScroll);
+            ActiveReportPanel.Children.Add(outerScroll);
         }
 
         // **************************************************
@@ -2475,8 +2623,8 @@ namespace FishLens_App
             {
                 table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
                 var rowBg = r % 2 == 0
-                    ? (Color)ColorConverter.ConvertFromString("#F5F8FA")
-                    : Colors.White;
+                    ? ReportColor("#F5F8FA")
+                    : ResourceColor("ReportSurfaceAltBrush", Colors.White);
 
                 var dataDate = new Border { Background = new SolidColorBrush(rowBg),
                     Child = new TextBlock { Text = sortedDates[r].ToString("yyyy-MM-dd"),
@@ -2501,7 +2649,7 @@ namespace FishLens_App
             }
 
             scroll.Content = table;
-            reportPanel.Children.Add(scroll);
+            ActiveReportPanel.Children.Add(scroll);
         }
 
         // **************************************************
@@ -2547,8 +2695,8 @@ namespace FishLens_App
             {
                 table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
                 var rowBg = r % 2 == 0
-                    ? (Color)ColorConverter.ConvertFromString("#F5F8FA")
-                    : Colors.White;
+                    ? ReportColor("#F5F8FA")
+                    : ResourceColor("ReportSurfaceAltBrush", Colors.White);
 
                 var locCell = new Border
                 {
@@ -2580,7 +2728,7 @@ namespace FishLens_App
             }
 
             scroll.Content = table;
-            reportPanel.Children.Add(scroll);
+            ActiveReportPanel.Children.Add(scroll);
         }
 
         // **************************************************
@@ -2596,7 +2744,7 @@ namespace FishLens_App
             var summaryParts = new List<string> { $"Fish: {stats.FishCount}", $"Upstream: {stats.UpstreamCount}", $"Downstream: {stats.DownstreamCount}" };
             if (stats.NoFishCount > 0)
                 summaryParts.Add($"No Fish: {stats.NoFishCount}");
-            reportPanel.Children.Add(new TextBlock
+            ActiveReportPanel.Children.Add(new TextBlock
             {
                 Text = string.Join("   |   ", summaryParts),
                 FontSize = 12,
@@ -2606,7 +2754,7 @@ namespace FishLens_App
 
             if (lines.Length == 0)
             {
-                reportPanel.Children.Add(new TextBlock
+                ActiveReportPanel.Children.Add(new TextBlock
                 {
                     Text = "No data rows to display.",
                     FontSize = 13,
@@ -2644,7 +2792,7 @@ namespace FishLens_App
                         Text = headers[c],
                         FontWeight = FontWeights.SemiBold,
                         FontSize = 12,
-                        Foreground = Brushes.White,
+                        Foreground = Brush("#FFFFFF"),
                         Margin = new Thickness(8, 5, 16, 5)
                     }
                 };
@@ -2676,8 +2824,8 @@ namespace FishLens_App
                     ? new[] { rowIdx.ToString(), run, ShortenVideoPath(video), location, species, dir, conf, start, end, ts }
                     : new[] { rowIdx.ToString(), ShortenVideoPath(video), location, species, dir, conf, start, end, ts };
                 var rowBg = rowIdx % 2 == 0
-                    ? (Color)ColorConverter.ConvertFromString("#F5F8FA")
-                    : Colors.White;
+                    ? ReportColor("#F5F8FA")
+                    : ResourceColor("ReportSurfaceAltBrush", Colors.White);
 
                 table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
                 for (int c = 0; c < cells.Length; c++)
@@ -2703,7 +2851,7 @@ namespace FishLens_App
             }
 
             outerScroll.Content = table;
-            reportPanel.Children.Add(outerScroll);
+            ActiveReportPanel.Children.Add(outerScroll);
 
             // --- Date × Location matrix ---
             if (stats.DetectionsByDateLocation.Count > 0 && stats.DetectionsByLocation.Count > 0)
@@ -2739,7 +2887,7 @@ namespace FishLens_App
             Grid.SetColumn(noFishCard, 3);
             grid.Children.Add(noFishCard);
 
-            reportPanel.Children.Add(grid);
+            ActiveReportPanel.Children.Add(grid);
         }
 
         // **************************************************
@@ -2854,7 +3002,7 @@ namespace FishLens_App
             panel.Children.Add(detectedText);
             estimationPanel.Child = panel;
 
-            reportPanel.Children.Add(estimationPanel);
+            ActiveReportPanel.Children.Add(estimationPanel);
         }
 
         // **************************************************
@@ -2876,7 +3024,7 @@ namespace FishLens_App
             Grid.SetColumn(correctCard, 1);
             grid.Children.Add(correctCard);
 
-            reportPanel.Children.Add(grid);
+            ActiveReportPanel.Children.Add(grid);
 
             // Add confidence distribution
             AddConfidenceDistribution(stats);
@@ -2936,7 +3084,7 @@ namespace FishLens_App
                 breakdownPanel.Children.Add(speciesText);
             }
 
-            reportPanel.Children.Add(breakdownPanel);
+            ActiveReportPanel.Children.Add(breakdownPanel);
         }
 
         // **************************************************
@@ -2949,8 +3097,8 @@ namespace FishLens_App
             var sortedDates = stats.DetectionsByDate.OrderBy(x => x.Key).ToList();
             var points = sortedDates.Select(kvp => (kvp.Key.ToString("MMM dd"), kvp.Value)).ToList();
 
-            var chart = CreateLineChart(points, "#7E57C2", 160, reportPanel?.ActualWidth ?? 0);
-            reportPanel.Children.Add(chart);
+            var chart = CreateLineChart(points, "#7E57C2", 160, ActiveReportPanel?.ActualWidth ?? 0);
+            ActiveReportPanel.Children.Add(chart);
         }
 
         // **************************************************
@@ -3213,7 +3361,8 @@ namespace FishLens_App
         //   is repeated so every page is self-identifying.
         private sealed class ReportVisualPaginator : DocumentPaginator
         {
-            private const double Margin = 48.0; // 0.5-inch margin on all sides (WPF units at 96dpi)
+            private const double Margin = 40.0; // Slightly larger report render while keeping print margins.
+            private const double RenderScale = 2.0;
 
             private readonly Size           _page;
             private readonly BitmapSource   _bitmap;    // full-height render of the report panel
@@ -3244,12 +3393,12 @@ namespace FishLens_App
                 // parent ScrollViewer, so the entire report content is captured regardless of
                 // the current scroll position shown on screen.
                 var rtb = new RenderTargetBitmap(
-                    (int)Math.Ceiling(_sourceW), (int)Math.Ceiling(sourceH),
-                    96, 96, PixelFormats.Pbgra32);
+                    (int)Math.Ceiling(_sourceW * RenderScale), (int)Math.Ceiling(sourceH * RenderScale),
+                    96 * RenderScale, 96 * RenderScale, PixelFormats.Pbgra32);
                 // Paint white background first so transparent regions print as white
                 var bg = new DrawingVisual();
                 using (var ctx = bg.RenderOpen())
-                    ctx.DrawRectangle(Brushes.White, null, new Rect(0, 0, _sourceW, sourceH));
+                    ctx.DrawRectangle(ResourceBrush("ReportPrintPageBackgroundBrush", Brushes.White), null, new Rect(0, 0, _sourceW, sourceH));
                 rtb.Render(bg);
                 rtb.Render(panel);
                 _bitmap = rtb;
@@ -3351,7 +3500,7 @@ namespace FishLens_App
                 var dv = new DrawingVisual();
                 using (var ctx = dv.RenderOpen())
                 {
-                    ctx.DrawRectangle(Brushes.White, null, new Rect(_page));
+                    ctx.DrawRectangle(ResourceBrush("ReportPrintPageBackgroundBrush", Brushes.White), null, new Rect(_page));
 
                     double drawY = Margin;
 
@@ -3384,8 +3533,8 @@ namespace FishLens_App
             {
                 int bw = _bitmap.PixelWidth;
                 int bh = _bitmap.PixelHeight;
-                int y  = Math.Max(0, (int)Math.Floor(srcY));
-                int h  = Math.Min((int)Math.Ceiling(srcH), bh - y);
+                int y  = Math.Max(0, (int)Math.Floor(srcY * RenderScale));
+                int h  = Math.Min((int)Math.Ceiling(srcH * RenderScale), bh - y);
                 if (y >= bh || h <= 0) return null;
                 return new CroppedBitmap(_bitmap, new Int32Rect(0, y, bw, h));
             }
@@ -3397,3 +3546,4 @@ namespace FishLens_App
         }
     }
 }
+

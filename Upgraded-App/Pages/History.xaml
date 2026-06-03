@@ -16,7 +16,7 @@
              invisible on teal) to WhiteBrush with reduced opacity.
         ════════════════════════════════════════════════════════════════ -->
         <Border Grid.Row="0"
-                Background="{DynamicResource PrimaryColorBrush}"
+                Background="{DynamicResource HistoryHeaderBackgroundBrush}"
                 Padding="30,25">
             <StackPanel>
                 <TextBlock Text="Reports &amp; Analytics"
@@ -44,10 +44,17 @@
             <Border Grid.Column="0"
                     Background="{DynamicResource SecondaryBackgroundBrush}"
                     BorderBrush="{DynamicResource BorderColorBrush}"
-                    BorderThickness="0,0,1,0"
-                    Padding="30,20">
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
-                              PreviewMouseWheel="FilterPanel_PreviewMouseWheel">
+                    BorderThickness="0,0,1,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <ScrollViewer Grid.Row="0"
+                                  VerticalScrollBarVisibility="Auto"
+                                  Padding="30,20"
+                                  PreviewMouseWheel="FilterPanel_PreviewMouseWheel">
                     <StackPanel>
 
                         <!-- "Filters" heading — PrimaryText reads in both themes -->
@@ -341,7 +348,7 @@
                                 Click="GenerateReportClick"
                                 Visibility="Collapsed"
                                 Background="{DynamicResource PrimaryColorBrush}"
-                                Foreground="White"
+                                Foreground="{DynamicResource OnAccentForeground}"
                                 FontSize="{DynamicResource BaseFontSize}"
                                 FontWeight="SemiBold"
                                 Padding="0,10"
@@ -372,23 +379,73 @@
                         </Button>
 
                         <Border x:Name="historyAnalysisBanner"
-                                Background="#FFF3E0"
-                                BorderBrush="#FF9800"
+                                Background="{DynamicResource ReportWarmSurfaceBrush}"
+                                BorderBrush="{DynamicResource ReportWarmBorderBrush}"
                                 BorderThickness="1"
                                 CornerRadius="6"
                                 Padding="12,8"
                                 Visibility="Collapsed">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#x26A0;" FontSize="14" Foreground="#E65100" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="&#x26A0;" FontSize="14" Foreground="{DynamicResource ReportWarmTitleBrush}" Margin="0,0,6,0" VerticalAlignment="Center"/>
                                 <TextBlock Text="Analysis in progress - report data may be incomplete."
                                            FontSize="12"
-                                           Foreground="#E65100"
+                                           Foreground="{DynamicResource ReportWarmTitleBrush}"
                                            VerticalAlignment="Center"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
-                </ScrollViewer>
+                    </ScrollViewer>
+
+                    <Border Grid.Row="1"
+                            Background="{DynamicResource SecondaryBackgroundBrush}"
+                            BorderBrush="{DynamicResource BorderColorBrush}"
+                            BorderThickness="0,1,0,0"
+                            Padding="30,14">
+                        <Button x:Name="printReportButton"
+                                Content="Print Report"
+                                Click="PrintReportClick"
+                                FontSize="{DynamicResource BaseFontSize}"
+                                FontWeight="SemiBold"
+                                Padding="0,10"
+                                Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource OnAccentForeground}"/>
+                                    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                    <Setter Property="BorderThickness" Value="1"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}"
+                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                        CornerRadius="6"
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                            <Setter Property="BorderBrush" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsEnabled" Value="False">
+                                            <Setter Property="Background" Value="{DynamicResource ReportPrintButtonDisabledBackground}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource ReportPrintButtonDisabledForeground}"/>
+                                            <Setter Property="BorderBrush" Value="{DynamicResource ReportPrintButtonDisabledBorder}"/>
+                                            <Setter Property="Cursor" Value="Arrow"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </Border>
+                </Grid>
             </Border>
 
             <!-- ═══════════════════════════════════════════════════════
@@ -412,32 +469,14 @@
 
                 <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <!-- Card top bar — matches card so there's no inset contrast clash -->
-                    <Border Grid.Row="0"
-                            Background="{DynamicResource SecondaryBackgroundBrush}"
-                            BorderBrush="{DynamicResource BorderColorBrush}"
-                            BorderThickness="0,0,0,1"
-                            Padding="20,15"
-                            CornerRadius="12,12,0,0">
-                        <Grid>
-                            <TextBlock x:Name="viewTitle"
-                                       Text="Analysis Report"
-                                       FontSize="{DynamicResource LargeFontSize}"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource PrimaryText}"
-                                       VerticalAlignment="Center"/>
-                        </Grid>
-                    </Border>
-
                     <!-- Placeholder — emoji Foreground has no effect on glyphs, so
                          opacity sits on the TextBlock itself, not a Foreground color -->
                     <StackPanel x:Name="placeholderPanel"
-                                Grid.Row="1"
+                                Grid.Row="0"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center">
                         <TextBlock Text="📊"
@@ -457,14 +496,14 @@
                     </StackPanel>
 
                     <MediaElement x:Name="videoPlayer"
-                                  Grid.Row="1"
+                                  Grid.Row="0"
                                   LoadedBehavior="Manual"
                                   Stretch="Uniform"
                                   Margin="20"
                                   Visibility="Collapsed"/>
 
                     <ScrollViewer x:Name="reportScrollViewer"
-                                  Grid.Row="1"
+                                  Grid.Row="0"
                                   VerticalScrollBarVisibility="Auto"
                                   Visibility="Collapsed"
                                   Padding="30,20"
@@ -473,83 +512,6 @@
                         </StackPanel>
                     </ScrollViewer>
 
-                    <Border x:Name="reportControls"
-                            Grid.Row="2" 
-                            Background="{DynamicResource PageBackgroundBrush}" 
-                            Padding="20,15"
-                            CornerRadius="0,0,12,12"
-                            Visibility="Collapsed">
-                        <StackPanel Orientation="Horizontal" 
-                                    HorizontalAlignment="Center">
-                            <Button Content="Export Report" 
-                                    Click="ExportReportClick"
-                                    Background="{DynamicResource PrimaryColorBrush}"
-                                    Foreground="White"
-                                    FontSize="{DynamicResource BaseFontSize}"
-                                    FontWeight="SemiBold"
-                                    Padding="20,10"
-                                    BorderThickness="0"
-                                    Cursor="Hand"
-                                    Margin="0,0,10,0">
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border Background="{TemplateBinding Background}"
-                                                            CornerRadius="6"
-                                                            Padding="{TemplateBinding Padding}">
-                                                        <ContentPresenter HorizontalAlignment="Center"
-                                                                          VerticalAlignment="Center"/>
-                                                    </Border>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                        <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
-                                            </Trigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
-
-                            <Button Content="Print Report" 
-                                    Click="PrintReportClick"
-                                    Background="{DynamicResource SecondaryBackgroundBrush}"
-                                    Foreground="{DynamicResource PrimaryColorBrush}"
-                                    BorderBrush="{DynamicResource BorderColorBrush}"
-                                    BorderThickness="1"
-                                    FontSize="{DynamicResource BaseFontSize}"
-                                    FontWeight="SemiBold"
-                                    Padding="20,10"
-                                    Cursor="Hand">
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border Background="{TemplateBinding Background}"
-                                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="6"
-                                                            Padding="{TemplateBinding Padding}">
-                                                        <ContentPresenter HorizontalAlignment="Center"
-                                                                          VerticalAlignment="Center"/>
-                                                    </Border>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                        <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
-                                            </Trigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
-                        </StackPanel>
-                    </Border>
                 </Grid>
             </Border>
 
@@ -566,7 +528,7 @@
                             Content="Generate Report" 
                             Click="GenerateReportClick"
                             Background="{DynamicResource PrimaryColorBrush}"
-                            Foreground="White"
+                            Foreground="{DynamicResource OnAccentForeground}"
                             FontSize="{DynamicResource BaseFontSize}"
                             FontWeight="SemiBold"
                             Padding="25,12"
@@ -598,8 +560,8 @@
 
                 <!-- Shown while analysis is running -->
                 <Border
-                        Background="#FFF3E0"
-                        BorderBrush="#FF9800"
+                        Background="{DynamicResource ReportWarmSurfaceBrush}"
+                        BorderBrush="{DynamicResource ReportWarmBorderBrush}"
                         BorderThickness="1"
                         CornerRadius="6"
                         Padding="12,8"
@@ -607,9 +569,9 @@
                         VerticalAlignment="Center"
                         Visibility="Collapsed">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#x26A0;" FontSize="14" Foreground="#E65100" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="&#x26A0;" FontSize="14" Foreground="{DynamicResource ReportWarmTitleBrush}" Margin="0,0,6,0" VerticalAlignment="Center"/>
                         <TextBlock Text="Analysis in progress — report data may be incomplete."
-                                   FontSize="12" Foreground="#E65100" VerticalAlignment="Center"/>
+                                   FontSize="12" Foreground="{DynamicResource ReportWarmTitleBrush}" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
             </Grid>

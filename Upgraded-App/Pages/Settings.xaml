@@ -17,7 +17,7 @@
             <TextBlock Text="Settings"
                        FontSize="{DynamicResource LargeHeaderFontSize}"
                        FontWeight="SemiBold"
-                       Foreground="{DynamicResource OnAccentForeground}"/>
+                       Foreground="{DynamicResource HeaderForegroundBrush}"/>
         </Border>
 
         <ScrollViewer Grid.Row="1"
@@ -29,8 +29,8 @@
                         HorizontalAlignment="Center">
 
                 <Border x:Name="analysisWarningBanner"
-                        Background="#FFF3E0"
-                        BorderBrush="#FF9800"
+                        Background="{DynamicResource WarningBackgroundBrush}"
+                        BorderBrush="{DynamicResource WarningBorderBrush}"
                         BorderThickness="1"
                         CornerRadius="8"
                         Padding="16,12"
@@ -39,12 +39,12 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#x26A0;"
                                    FontSize="16"
-                                   Foreground="#E65100"
+                                   Foreground="{DynamicResource WarningTextBrush}"
                                    Margin="0,0,8,0"
                                    VerticalAlignment="Center"/>
                         <TextBlock Text="Analysis is currently running. Run, location, and settings changes are locked until the analysis completes or is cancelled."
                                    FontSize="13"
-                                   Foreground="#E65100"
+                                   Foreground="{DynamicResource WarningTextBrush}"
                                    TextWrapping="Wrap"
                                    VerticalAlignment="Center"/>
                     </StackPanel>
@@ -130,7 +130,7 @@
                         Padding="20"
                         Margin="0,0,0,30">
                     <StackPanel>
-                        <TextBlock Text="Create and manage seasonal monitoring runs. Each run stores its own fish and no-fish records."
+                        <TextBlock Text="Create and manage seasonal monitoring runs. Each run stores its own fish records."
                                    FontSize="{DynamicResource BaseFontSize}"
                                    Foreground="{DynamicResource SecondaryText}"
                                    Margin="0,0,0,15"
@@ -162,7 +162,7 @@
                                     Height="36"
                                     Padding="14,0"
                                     FontSize="{DynamicResource BaseFontSize}"
-                                    Background="{DynamicResource HeaderBackground}"
+                                    Background="{DynamicResource PrimaryColorBrush}"
                                     Foreground="{DynamicResource OnAccentForeground}"
                                     BorderThickness="0"
                                     Margin="0,0,8,0"
@@ -174,8 +174,8 @@
                                     Height="36"
                                     Padding="14,0"
                                     FontSize="{DynamicResource BaseFontSize}"
-                                    Background="#C62828"
-                                    Foreground="White"
+                                    Background="{DynamicResource DestructiveButtonBackground}"
+                                    Foreground="{DynamicResource DestructiveButtonForeground}"
                                     BorderThickness="0"
                                     Click="EndRun_Click"/>
                         </Grid>
@@ -207,7 +207,7 @@
                                     Height="36"
                                     Padding="14,0"
                                     FontSize="{DynamicResource BaseFontSize}"
-                                    Background="{DynamicResource HeaderBackground}"
+                                    Background="{DynamicResource PrimaryColorBrush}"
                                     Foreground="{DynamicResource OnAccentForeground}"
                                     BorderThickness="0"
                                     Click="CreateRun_Click"/>
@@ -272,10 +272,11 @@
 
                             <Button Grid.Column="2"
                                     Content="Add Location"
+                                    Style="{StaticResource SettingsButton}"
                                     Height="36"
                                     Padding="14,0"
                                     FontSize="{DynamicResource BaseFontSize}"
-                                    Background="{DynamicResource HeaderBackground}"
+                                    Background="{DynamicResource PrimaryColorBrush}"
                                     Foreground="{DynamicResource OnAccentForeground}"
                                     BorderThickness="0"
                                     Click="AddLocation_Click"/>
@@ -358,7 +359,7 @@
                 <Button x:Name="saveSettingsButton"
                         Content="Save Settings"
                         Click="SaveSettings_Click"
-                        Background="{DynamicResource HeaderBackground}"
+                        Background="{DynamicResource PrimaryColorBrush}"
                         Foreground="{DynamicResource OnAccentForeground}"
                         FontSize="{DynamicResource BaseFontSize}"
                         FontWeight="SemiBold"
@@ -371,6 +372,8 @@
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
                                         <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
                                                 CornerRadius="6"
                                                 Padding="{TemplateBinding Padding}">
                                             <ContentPresenter HorizontalAlignment="Center"
@@ -382,6 +385,12 @@
                             <Style.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
                                     <Setter Property="Opacity" Value="0.8"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Background" Value="{DynamicResource AccentButtonDisabledBackground}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource AccentButtonDisabledForeground}"/>
+                                    <Setter Property="BorderBrush" Value="{DynamicResource AccentButtonDisabledForeground}"/>
+                                    <Setter Property="BorderThickness" Value="1"/>
                                 </Trigger>
                             </Style.Triggers>
                         </Style>

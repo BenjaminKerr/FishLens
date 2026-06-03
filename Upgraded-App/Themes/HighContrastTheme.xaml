@@ -1,28 +1,105 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <SolidColorBrush x:Key="WindowBackground" Color="#0A0F0F"/>
+    <SolidColorBrush x:Key="WindowBackground" Color="#101818"/>
     <SolidColorBrush x:Key="HeaderBackground" Color="#0A0F0F"/>
-    <SolidColorBrush x:Key="CardBackground" Color="#111818"/>
+    <SolidColorBrush x:Key="CardBackground" Color="#162020"/>
     <SolidColorBrush x:Key="PrimaryText" Color="#00E5CC"/>
     <SolidColorBrush x:Key="SecondaryText" Color="#6DB8B0"/>
     <SolidColorBrush x:Key="AccentBrush" Color="#00E5CC"/>
     <SolidColorBrush x:Key="BorderBrush" Color="#00E5CC"/>
+    <SolidColorBrush x:Key="HeaderForegroundBrush" Color="#00E5CC"/>
 
     <!-- Aliases -->
-    <SolidColorBrush x:Key="PageBackgroundBrush" Color="#0A0F0F"/>
+    <SolidColorBrush x:Key="PageBackgroundBrush" Color="#101818"/>
     <SolidColorBrush x:Key="PrimaryColorBrush" Color="#00E5CC"/>
     <SolidColorBrush x:Key="SecondaryTextBrush" Color="#6DB8B0"/>
     <SolidColorBrush x:Key="PrimaryTextBrush" Color="#00E5CC"/>
     <SolidColorBrush x:Key="BorderColorBrush" Color="#00E5CC"/>
-    <SolidColorBrush x:Key="SecondaryBackgroundBrush" Color="#111818"/>
+    <SolidColorBrush x:Key="SecondaryBackgroundBrush" Color="#162020"/>
     <SolidColorBrush x:Key="HoverBackgroundBrush" Color="#00B3A0"/>
     <SolidColorBrush x:Key="OnAccentForeground" Color="#051210"/>
-    <SolidColorBrush x:Key="WhiteBrush" Color="#00E5CC"/>
+    <SolidColorBrush x:Key="WhiteBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="WarningBrush" Color="#FF9F1C"/>
+    <SolidColorBrush x:Key="SuccessBrush" Color="#00E5CC"/>
+    <SolidColorBrush x:Key="AccentActionButtonBackground" Color="#164B47"/>
+    <SolidColorBrush x:Key="AccentActionButtonHoverBackground" Color="#1C615C"/>
+    <SolidColorBrush x:Key="AccentActionButtonForeground" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="NeutralActionButtonBackground" Color="#172D2D"/>
+    <SolidColorBrush x:Key="NeutralActionButtonHoverBackground" Color="#214242"/>
+    <SolidColorBrush x:Key="HistoryHeaderBackgroundBrush" Color="#006A61"/>
+    <SolidColorBrush x:Key="TrackNavigatorButtonBackground" Color="#143030"/>
+    <SolidColorBrush x:Key="TrackNavigatorButtonForeground" Color="#00E5CC"/>
+    <SolidColorBrush x:Key="TrackNavigatorButtonDisabledBackground" Color="#1C4642"/>
+    <SolidColorBrush x:Key="TrackNavigatorButtonDisabledForeground" Color="#9EDBD5"/>
+    <SolidColorBrush x:Key="SettingsSuccessTextBrush" Color="#6DFF8A"/>
+    <SolidColorBrush x:Key="DestructiveButtonBackground" Color="#FF6B6B"/>
+    <SolidColorBrush x:Key="DestructiveButtonForeground" Color="#0A0F0F"/>
     <!-- Action button disabled-state colors -->
-    <SolidColorBrush x:Key="AccentButtonDisabledBackground" Color="#0D2E2E"/>
-    <SolidColorBrush x:Key="AccentButtonDisabledForeground" Color="#2A6B60"/>
-    <SolidColorBrush x:Key="NeutralButtonDisabledBackground" Color="#1A2222"/>
-    <SolidColorBrush x:Key="NeutralButtonDisabledForeground" Color="#3A5050"/>
+    <SolidColorBrush x:Key="AccentButtonDisabledBackground" Color="#123A38"/>
+    <SolidColorBrush x:Key="AccentButtonDisabledForeground" Color="#88FFF2"/>
+    <SolidColorBrush x:Key="ReportPrintButtonDisabledBackground" Color="#003C38"/>
+    <SolidColorBrush x:Key="ReportPrintButtonDisabledForeground" Color="#8FFCF0"/>
+    <SolidColorBrush x:Key="ReportPrintButtonDisabledBorder" Color="#00A896"/>
+    <SolidColorBrush x:Key="NeutralButtonDisabledBackground" Color="#142626"/>
+    <SolidColorBrush x:Key="NeutralButtonDisabledForeground" Color="#8AC7C0"/>
     <SolidColorBrush x:Key="SidebarBorder" Color="#1A3333"/>
     <SolidColorBrush x:Key="SidebarBackground" Color="#0D1A1A"/>
+    <SolidColorBrush x:Key="SidebarTextBrush" Color="#00E5CC"/>
+    <SolidColorBrush x:Key="SidebarMutedTextBrush" Color="#6DB8B0"/>
+    <SolidColorBrush x:Key="SidebarHoverBackgroundBrush" Color="#163636"/>
+    <SolidColorBrush x:Key="NavButtonIconBackgroundBrush" Color="#00E5CC"/>
+    <SolidColorBrush x:Key="NavButtonIconForegroundBrush" Color="#051210"/>
+
+    <!-- Semantic analysis colors -->
+    <SolidColorBrush x:Key="DirectionUpstreamBrush" Color="#4DA3FF"/>
+    <SolidColorBrush x:Key="DirectionDownstreamBrush" Color="#FF6B6B"/>
+    <SolidColorBrush x:Key="DirectionUnknownBrush" Color="#FF9F1C"/>
+    <SolidColorBrush x:Key="ScrubMarkerOutlineBrush" Color="#0A0F0F"/>
+
+    <!-- Video library and confidence visuals -->
+    <SolidColorBrush x:Key="VideoButtonBackground" Color="#111818"/>
+    <SolidColorBrush x:Key="VideoButtonForeground" Color="#00E5CC"/>
+    <SolidColorBrush x:Key="VideoButtonBorderBrush" Color="#00E5CC"/>
+    <SolidColorBrush x:Key="VideoButtonHoverBackground" Color="#163636"/>
+    <SolidColorBrush x:Key="VideoButtonHoverForeground" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="VideoButtonPressedBackground" Color="#1F4A4A"/>
+    <SolidColorBrush x:Key="VideoButtonLowBackground" Color="#2A1518"/>
+    <SolidColorBrush x:Key="VideoButtonLowForeground" Color="#FF6B6B"/>
+    <SolidColorBrush x:Key="VideoButtonLowHoverBackground" Color="#7A1F2A"/>
+    <SolidColorBrush x:Key="VideoButtonLowHoverForeground" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="VideoButtonLowPressedBackground" Color="#9C2734"/>
+    <SolidColorBrush x:Key="LibraryConfidenceHighBrush" Color="#6DFF8A"/>
+    <SolidColorBrush x:Key="LibraryConfidenceMidBrush" Color="#FF9F1C"/>
+    <SolidColorBrush x:Key="LibraryConfidenceLowBrush" Color="#FF6B6B"/>
+    <SolidColorBrush x:Key="LibraryLowConfidenceBackground" Color="#332020"/>
+    <SolidColorBrush x:Key="ConfidenceRingHighBrush" Color="#6DFF8A"/>
+    <SolidColorBrush x:Key="ConfidenceRingMidBrush" Color="#FF9F1C"/>
+    <SolidColorBrush x:Key="ConfidenceRingLowBrush" Color="#FF6B6B"/>
+    <SolidColorBrush x:Key="CheckBoxBackgroundBrush" Color="#0A0F0F"/>
+    <SolidColorBrush x:Key="CheckBoxCheckForegroundBrush" Color="#00E5CC"/>
+
+    <!-- Report semantic roles -->
+    <SolidColorBrush x:Key="ReportTitleTextBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="ReportBodyTextBrush" Color="#E8FFFF"/>
+    <SolidColorBrush x:Key="ReportSecondaryTextBrush" Color="#9EDBD5"/>
+    <SolidColorBrush x:Key="ReportMutedTextBrush" Color="#75A8A2"/>
+    <SolidColorBrush x:Key="ReportSurfaceBrush" Color="#162020"/>
+    <SolidColorBrush x:Key="ReportSurfaceAltBrush" Color="#101818"/>
+    <SolidColorBrush x:Key="ReportBorderBrush" Color="#00A896"/>
+    <SolidColorBrush x:Key="ReportGridBrush" Color="#255252"/>
+    <SolidColorBrush x:Key="ReportAxisBrush" Color="#62C9C0"/>
+    <SolidColorBrush x:Key="ReportTableHeaderBrush" Color="#00E5CC"/>
+    <SolidColorBrush x:Key="ReportTableHeaderBorderBrush" Color="#88FFF2"/>
+    <SolidColorBrush x:Key="ReportOnTableHeaderBrush" Color="#051210"/>
+    <SolidColorBrush x:Key="ReportBarTrackBrush" Color="#DCE7EC"/>
+    <SolidColorBrush x:Key="ReportInfoBrush" Color="#4DA3FF"/>
+    <SolidColorBrush x:Key="ReportSpecialBrush" Color="#C792FF"/>
+    <SolidColorBrush x:Key="ReportTimeBrush" Color="#FF9F1C"/>
+    <SolidColorBrush x:Key="ReportSecondaryInfoBrush" Color="#26D9FF"/>
+    <SolidColorBrush x:Key="ReportConfidenceHighBrush" Color="#6DFF8A"/>
+    <SolidColorBrush x:Key="ReportConfidenceMidBrush" Color="#FF9F1C"/>
+    <SolidColorBrush x:Key="ReportWarmSurfaceBrush" Color="#2A2012"/>
+    <SolidColorBrush x:Key="ReportWarmBorderBrush" Color="#FF9F1C"/>
+    <SolidColorBrush x:Key="ReportWarmTitleBrush" Color="#FF9F1C"/>
+    <SolidColorBrush x:Key="ReportWarmTextBrush" Color="#FFE8A3"/>
 </ResourceDictionary>

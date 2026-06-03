@@ -166,6 +166,22 @@ namespace FishLens_App
             catch { /* non-critical */ }
         }
 
+        public void ResetSessionCsvFiles()
+        {
+            try
+            {
+                NormalizeConfigurationState();
+                foreach (var run in Configuration.Runs.Where(r => !string.IsNullOrWhiteSpace(r.Name)))
+                {
+                    string runFolder = Path.Combine(GetProjectRoot(), "All History", run.Name);
+                    Directory.CreateDirectory(runFolder);
+                    File.WriteAllText(Path.Combine(runFolder, "session_fish.csv"), FishCsvHeader + Environment.NewLine);
+                    File.WriteAllText(Path.Combine(runFolder, "session_no_fish.csv"), NoFishCsvHeader + Environment.NewLine);
+                }
+            }
+            catch { /* non-critical */ }
+        }
+
         private void EnsureRunStorageExists(string runName, bool isDebugRun)
         {
             string runFolder = Path.Combine(GetProjectRoot(), "All History", runName);

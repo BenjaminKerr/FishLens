@@ -429,7 +429,7 @@ namespace FishLens_App
                 Text = "Confirm Delete",
                 FontSize = 18,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = (System.Windows.Media.Brush)Application.Current.Resources["OnAccentForeground"]
+                Foreground = (System.Windows.Media.Brush)Application.Current.Resources["HeaderForegroundBrush"]
             };
             Grid.SetRow(headerBorder, 0);
             rootGrid.Children.Add(headerBorder);
@@ -502,8 +502,8 @@ namespace FishLens_App
 
             var deleteBtn = CreateThemedDialogButton(
                 "Delete User",
-                System.Windows.Media.Brushes.IndianRed,
-                System.Windows.Media.Brushes.White,
+                (System.Windows.Media.Brush)Application.Current.Resources["DestructiveButtonBackground"],
+                (System.Windows.Media.Brush)Application.Current.Resources["DestructiveButtonForeground"],
                 showBorder: false);
             deleteBtn.Width = 120;
             deleteBtn.IsEnabled = false;
