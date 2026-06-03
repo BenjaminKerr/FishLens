@@ -424,7 +424,7 @@ namespace FishLens_App
 
                 // User settings: FastMode, HighContrast, LargeText, ActiveRunOverride
                 string userActiveRunOverride = null;
-                using (var cmd = new SqlCommand("kaharra.GetUserSettings", conn))
+                using (var cmd = new SqlCommand($"{DatabaseConfig.Schema}.GetUserSettings", conn))
                 {
                     cmd.CommandType = System.Data.CommandType.StoredProcedure;
                     cmd.Parameters.AddWithValue("@pUserId", app.CurrentUserId);
@@ -441,7 +441,7 @@ namespace FishLens_App
 
                 // Org settings: ConfidenceThreshold, ActiveRun
                 string orgActiveRun = null;
-                using (var orgCmd = new SqlCommand("kaharra.GetOrganizationSettings", conn))
+                using (var orgCmd = new SqlCommand($"{DatabaseConfig.Schema}.GetOrganizationSettings", conn))
                 {
                     orgCmd.CommandType = System.Data.CommandType.StoredProcedure;
                     orgCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
@@ -461,7 +461,7 @@ namespace FishLens_App
 
                 // Org Runs list
                 var runs = new List<RunEntry>();
-                using (var runsCmd = new SqlCommand("kaharra.GetOrganizationRuns", conn))
+                using (var runsCmd = new SqlCommand($"{DatabaseConfig.Schema}.GetOrganizationRuns", conn))
                 {
                     runsCmd.CommandType = System.Data.CommandType.StoredProcedure;
                     runsCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
@@ -480,7 +480,7 @@ namespace FishLens_App
 
                 // Org Locations list
                 var locations = new List<LocationEntry>();
-                using (var locsCmd = new SqlCommand("kaharra.GetOrganizationLocations", conn))
+                using (var locsCmd = new SqlCommand($"{DatabaseConfig.Schema}.GetOrganizationLocations", conn))
                 {
                     locsCmd.CommandType = System.Data.CommandType.StoredProcedure;
                     locsCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
@@ -522,7 +522,7 @@ namespace FishLens_App
             }
             else
             {
-                using var orgCmd = new SqlCommand("kaharra.GetOrganizationSettings", conn);
+                using var orgCmd = new SqlCommand($"{DatabaseConfig.Schema}.GetOrganizationSettings", conn);
                 orgCmd.CommandType = System.Data.CommandType.StoredProcedure;
                 orgCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
                 using var orgReader = orgCmd.ExecuteReader();
@@ -534,7 +534,7 @@ namespace FishLens_App
                 ? null 
                 : _config.ActiveRun;
 
-            using (var cmd = new SqlCommand("kaharra.SaveUserSettings", conn))
+            using (var cmd = new SqlCommand($"{DatabaseConfig.Schema}.SaveUserSettings", conn))
             {
                 cmd.CommandType = System.Data.CommandType.StoredProcedure;
                 cmd.Parameters.AddWithValue("@pUserId", app.CurrentUserId);
@@ -542,12 +542,13 @@ namespace FishLens_App
                 cmd.Parameters.AddWithValue("@pHighContrastMode", _config.HighContrastMode);
                 cmd.Parameters.AddWithValue("@pLargeText", _config.LargeText);
                 cmd.Parameters.AddWithValue("@pActiveRunOverride", (object)userOverride ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@pActiveLocation", (object)_config.ActiveLocation ?? DBNull.Value);
                 cmd.ExecuteNonQuery();
             }
 
             if (app.IsAdmin)
             {
-                using var saveOrgCmd = new SqlCommand("kaharra.SaveOrganizationSettings", conn);
+                using var saveOrgCmd = new SqlCommand($"{DatabaseConfig.Schema}.SaveOrganizationSettings", conn);
                 saveOrgCmd.CommandType = System.Data.CommandType.StoredProcedure;
                 saveOrgCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
                 saveOrgCmd.Parameters.AddWithValue("@pConfidenceThreshold", _config.ConfidenceThreshold);
@@ -566,7 +567,7 @@ namespace FishLens_App
             {
                 using var conn = new SqlConnection(app.connectionString);
                 conn.Open();
-                using var cmd = new SqlCommand("kaharra.AddOrganizationRun", conn);
+                using var cmd = new SqlCommand($"{DatabaseConfig.Schema}.AddOrganizationRun", conn);
                 cmd.CommandType = System.Data.CommandType.StoredProcedure;
                 cmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
                 cmd.Parameters.AddWithValue("@pName", name);
@@ -588,7 +589,7 @@ namespace FishLens_App
             {
                 using var conn = new SqlConnection(app.connectionString);
                 conn.Open();
-                using var cmd = new SqlCommand("kaharra.UpdateOrganizationRun", conn);
+                using var cmd = new SqlCommand($"{DatabaseConfig.Schema}.UpdateOrganizationRun", conn);
                 cmd.CommandType = System.Data.CommandType.StoredProcedure;
                 cmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
                 cmd.Parameters.AddWithValue("@pName", name);
@@ -610,7 +611,7 @@ namespace FishLens_App
             {
                 using var conn = new SqlConnection(app.connectionString);
                 conn.Open();
-                using var cmd = new SqlCommand("kaharra.AddOrganizationLocation", conn);
+                using var cmd = new SqlCommand($"{DatabaseConfig.Schema}.AddOrganizationLocation", conn);
                 cmd.CommandType = System.Data.CommandType.StoredProcedure;
                 cmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
                 cmd.Parameters.AddWithValue("@pName", name);
@@ -632,7 +633,7 @@ namespace FishLens_App
             {
                 using var conn = new SqlConnection(app.connectionString);
                 conn.Open();
-                using var cmd = new SqlCommand("kaharra.DeleteOrganizationLocation", conn);
+                using var cmd = new SqlCommand($"{DatabaseConfig.Schema}.DeleteOrganizationLocation", conn);
                 cmd.CommandType = System.Data.CommandType.StoredProcedure;
                 cmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
                 cmd.Parameters.AddWithValue("@pName", name);

@@ -548,32 +548,18 @@ namespace FishLens_App
         // **************************************************
         // Function: GetUpstreamDirectionForActiveLocation
         // Description: Returns "left" or "right" based on the UpstreamDirection of the
-        //              currently active location stored in appsettings.json
+        //              currently active location, read from app.Configuration (populated from DB at sign-in).
         // **************************************************
         private string GetUpstreamDirectionForActiveLocation()
         {
             try
             {
-                string activeLocation = (Application.Current as App)?.ActiveLocation ?? "Unknown";
-                string configPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
-                if (!File.Exists(configPath)) return "left";
-
-                using var stream = File.OpenRead(configPath);
-                using var doc = JsonDocument.Parse(stream);
-                var root = doc.RootElement;
-
-                if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var locEl in locsEl.EnumerateArray())
-                    {
-                        if (locEl.TryGetProperty("Name", out var nEl) &&
-                            nEl.GetString()?.Equals(activeLocation, StringComparison.OrdinalIgnoreCase) == true &&
-                            locEl.TryGetProperty("UpstreamDirection", out var dEl))
-                        {
-                            return dEl.GetString() ?? "left";
-                        }
-                    }
-                }
+                var app = Application.Current as App;
+                string activeLocation = app?.ActiveLocation ?? "Unknown";
+                var entry = app?.Configuration?.Locations
+                    .FirstOrDefault(l => string.Equals(l.Name, activeLocation, StringComparison.OrdinalIgnoreCase));
+                if (entry != null)
+                    return entry.UpstreamDirection ?? "left";
             }
             catch { /* fall through to default */ }
             return "left";
@@ -582,24 +568,20 @@ namespace FishLens_App
         // **************************************************
         // Function: LoadUpstreamDirectionMap
         // Description: Returns a dictionary of location name -> upstream direction ("left"/"right")
-        //              loaded from appsettings.json. Used for direction-flip logic on location change.
+        //              read from app.Configuration (populated from DB at sign-in).
         // **************************************************
         private Dictionary<string, string> LoadUpstreamDirectionMap()
         {
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             try
             {
-                string configPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
-                if (!File.Exists(configPath)) return map;
-                using var stream = File.OpenRead(configPath);
-                using var doc = JsonDocument.Parse(stream);
-                var root = doc.RootElement;
-                if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == JsonValueKind.Array)
+                var locations = (Application.Current as App)?.Configuration?.Locations;
+                if (locations != null)
                 {
-                    foreach (var locEl in locsEl.EnumerateArray())
+                    foreach (var loc in locations)
                     {
-                        if (locEl.TryGetProperty("Name", out var nEl) && locEl.TryGetProperty("UpstreamDirection", out var dEl))
-                            map[nEl.GetString() ?? ""] = dEl.GetString() ?? "left";
+                        if (!string.IsNullOrWhiteSpace(loc.Name))
+                            map[loc.Name] = loc.UpstreamDirection ?? "left";
                     }
                 }
             }
@@ -609,37 +591,25 @@ namespace FishLens_App
 
         // **************************************************
         // Function: PopulateLocationDropdown
-        // Description: Loads named locations from appsettings.json into the header ComboBox
+        // Description: Loads named locations from app.Configuration (populated from DB at sign-in)
+        //              into the header ComboBox.
         // **************************************************
         private void PopulateLocationDropdown()
         {
             try
             {
-                string configPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
-                var locationNames = new List<string>();
-                string activeLocation = "Unknown";
+                var app = Application.Current as App;
+                if (app == null) return;
 
-                if (File.Exists(configPath))
-                {
-                    using var stream = File.OpenRead(configPath);
-                    using var doc = JsonDocument.Parse(stream);
-                    var root = doc.RootElement;
-
-                    if (root.TryGetProperty("ActiveLocation", out var alEl) && alEl.ValueKind == JsonValueKind.String)
-                        activeLocation = alEl.GetString() ?? "Unknown";
-
-                    if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var locEl in locsEl.EnumerateArray())
-                        {
-                            if (locEl.TryGetProperty("Name", out var nEl) && nEl.ValueKind == JsonValueKind.String)
-                                locationNames.Add(nEl.GetString());
-                        }
-                    }
-                }
+                var locationNames = app.Configuration?.Locations
+                    .Select(l => l.Name)
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .ToList() ?? new List<string>();
 
                 if (locationNames.Count == 0)
                     locationNames.Add("Unknown");
+
+                string activeLocation = app.ActiveLocation ?? "Unknown";
 
                 // Suppress SelectionChanged while populating
                 locationDropdown.SelectionChanged -= LocationDropdown_SelectionChanged;
@@ -647,10 +617,9 @@ namespace FishLens_App
                 locationDropdown.SelectedItem = locationNames.Contains(activeLocation) ? activeLocation : locationNames[0];
                 locationDropdown.SelectionChanged += LocationDropdown_SelectionChanged;
 
-                // Keep App in sync
-                var app = Application.Current as App;
-                if (app != null)
-                    app.ActiveLocation = locationDropdown.SelectedItem as string ?? "Unknown";
+                // Keep App in sync with whatever was actually selected
+                app.ActiveLocation = locationDropdown.SelectedItem as string ?? "Unknown";
+                app.Configuration.ActiveLocation = app.ActiveLocation;
             }
             catch { /* non-critical */ }
         }
@@ -679,30 +648,19 @@ namespace FishLens_App
 
             var app = Application.Current as App;
             if (app != null)
+            {
                 app.ActiveLocation = selected;
+                if (app.Configuration != null)
+                    app.Configuration.ActiveLocation = selected;
+            }
 
-            // Persist to JSON so next startup remembers the choice
+            // Persist active location to JSON as a startup fallback
             try
             {
                 string configPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
-                if (!File.Exists(configPath)) return;
-
-                string json = File.ReadAllText(configPath);
-                using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
-
-                // Rebuild the JSON with the updated ActiveLocation
-                var dict = new System.Collections.Generic.Dictionary<string, object>();
-                foreach (var prop in root.EnumerateObject())
-                {
-                    if (prop.Name == "ActiveLocation")
-                        dict[prop.Name] = selected;
-                    else
-                        dict[prop.Name] = prop.Value.Clone();
-                }
-
+                var data = new System.Collections.Generic.Dictionary<string, string> { ["ActiveLocation"] = selected };
                 var options = new JsonSerializerOptions { WriteIndented = true };
-                File.WriteAllText(configPath, JsonSerializer.Serialize(dict, options));
+                File.WriteAllText(configPath, JsonSerializer.Serialize(data, options));
             }
             catch { /* non-critical */ }
         }
@@ -1799,8 +1757,9 @@ namespace FishLens_App
 
             if (!File.Exists(csvPath))
             {
+                bool isNoRun = string.IsNullOrWhiteSpace(effectiveRun);
                 bool isDebug = effectiveRun.Equals("debug", StringComparison.OrdinalIgnoreCase);
-                if (!isDebug)
+                if (!isNoRun && !isDebug)
                     MessageBox.Show("Analysis data file not found.", "Error",
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                 return new List<FishLens_App.Models.Video> { new FishLens_App.Models.Video { Name = videoFileName, VideoFilePath = videoFilePath, Run = effectiveRun } };

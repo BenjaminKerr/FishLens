@@ -335,7 +335,7 @@ namespace FishLens_App
                 using (SqlConnection conn = new SqlConnection((Application.Current as App).connectionString))
                 {
                     conn.Open();
-                    using (SqlCommand cmd = new SqlCommand("kaharra.AddUser", conn))
+                    using (SqlCommand cmd = new SqlCommand($"{DatabaseConfig.Schema}.AddUser", conn))
                     {
                         cmd.CommandType = System.Data.CommandType.StoredProcedure;
                         cmd.Parameters.AddWithValue("@pUser", username);
@@ -369,7 +369,7 @@ namespace FishLens_App
             {
                 using var conn = new System.Data.SqlClient.SqlConnection(app.connectionString);
                 conn.Open();
-                using var cmd = new System.Data.SqlClient.SqlCommand("kaharra.DeleteUser", conn);
+                using var cmd = new System.Data.SqlClient.SqlCommand($"{DatabaseConfig.Schema}.DeleteUser", conn);
                 cmd.CommandType = System.Data.CommandType.StoredProcedure;
                 cmd.Parameters.AddWithValue("@pUserId", targetUserId);
                 cmd.Parameters.AddWithValue("@pRequestingUserId", app.CurrentUserId);
@@ -601,9 +601,9 @@ namespace FishLens_App
                 {
                     conn.Open();
 
-                    string sql = @"
+                    string sql = $@"
                             SELECT Id, Username, Email, RoleId
-                            FROM [kaharra].[kaharra].[FishLensUsers]
+                            FROM [{DatabaseConfig.Schema}].[FishLensUsers]
                             WHERE OrganizationId = @orgId
                             ORDER BY Username";
                         
@@ -653,7 +653,7 @@ namespace FishLens_App
                 using (SqlConnection conn = new SqlConnection((Application.Current as App).connectionString))
                 {
                     conn.Open();
-                    using (SqlCommand cmd = new SqlCommand("SELECT Id, Name FROM Roles", conn))
+                    using (SqlCommand cmd = new SqlCommand($"SELECT Id, Name FROM [{DatabaseConfig.Schema}].[Roles]", conn))
                     using (SqlDataReader reader = cmd.ExecuteReader())
                     {
                         var roles = new List<Role>();
@@ -685,8 +685,8 @@ namespace FishLens_App
                 using (SqlConnection conn = new SqlConnection((Application.Current as App).connectionString))
                 {
                     conn.Open();
-                    string sql = @"
-                            UPDATE [kaharra].[kaharra].[FishLensUsers]
+                    string sql = $@"
+                            UPDATE [{DatabaseConfig.Schema}].[FishLensUsers]
                             SET Username = @user, RoleId = @roleid, Email = @email
                             WHERE Id = @userid";
 

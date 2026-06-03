@@ -17,11 +17,7 @@ namespace FishLens_App
         // Private sets so they aren't accidentally replaced with new instances
         public CheckBoxToggle CheckBoxes { get; private set; }
 
-        public string connectionString =
-        "server=aura.cset.oit.edu,5433; " +
-        "database=kaharra; " +
-        "UID=kaharra; " +
-        "password=kaharra";
+        public string connectionString = DatabaseConfig.ConnectionString;
         public AppConfiguration Configuration { get; private set; }
         public int CurrentUserId { get; set; }
         public string CurrentUsername { get; set; }
@@ -67,6 +63,21 @@ namespace FishLens_App
             base.OnStartup(e);
             CheckBoxes = new CheckBoxToggle();
             Configuration = new AppConfiguration();
+
+            // Ensure all FishLens tables, procedures, and seed data exist in the configured schema.
+            // On an existing DB this is a fast no-op; on a fresh DB it creates everything automatically.
+            try
+            {
+                DbBootstrap.EnsureSchemaExists();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Database setup error:\n{ex.Message}\n\nCheck DatabaseConfig.cs and verify the server is reachable.",
+                    "FishLens — Database Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
 
             // Startup only pulls JSON-backed runtime settings. User/org visual settings
             // like High Contrast and Large Text are populated from the database at sign-in.

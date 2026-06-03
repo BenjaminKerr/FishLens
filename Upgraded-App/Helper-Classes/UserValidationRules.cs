@@ -59,7 +59,7 @@ namespace FishLens_App
         public static bool OrgNameExists(SqlConnection conn, string orgName)
         {
             using (SqlCommand cmd = new SqlCommand(
-                "SELECT COUNT(*) FROM [kaharra].[Organizations] WHERE Name = @name", conn))
+                $"SELECT COUNT(*) FROM [{DatabaseConfig.Schema}].[Organizations] WHERE Name = @name", conn))
             {
                 cmd.Parameters.AddWithValue("@name", orgName);
                 return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
@@ -73,8 +73,8 @@ namespace FishLens_App
         public static bool UsernameExists(SqlConnection conn, string username, int excludeUserId = -1)
         {
             string sql = excludeUserId == -1
-                ? "SELECT COUNT(*) FROM [kaharra].[FishLensUsers] WHERE Username = @user"
-                : "SELECT COUNT(*) FROM [kaharra].[FishLensUsers] WHERE Username = @user AND Id != @id";
+                ? $"SELECT COUNT(*) FROM [{DatabaseConfig.Schema}].[FishLensUsers] WHERE Username = @user"
+                : $"SELECT COUNT(*) FROM [{DatabaseConfig.Schema}].[FishLensUsers] WHERE Username = @user AND Id != @id";
 
             using (SqlCommand cmd = new SqlCommand(sql, conn))
             {
@@ -92,8 +92,8 @@ namespace FishLens_App
         public static bool EmailExists(SqlConnection conn, string email, int excludeUserId = -1)
         {
             string sql = excludeUserId == -1
-                ? "SELECT COUNT(*) FROM [kaharra].[FishLensUsers] WHERE Email = @email"
-                : "SELECT COUNT(*) FROM [kaharra].[FishLensUsers] WHERE Email = @email AND Id != @id";
+                ? $"SELECT COUNT(*) FROM [{DatabaseConfig.Schema}].[FishLensUsers] WHERE Email = @email"
+                : $"SELECT COUNT(*) FROM [{DatabaseConfig.Schema}].[FishLensUsers] WHERE Email = @email AND Id != @id";
 
             using (SqlCommand cmd = new SqlCommand(sql, conn))
             {

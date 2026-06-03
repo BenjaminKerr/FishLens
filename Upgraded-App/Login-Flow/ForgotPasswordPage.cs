@@ -32,7 +32,7 @@ namespace FishLens_App
                 {
                     conn.Open();
 
-                    string sql = @"SELECT Id, Email FROM [kaharra].[FishLensUsers]
+                    string sql = $@"SELECT Id, Email FROM [{DatabaseConfig.Schema}].[FishLensUsers]
                                    WHERE Username = @user";
 
                     using (SqlCommand cmd = new SqlCommand(sql, conn))
@@ -56,8 +56,8 @@ namespace FishLens_App
 
                                 string code = new Random().Next(100000, 999999).ToString();
 
-                                string insertSql = @"
-                                    INSERT INTO [kaharra].[PasswordResetTokens]
+                                string insertSql = $@"
+                                    INSERT INTO [{DatabaseConfig.Schema}].[PasswordResetTokens]
                                         (UserId, Token, ExpiresAt)
                                     VALUES
                                         (@userId, @token, @expires)";
@@ -128,8 +128,8 @@ namespace FishLens_App
                 {
                     conn.Open();
 
-                    string checkSql = @"
-                        SELECT Id FROM [kaharra].[PasswordResetTokens]
+                    string checkSql = $@"
+                        SELECT Id FROM [{DatabaseConfig.Schema}].[PasswordResetTokens]
                         WHERE UserId   = @userId
                           AND Token    = @token
                           AND ExpiresAt > GETDATE()
@@ -151,14 +151,14 @@ namespace FishLens_App
                         int tokenId = Convert.ToInt32(result);
 
                         using (SqlCommand updateCmd = new SqlCommand(
-                            @"UPDATE [kaharra].[PasswordResetTokens] SET Used = 1 WHERE Id = @id",
+                            $"UPDATE [{DatabaseConfig.Schema}].[PasswordResetTokens] SET Used = 1 WHERE Id = @id",
                             conn))
                         {
                             updateCmd.Parameters.AddWithValue("@id", tokenId);
                             updateCmd.ExecuteNonQuery();
                         }
 
-                        using (SqlCommand resetCmd = new SqlCommand("kaharra.ResetPassword", conn))
+                        using (SqlCommand resetCmd = new SqlCommand($"{DatabaseConfig.Schema}.ResetPassword", conn))
                         {
                             resetCmd.CommandType = System.Data.CommandType.StoredProcedure;
                             resetCmd.Parameters.AddWithValue("@pUserId", _resetUserId);

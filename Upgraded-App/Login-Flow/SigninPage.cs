@@ -29,7 +29,7 @@ namespace FishLens_App
                 {
                     conn.Open();
 
-                    using (SqlCommand cmd = new SqlCommand("kaharra.Unsalt", conn))
+                    using (SqlCommand cmd = new SqlCommand($"{DatabaseConfig.Schema}.Unsalt", conn))
                     {
                         cmd.CommandType = System.Data.CommandType.StoredProcedure;
                         cmd.Parameters.AddWithValue("@pUser", username);
@@ -40,8 +40,8 @@ namespace FishLens_App
                     if (success)
                     {
                         // 1. Look up user identity
-                        string sql = @"SELECT Id, Username, RoleId, OrganizationId
-                               FROM [kaharra].[FishLensUsers]
+                        string sql = $@"SELECT Id, Username, RoleId, OrganizationId
+                               FROM [{DatabaseConfig.Schema}].[FishLensUsers]
                                WHERE Username = @user";
 
                         using (SqlCommand cmd = new SqlCommand(sql, conn))
@@ -61,7 +61,7 @@ namespace FishLens_App
                         }
 
                         // 2. Load this user's saved settings from DB
-                        using (SqlCommand settingsCmd = new SqlCommand("kaharra.GetUserSettings", conn))
+                        using (SqlCommand settingsCmd = new SqlCommand($"{DatabaseConfig.Schema}.GetUserSettings", conn))
                         {
                             settingsCmd.CommandType = System.Data.CommandType.StoredProcedure;
                             settingsCmd.Parameters.AddWithValue("@pUserId", app.CurrentUserId);
@@ -88,7 +88,7 @@ namespace FishLens_App
 
 
                         // 3. Load this user's organization's shared settings
-                        using (SqlCommand orgSettingsCmd = new SqlCommand("kaharra.GetOrganizationSettings", conn))
+                        using (SqlCommand orgSettingsCmd = new SqlCommand($"{DatabaseConfig.Schema}.GetOrganizationSettings", conn))
                         {
                             orgSettingsCmd.CommandType = System.Data.CommandType.StoredProcedure;
                             orgSettingsCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
@@ -111,7 +111,7 @@ namespace FishLens_App
                         }
 
                         // 4. Load org's locations into Configuration so MainWindow's dropdown works on first load
-                        using (SqlCommand locsCmd = new SqlCommand("kaharra.GetOrganizationLocations", conn))
+                        using (SqlCommand locsCmd = new SqlCommand($"{DatabaseConfig.Schema}.GetOrganizationLocations", conn))
                         {
                             locsCmd.CommandType = System.Data.CommandType.StoredProcedure;
                             locsCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);
@@ -133,7 +133,7 @@ namespace FishLens_App
                         }
 
                         // 5. Load org's runs so the run dropdown is populated immediately
-                        using (SqlCommand runsCmd = new SqlCommand("kaharra.GetOrganizationRuns", conn))
+                        using (SqlCommand runsCmd = new SqlCommand($"{DatabaseConfig.Schema}.GetOrganizationRuns", conn))
                         {
                             runsCmd.CommandType = System.Data.CommandType.StoredProcedure;
                             runsCmd.Parameters.AddWithValue("@pOrgId", app.CurrentOrganizationId);

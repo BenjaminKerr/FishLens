@@ -822,31 +822,19 @@ namespace FishLens_App
 
         // **************************************************
         // Function: LoadLocationFilter
-        // Description: Populates the location ComboBox from appsettings.json Locations list
+        // Description: Populates the location ComboBox from app.Configuration (populated from DB at sign-in).
         private void LoadLocationFilter()
         {
             try
             {
-                string configPath = System.IO.Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
                 var names = new List<string> { "All Locations" };
-
-                if (File.Exists(configPath))
+                var locations = (Application.Current as App)?.Configuration?.Locations;
+                if (locations != null)
                 {
-                    using var stream = File.OpenRead(configPath);
-                    using var doc = System.Text.Json.JsonDocument.Parse(stream);
-                    var root = doc.RootElement;
-
-                    if (root.TryGetProperty("Locations", out var locsEl) && locsEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    foreach (var loc in locations)
                     {
-                        foreach (var locEl in locsEl.EnumerateArray())
-                        {
-                            if (locEl.TryGetProperty("Name", out var nEl) && nEl.ValueKind == System.Text.Json.JsonValueKind.String)
-                            {
-                                string name = nEl.GetString();
-                                if (!string.IsNullOrWhiteSpace(name) && !names.Contains(name))
-                                    names.Add(name);
-                            }
-                        }
+                        if (!string.IsNullOrWhiteSpace(loc.Name) && !names.Contains(loc.Name))
+                            names.Add(loc.Name);
                     }
                 }
 
@@ -963,7 +951,7 @@ namespace FishLens_App
 
         // **************************************************
         // Function: LoadRunFilter
-        // Description: Populates the run ComboBox from appsettings.json Runs
+        // Description: Populates the run ComboBox from app.Configuration (populated from DB at sign-in).
         private void LoadRunFilter()
         {
             try
@@ -971,25 +959,13 @@ namespace FishLens_App
                 // 'Current Session' always appears first after 'All History' so the user can
                 // quickly report on just the videos they have analyzed in this startup session.
                 var items = new List<string> { "All History", "Current Session" };
-                string configPath = System.IO.Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
-
-                if (File.Exists(configPath))
+                var runs = (Application.Current as App)?.Configuration?.Runs;
+                if (runs != null)
                 {
-                    using var stream = File.OpenRead(configPath);
-                    using var doc = System.Text.Json.JsonDocument.Parse(stream);
-                    var root = doc.RootElement;
-
-                    if (root.TryGetProperty("Runs", out var runsEl) && runsEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    foreach (var run in runs)
                     {
-                        foreach (var runEl in runsEl.EnumerateArray())
-                        {
-                            if (runEl.TryGetProperty("Name", out var nEl) && nEl.ValueKind == System.Text.Json.JsonValueKind.String)
-                            {
-                                string name = nEl.GetString();
-                                if (!string.IsNullOrWhiteSpace(name))
-                                    items.Add(name);
-                            }
-                        }
+                        if (!string.IsNullOrWhiteSpace(run.Name))
+                            items.Add(run.Name);
                     }
                 }
 
@@ -1151,7 +1127,7 @@ namespace FishLens_App
             {
                 using var conn = new SqlConnection(connectionString);
                 conn.Open();
-                using var cmd = new SqlCommand("kaharra.GetFishDetectionsByOrg", conn);
+                using var cmd = new SqlCommand($"{DatabaseConfig.Schema}.GetFishDetectionsByOrg", conn);
                 cmd.CommandType = System.Data.CommandType.StoredProcedure;
                 cmd.Parameters.AddWithValue("@pOrgId",        orgId);
                 cmd.Parameters.AddWithValue("@pRunName",      runName != null ? (object)runName : DBNull.Value);

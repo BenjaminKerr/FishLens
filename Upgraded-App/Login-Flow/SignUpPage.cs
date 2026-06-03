@@ -101,8 +101,8 @@ namespace FishLens_App
                 {
                     conn.Open();
 
-                    string checkSql = @"
-                        SELECT Id FROM [kaharra].[SignupVerificationTokens]
+                    string checkSql = $@"
+                        SELECT Id FROM [{DatabaseConfig.Schema}].[SignupVerificationTokens]
                         WHERE Email     = @email
                           AND Token     = @token
                           AND ExpiresAt > GETDATE()
@@ -124,7 +124,7 @@ namespace FishLens_App
                         int tokenId = Convert.ToInt32(result);
 
                         using (SqlCommand updateCmd = new SqlCommand(
-                            @"UPDATE [kaharra].[SignupVerificationTokens] SET Used = 1 WHERE Id = @id",
+                            $"UPDATE [{DatabaseConfig.Schema}].[SignupVerificationTokens] SET Used = 1 WHERE Id = @id",
                             conn))
                         {
                             updateCmd.Parameters.AddWithValue("@id", tokenId);
@@ -132,7 +132,7 @@ namespace FishLens_App
                         }
 
                         using (SqlCommand createCmd = new SqlCommand(
-                            "kaharra.CreateOrganization", conn))
+                            $"{DatabaseConfig.Schema}.CreateOrganization", conn))
                         {
                             createCmd.CommandType = System.Data.CommandType.StoredProcedure;
                             createCmd.Parameters.AddWithValue("@pOrgName", _pendingOrgName);
@@ -205,8 +205,8 @@ namespace FishLens_App
         {
             string code = new Random().Next(100000, 999999).ToString();
 
-            string insertSql = @"
-                INSERT INTO [kaharra].[SignupVerificationTokens] (Email, Token, ExpiresAt)
+            string insertSql = $@"
+                INSERT INTO [{DatabaseConfig.Schema}].[SignupVerificationTokens] (Email, Token, ExpiresAt)
                 VALUES (@email, @token, @expires)";
 
             using (SqlCommand cmd = new SqlCommand(insertSql, conn))

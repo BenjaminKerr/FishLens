@@ -149,7 +149,7 @@ namespace FishLens_App.Services
 
         private static void UpsertDetection(SqlConnection conn, Video video, int orgId, int userId)
         {
-            using var cmd = new SqlCommand("kaharra.UpsertFishDetection", conn);
+            using var cmd = new SqlCommand($"{DatabaseConfig.Schema}.UpsertFishDetection", conn);
             cmd.CommandType = System.Data.CommandType.StoredProcedure;
 
             // Normalize the two key columns so every code path produces the same strings and
