@@ -4,9 +4,9 @@
 
     <!-- Normal video button style -->
     <Style x:Key="VideoButtonNormalStyle" TargetType="Button">
-        <Setter Property="Background" Value="#F9FAFB" /> <!-- rgb(249,250,251) -->
-        <Setter Property="Foreground" Value="#374151" /> <!-- rgb(55,65,81) -->
-        <Setter Property="BorderBrush" Value="#E5E7EB" /> <!-- rgb(229,231,235) -->
+        <Setter Property="Background" Value="{DynamicResource VideoButtonBackground}" />
+        <Setter Property="Foreground" Value="{DynamicResource VideoButtonForeground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource VideoButtonBorderBrush}" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
@@ -21,11 +21,11 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="border" Property="Background" Value="#F3F4F6"/> <!-- rgb(243,244,246) -->
-                            <Setter Property="Foreground" Value="#111827"/> <!-- rgb(17,24,39) -->
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource VideoButtonHoverBackground}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource VideoButtonHoverForeground}"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="border" Property="Background" Value="#E5E7EB"/> <!-- rgb(229,231,235) -->
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource VideoButtonPressedBackground}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -35,8 +35,8 @@
 
     <!-- Low-confidence video button style -->
     <Style x:Key="VideoButtonLowConfidenceStyle" TargetType="Button" BasedOn="{StaticResource VideoButtonNormalStyle}">
-        <Setter Property="Background" Value="#FEF2F2" /> <!-- rgb(254,242,242) -->
-        <Setter Property="Foreground" Value="#B91818" /> <!-- rgb(185,28,28) -->
+        <Setter Property="Background" Value="{DynamicResource VideoButtonLowBackground}" />
+        <Setter Property="Foreground" Value="{DynamicResource VideoButtonLowForeground}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -49,11 +49,11 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="border" Property="Background" Value="#EF4444"/> <!-- rgb(239,68,68) -->
-                            <Setter Property="Foreground" Value="#FFFFFF"/> <!-- white -->
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource VideoButtonLowHoverBackground}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource VideoButtonLowHoverForeground}"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="border" Property="Background" Value="#DC2626"/> <!-- rgb(220,38,38) -->
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource VideoButtonLowPressedBackground}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

@@ -16,7 +16,7 @@
     <Window.Resources>
 
         <DataTemplate x:Key="FilledSegment">
-            <Rectangle Fill ="#40842F" Height="10"/>
+            <Rectangle Fill="{DynamicResource SuccessBrush}" Height="10"/>
         </DataTemplate>
 
         <DataTemplate x:Key="EmptySegment">
@@ -24,7 +24,7 @@
         </DataTemplate>
 
         <DataTemplate x:Key="ActiveSegment">
-            <Rectangle Fill="#E8A038" Height="10">
+            <Rectangle Fill="{DynamicResource WarningBrush}" Height="10">
                 <Rectangle.Triggers>
                     <EventTrigger RoutedEvent="Loaded">
                         <BeginStoryboard>
@@ -89,11 +89,11 @@
                                 <Canvas Width="30" Height="30">
                                     <Ellipse Width="30" Height="30"
                      Canvas.Left="0" Canvas.Top="0"
-                     Fill="{DynamicResource OnAccentForeground}"/>
+                     Fill="{DynamicResource NavButtonIconBackgroundBrush}"/>
                                     <Canvas Width="18" Height="18"
                     Canvas.Left="6" Canvas.Top="6">
                                         <Path Data="M2.25 7.125L9 2.25l6.75 4.875V15.75a0.75 0.75 0 0 1-0.75 0.75H3a0.75 0.75 0 0 1-0.75-0.75V7.125z M6.75 16.5V9h4.5v7.5"
-                      Stroke="{DynamicResource AccentBrush}"
+                      Stroke="{DynamicResource NavButtonIconForegroundBrush}"
                       StrokeThickness="1.4"
                       StrokeLineJoin="Round"
                       StrokeStartLineCap="Round"
@@ -114,23 +114,23 @@
                                 <Canvas Width="30" Height="30">
                                     <Ellipse Width="30" Height="30"
                      Canvas.Left="0" Canvas.Top="0"
-                     Fill="{DynamicResource OnAccentForeground}"/>
+                     Fill="{DynamicResource NavButtonIconBackgroundBrush}"/>
                                     <Canvas Width="18" Height="18"
                     Canvas.Left="6" Canvas.Top="6">
                                         <Path Data="M12 3h1.5a1.5 1.5 0 0 1 1.5 1.5v10.5a1.5 1.5 0 0 1-1.5 1.5H4.5A1.5 1.5 0 0 1 3 15V4.5A1.5 1.5 0 0 1 4.5 3H6"
-                      Stroke="{DynamicResource AccentBrush}"
+                      Stroke="{DynamicResource NavButtonIconForegroundBrush}"
                       StrokeThickness="1.4"
                       StrokeLineJoin="Round"
                       StrokeStartLineCap="Round"
                       StrokeEndLineCap="Round"
                       Fill="Transparent"/>
                                         <Path Data="M11.25 1.5H6.75a0.75 0.75 0 0 0-0.75 0.75v1.5a0.75 0.75 0 0 0 0.75 0.75h4.5a0.75 0.75 0 0 0 0.75-0.75v-1.5a0.75 0.75 0 0 0-0.75-0.75z"
-                      Stroke="{DynamicResource AccentBrush}"
+                      Stroke="{DynamicResource NavButtonIconForegroundBrush}"
                       StrokeThickness="1.4"
                       StrokeLineJoin="Round"
                       Fill="Transparent"/>
                                         <Path Data="M6.75 9h4.5M6.75 12h3"
-                      Stroke="{DynamicResource AccentBrush}"
+                      Stroke="{DynamicResource NavButtonIconForegroundBrush}"
                       StrokeThickness="1.4"
                       StrokeStartLineCap="Round"
                       StrokeEndLineCap="Round"
@@ -150,27 +150,27 @@
                                 <Canvas Width="30" Height="30">
                                     <Ellipse Width="30" Height="30"
                      Canvas.Left="0" Canvas.Top="0"
-                     Fill="{DynamicResource OnAccentForeground}"/>
+                     Fill="{DynamicResource NavButtonIconBackgroundBrush}"/>
                                     <Canvas Width="18" Height="18"
                     Canvas.Left="6" Canvas.Top="6">
                                         <Path Data="M15.75 4.5H2.25M11.25 9H2.25M12.75 13.5H2.25"
-                      Stroke="{DynamicResource AccentBrush}"
+                      Stroke="{DynamicResource NavButtonIconForegroundBrush}"
                       StrokeThickness="1.4"
                       StrokeStartLineCap="Round"
                       StrokeEndLineCap="Round"
                       Fill="Transparent"/>
                                         <Ellipse Canvas.Left="12.75" Canvas.Top="2.625" Width="3.75" Height="3.75"
-                         Stroke="{DynamicResource AccentBrush}"
+                         Stroke="{DynamicResource NavButtonIconForegroundBrush}"
                          StrokeThickness="1.4"
-                         Fill="{DynamicResource OnAccentForeground}"/>
+                         Fill="{DynamicResource NavButtonIconBackgroundBrush}"/>
                                         <Ellipse Canvas.Left="5.25" Canvas.Top="7.125" Width="3.75" Height="3.75"
-                         Stroke="{DynamicResource AccentBrush}"
+                         Stroke="{DynamicResource NavButtonIconForegroundBrush}"
                          StrokeThickness="1.4"
-                         Fill="{DynamicResource OnAccentForeground}"/>
+                         Fill="{DynamicResource NavButtonIconBackgroundBrush}"/>
                                         <Ellipse Canvas.Left="9.75" Canvas.Top="11.625" Width="3.75" Height="3.75"
-                         Stroke="{DynamicResource AccentBrush}"
+                         Stroke="{DynamicResource NavButtonIconForegroundBrush}"
                          StrokeThickness="1.4"
-                         Fill="{DynamicResource OnAccentForeground}"/>
+                         Fill="{DynamicResource NavButtonIconBackgroundBrush}"/>
                                     </Canvas>
                                 </Canvas>
                             </Viewbox>
@@ -187,17 +187,17 @@
                                 <Canvas Width="30" Height="30">
                                     <Ellipse Width="30" Height="30"
                      Canvas.Left="0" Canvas.Top="0"
-                     Fill="{DynamicResource OnAccentForeground}"/>
+                     Fill="{DynamicResource NavButtonIconBackgroundBrush}"/>
                                     <Canvas Width="18" Height="18"
                     Canvas.Left="6" Canvas.Top="6">
                                         <!-- head -->
                                         <Ellipse Canvas.Left="5.5" Canvas.Top="4.5" Width="7" Height="7"
-         Stroke="{DynamicResource AccentBrush}"
+         Stroke="{DynamicResource NavButtonIconForegroundBrush}"
          StrokeThickness="1.4"
          Fill="Transparent"/>
                                         <!-- shoulders arc -->
                                         <Path Data="M4.63 13.93A4.5 4.5 0 0 1 9 11.25a4.5 4.5 0 0 1 4.37 2.68"
-                      Stroke="{DynamicResource AccentBrush}"
+                      Stroke="{DynamicResource NavButtonIconForegroundBrush}"
                       StrokeThickness="1.4"
                       StrokeStartLineCap="Round"
                       StrokeEndLineCap="Round"
@@ -225,8 +225,8 @@
                FontFamily="{DynamicResource DisplayFont}"
                FontSize="11"
                FontWeight="SemiBold"
-               Foreground="{DynamicResource OnAccentForeground}"
-               Opacity="0.55"
+               Foreground="{DynamicResource SidebarTextBrush}"
+               Opacity="0.75"
                VerticalAlignment="Center"
                Margin="8,0"/>
                         <Rectangle Grid.Column="2" Height="1"
@@ -304,7 +304,7 @@
                                                     <!-- IN PROGRESS -->
                                                     <DataTrigger Binding="{Binding State}" Value="InProgress">
 
-                                                        <Setter Property="Background" Value="#E8A038"/>
+                                                        <Setter Property="Background" Value="{DynamicResource WarningBrush}"/>
 
                                                         <DataTrigger.EnterActions>
                                                             <BeginStoryboard x:Name="Pulse">
@@ -328,7 +328,7 @@
 
                                                     <!-- FILLED -->
                                                     <DataTrigger Binding="{Binding State}" Value="Filled">
-                                                        <Setter Property="Background" Value="#40842F"/>
+                                                        <Setter Property="Background" Value="{DynamicResource SuccessBrush}"/>
                                                         <Setter Property="Opacity" Value="1"/>
                                                     </DataTrigger>
 
@@ -680,7 +680,7 @@
                     BorderThickness="0"
                     Cursor="Hand"
                     Margin="0,0,8,0"
-                    Visibility="Collapsed">
+                    Visibility="Visible">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
                                     <Border x:Name="bd"
@@ -952,6 +952,10 @@
                                                 <Trigger Property="IsMouseOver" Value="True">
                                                     <Setter TargetName="bd" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
                                                 </Trigger>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter TargetName="bd" Property="Background" Value="{DynamicResource TrackNavigatorButtonDisabledBackground}"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource TrackNavigatorButtonDisabledForeground}"/>
+                                                </Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
                                     </Button.Template>
@@ -973,6 +977,10 @@
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
                                                     <Setter TargetName="bd" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter TargetName="bd" Property="Background" Value="{DynamicResource TrackNavigatorButtonDisabledBackground}"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource TrackNavigatorButtonDisabledForeground}"/>
                                                 </Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
@@ -1039,6 +1047,10 @@
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
                                                     <Setter TargetName="bd" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter TargetName="bd" Property="Background" Value="{DynamicResource TrackNavigatorButtonDisabledBackground}"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource TrackNavigatorButtonDisabledForeground}"/>
                                                 </Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
@@ -1123,8 +1135,28 @@
                                                 Padding="8,4"
                                                 BorderThickness="0"
                                                 Cursor="Hand"
-                                                Background="Transparent"
-                                                Foreground="{DynamicResource PrimaryText}"/>
+                                                Background="{DynamicResource TrackNavigatorButtonBackground}"
+                                                Foreground="{DynamicResource TrackNavigatorButtonForeground}">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="bd"
+                                                            Background="{TemplateBinding Background}"
+                                                            CornerRadius="6"
+                                                            Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource NeutralActionButtonHoverBackground}"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsEnabled" Value="False">
+                                                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource TrackNavigatorButtonDisabledBackground}"/>
+                                                            <Setter Property="Foreground" Value="{DynamicResource TrackNavigatorButtonDisabledForeground}"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
                                             <TextBlock x:Name="trackLabel"
                                                        Text="Fish 1 / 1"
@@ -1139,8 +1171,28 @@
                                                 Padding="8,4"
                                                 BorderThickness="0"
                                                 Cursor="Hand"
-                                                Background="Transparent"
-                                                Foreground="{DynamicResource PrimaryText}"/>
+                                                Background="{DynamicResource TrackNavigatorButtonBackground}"
+                                                Foreground="{DynamicResource TrackNavigatorButtonForeground}">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="bd"
+                                                            Background="{TemplateBinding Background}"
+                                                            CornerRadius="6"
+                                                            Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource NeutralActionButtonHoverBackground}"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsEnabled" Value="False">
+                                                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource TrackNavigatorButtonDisabledBackground}"/>
+                                                            <Setter Property="Foreground" Value="{DynamicResource TrackNavigatorButtonDisabledForeground}"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
                                     </Grid>
                                 </Border>
 
@@ -1471,7 +1523,8 @@
                     <Border Grid.Row="2"
                             Background="{DynamicResource SidebarBackground}"
                             CornerRadius="12"
-                            BorderThickness="0">
+                            BorderBrush="{DynamicResource AccentBrush}"
+                            BorderThickness="1">
                         <Border.Effect>
                             <DropShadowEffect BlurRadius="20" ShadowDepth="3" Opacity="0.12" Color="#000000"/>
                         </Border.Effect>
@@ -1480,7 +1533,7 @@
                                        FontFamily="{DynamicResource DisplayFont}"
                                        FontSize="10"
                                        FontWeight="SemiBold"
-                                       Foreground="{DynamicResource OnAccentForeground}"
+                                       Foreground="{DynamicResource SidebarMutedTextBrush}"
                                        Opacity="0.6"
                                        Margin="0,0,0,12"/>
                             <Grid Margin="0,0,0,8">
@@ -1491,7 +1544,7 @@
                                 <TextBlock Grid.Column="0"
                                            Text="Run"
                                            FontSize="12"
-                                           Foreground="{DynamicResource OnAccentForeground}"
+                                           Foreground="{DynamicResource SidebarMutedTextBrush}"
                                            Opacity="0.65"
                                            Width="90"/>
                                 <TextBlock x:Name="sessionRunText"
@@ -1499,7 +1552,7 @@
                                            Text="--"
                                            FontSize="12"
                                            FontWeight="SemiBold"
-                                           Foreground="{DynamicResource OnAccentForeground}"/>
+                                           Foreground="{DynamicResource SidebarTextBrush}"/>
                             </Grid>
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
@@ -1509,7 +1562,7 @@
                                 <TextBlock Grid.Column="0"
                                            Text="Location"
                                            FontSize="12"
-                                           Foreground="{DynamicResource OnAccentForeground}"
+                                           Foreground="{DynamicResource SidebarMutedTextBrush}"
                                            Opacity="0.65"
                                            Width="90"/>
                                 <TextBlock x:Name="sessionLocationText"
@@ -1517,7 +1570,7 @@
                                            Text="--"
                                            FontSize="12"
                                            FontWeight="SemiBold"
-                                           Foreground="{DynamicResource OnAccentForeground}"/>
+                                           Foreground="{DynamicResource SidebarTextBrush}"/>
                             </Grid>
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -1527,7 +1580,7 @@
                                 <TextBlock Grid.Column="0"
                                            Text="Net Upstream"
                                            FontSize="12"
-                                           Foreground="{DynamicResource OnAccentForeground}"
+                                           Foreground="{DynamicResource SidebarMutedTextBrush}"
                                            Opacity="0.65"
                                            Width="90"/>
                                 <TextBlock x:Name="sessionNetUpstreamText"
@@ -1535,7 +1588,7 @@
                                            Text="--"
                                            FontSize="12"
                                            FontWeight="SemiBold"
-                                           Foreground="{DynamicResource OnAccentForeground}"/>
+                                           Foreground="{DynamicResource SidebarTextBrush}"/>
                             </Grid>
                         </StackPanel>
                     </Border>

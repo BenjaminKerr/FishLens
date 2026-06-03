@@ -20,19 +20,19 @@
                                 CornerRadius="8"
                                 BorderThickness="1.5"
                                 BorderBrush="{DynamicResource AccentBrush}"
-                                Background="White"
+                                Background="{DynamicResource CheckBoxBackgroundBrush}"
                                 Opacity="0.4"/>
                             <!-- Checked fill -->
                             <Border x:Name="Fill"
                                 Width="16" Height="16"
                                 CornerRadius="8"
-                                Background="White"
+                                Background="{DynamicResource CheckBoxBackgroundBrush}"
                                 Visibility="Collapsed"/>
                             <TextBlock x:Name="Check"
                                    Text="✓"
                                    FontSize="9"
                                    FontWeight="SemiBold"
-                                   Foreground="{DynamicResource AccentBrush}"
+                                   Foreground="{DynamicResource CheckBoxCheckForegroundBrush}"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
                                    Visibility="Collapsed"/>

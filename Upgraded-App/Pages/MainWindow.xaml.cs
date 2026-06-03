@@ -17,6 +17,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
+using System.Data.SqlClient;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -25,6 +26,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -53,6 +55,8 @@ namespace FishLens_App
         private const string SAVED_VIDEOS_FOLDER = "SavedVids";
         private const string SAMPLE_DATA_FOLDER = "sample_data";
         private const string TRASH_FOLDER = ".trash";
+        private const string FishExportHeader = "video_file,location,species,species_confidence,likely_class,confidence,direction,start_time_sec,end_time_sec,video_timestamp,run";
+        private const string NoFishExportHeader = "video_file,location,video_timestamp";
 
         // State
         private string _currentFolderName = string.Empty;
@@ -69,10 +73,6 @@ namespace FishLens_App
         private readonly PythonWorkerPoolService _workerPool;
         // Stack of deletion batches for undo support
         private readonly Stack<DeletionBatch> _deletionHistory = new Stack<DeletionBatch>();
-        private static readonly Color COLOR_HIGH = Color.FromRgb(0x5D, 0xCA, 0xA5);
-        private static readonly Color COLOR_MID = Color.FromRgb(0xEF, 0x9F, 0x27);
-        private static readonly Color COLOR_LOW = Color.FromRgb(0xE2, 0x4B, 0x4A);
-
         // Persistent Python process - models stay loaded between runs
         private Process _yoloProcess;
         private bool _yoloFastModeAtStart;
@@ -141,6 +141,16 @@ namespace FishLens_App
             public string FolderName { get; set; } = string.Empty;
             public string FolderPath { get; set; } = string.Empty;
             public string Run { get; set; } = string.Empty;
+        }
+
+        private class ExportDataSet
+        {
+            public string[] FishLines { get; set; } = Array.Empty<string>();
+            public string[] NoFishLines { get; set; } = Array.Empty<string>();
+
+            public bool HasData =>
+                (FishLines?.Skip(1).Any(line => !string.IsNullOrWhiteSpace(line)) ?? false) ||
+                (NoFishLines?.Skip(1).Any(line => !string.IsNullOrWhiteSpace(line)) ?? false);
         }
 
         #endregion
@@ -345,12 +355,14 @@ namespace FishLens_App
                 //{
                 ExpandSidebar();
                 MainFrame.Visibility = Visibility.Collapsed;
+                RefreshAnalysisThemeStyles();
                 //}
             }
             else
             {
                 ExpandSidebar();
                 MainFrame.Visibility = Visibility.Collapsed;
+                RefreshAnalysisThemeStyles();
             }
         }
 
@@ -1996,10 +2008,9 @@ namespace FishLens_App
                 string scope = ShowExportScopeDialog();
                 if (scope == null) return;
 
-                string csvPath = ResolveExportCsvPath(scope);
-                string noFishPath = ResolveExportNoFishCsvPath(scope);
+                ExportDataSet exportSet = BuildExportDataSet(scope);
 
-                if (!HasCsvData(csvPath) && !HasCsvData(noFishPath))
+                if (!exportSet.HasData)
                 {
                     MessageBox.Show("No analysis data found for the selected scope.", "Export Error",
                         MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -2009,7 +2020,7 @@ namespace FishLens_App
                 SaveFileDialog saveFileDialog = CreateExportSaveDialog();
                 if (saveFileDialog.ShowDialog() == true)
                 {
-                    MakeExcelSheetAndInsertData(saveFileDialog, csvPath, noFishPath);
+                    MakeExcelSheetAndInsertData(saveFileDialog, exportSet.FishLines, exportSet.NoFishLines);
                 }
             }
             catch (Exception ex)
@@ -2115,6 +2126,122 @@ namespace FishLens_App
             return scope == "session" ? _pathResolver.ResolveSessionNoFishCsvPath(activeRun) : null;
         }
 
+        private ExportDataSet BuildExportDataSet(string scope)
+        {
+            if (scope == "session")
+            {
+                return BuildExportDataSetFromCsv(
+                    ResolveExportCsvPath(scope),
+                    ResolveExportNoFishCsvPath(scope));
+            }
+
+            var app = Application.Current as App;
+            if (app != null && app.CurrentOrganizationId > 0 && !string.IsNullOrWhiteSpace(app.connectionString))
+            {
+                string activeRun = app.ActiveRun ?? string.Empty;
+                string runFilter = scope == "run" ? activeRun : null;
+                string[] dbLines = ReadExportDataLinesFromDb(app.CurrentOrganizationId, app.connectionString, runFilter);
+                if (dbLines != null)
+                    return SplitFullSchemaRowsForExport(dbLines);
+            }
+
+            return BuildExportDataSetFromCsv(
+                ResolveExportCsvPath(scope),
+                ResolveExportNoFishCsvPath(scope));
+        }
+
+        private ExportDataSet BuildExportDataSetFromCsv(string fishCsvPath, string noFishCsvPath)
+        {
+            return new ExportDataSet
+            {
+                FishLines = File.Exists(fishCsvPath)
+                    ? File.ReadAllLines(fishCsvPath)
+                    : new[] { FishExportHeader },
+                NoFishLines = File.Exists(noFishCsvPath)
+                    ? File.ReadAllLines(noFishCsvPath)
+                    : new[] { NoFishExportHeader }
+            };
+        }
+
+        private ExportDataSet SplitFullSchemaRowsForExport(IEnumerable<string> fullSchemaRows)
+        {
+            var fishLines = new List<string> { FishExportHeader };
+            var noFishLines = new List<string> { NoFishExportHeader };
+
+            foreach (string row in fullSchemaRows ?? Enumerable.Empty<string>())
+            {
+                if (string.IsNullOrWhiteSpace(row))
+                    continue;
+
+                string[] cols = FishLens_App.Services.CsvUtils.ParseCsvLine(row);
+                string likelyClass = cols.Length > 4 ? cols[4].Trim() : string.Empty;
+                bool noFish = likelyClass.Equals("no_fish", StringComparison.OrdinalIgnoreCase)
+                    || likelyClass.Equals("not_fish", StringComparison.OrdinalIgnoreCase);
+
+                if (noFish)
+                {
+                    string videoFile = cols.Length > 0 ? cols[0].Trim() : string.Empty;
+                    string location = cols.Length > 1 ? cols[1].Trim() : string.Empty;
+                    string timestamp = cols.Length > 9 ? cols[9].Trim() : string.Empty;
+                    noFishLines.Add($"{videoFile},{location},{timestamp}");
+                }
+                else
+                {
+                    fishLines.Add(row);
+                }
+            }
+
+            return new ExportDataSet
+            {
+                FishLines = fishLines.ToArray(),
+                NoFishLines = noFishLines.ToArray()
+            };
+        }
+
+        private string[] ReadExportDataLinesFromDb(int orgId, string connectionString, string runName = null)
+        {
+            var lines = new List<string>();
+            try
+            {
+                using var conn = new SqlConnection(connectionString);
+                conn.Open();
+                using var cmd = new SqlCommand("kaharra.GetFishDetectionsByOrg", conn);
+                cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                cmd.Parameters.AddWithValue("@pOrgId", orgId);
+                cmd.Parameters.AddWithValue("@pRunName", runName != null ? (object)runName : DBNull.Value);
+                cmd.Parameters.AddWithValue("@pLocationName", DBNull.Value);
+
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    string videoFile = reader["VideoFile"]?.ToString() ?? string.Empty;
+                    string location = reader["LocationName"]?.ToString() ?? string.Empty;
+                    string species = reader["Species"]?.ToString() ?? string.Empty;
+                    string speciesConf = reader["SpeciesConfidence"] == DBNull.Value
+                        ? "0" : ((double)reader["SpeciesConfidence"]).ToString("F4");
+                    string likelyClass = reader["LikelyClass"]?.ToString() ?? string.Empty;
+                    string confidence = reader["Confidence"] == DBNull.Value
+                        ? "0" : ((double)reader["Confidence"]).ToString("F4");
+                    string direction = reader["Direction"]?.ToString() ?? string.Empty;
+                    string startTime = reader["StartTimeSec"]?.ToString() ?? "0";
+                    string endTime = reader["EndTimeSec"]?.ToString() ?? "0";
+                    string timestamp = reader["DetectionTimestamp"] == DBNull.Value
+                        ? string.Empty
+                        : ((DateTime)reader["DetectionTimestamp"]).ToString("yyyy/MM/dd HH:mm:ss");
+                    string run = reader["RunName"]?.ToString() ?? string.Empty;
+
+                    lines.Add($"{videoFile},{location},{species},{speciesConf},{likelyClass},{confidence},{direction},{startTime},{endTime},{timestamp},{run}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reading export detections from DB for org {OrgId}", orgId);
+                return null;
+            }
+
+            return lines.ToArray();
+        }
+
         private bool HasCurrentSessionData()
         {
             string activeRun = (Application.Current as App)?.ActiveRun ?? string.Empty;
@@ -2150,14 +2277,11 @@ namespace FishLens_App
             };
         }
 
-        private void MakeExcelSheetAndInsertData(SaveFileDialog saveFileDialog, string csvPath, string noFishCsvPath = null)
+        private void MakeExcelSheetAndInsertData(SaveFileDialog saveFileDialog, string[] fishLines, string[] noFishLines)
         {
             string excelPath = saveFileDialog.FileName;
-            string[] fishLines = File.ReadAllLines(csvPath);
-
-            string[] noFishLines = File.Exists(noFishCsvPath)
-                ? File.ReadAllLines(noFishCsvPath)
-                : new[] { "video_file,location,video_timestamp" };
+            fishLines ??= new[] { FishExportHeader };
+            noFishLines ??= new[] { NoFishExportHeader };
 
             using (var workbook = new ClosedXML.Excel.XLWorkbook())
             {
@@ -2906,9 +3030,9 @@ namespace FishLens_App
 
         private static void SetRingArc(System.Windows.Shapes.Path arc, TextBlock label, double confidence)
         {
-            var color = confidence >= 75 ? Color.FromRgb(0x0F, 0x6E, 0x56)
-                      : confidence >= 45 ? Color.FromRgb(0xBA, 0x75, 0x17)
-                                         : Color.FromRgb(0xC0, 0x39, 0x2B);
+            var color = confidence >= 75 ? GetThemeColor("ConfidenceRingHighBrush", Color.FromRgb(0x0F, 0x6E, 0x56))
+                      : confidence >= 45 ? GetThemeColor("ConfidenceRingMidBrush", Color.FromRgb(0xBA, 0x75, 0x17))
+                                         : GetThemeColor("ConfidenceRingLowBrush", Color.FromRgb(0xC0, 0x39, 0x2B));
             var brush = new SolidColorBrush(color);
             arc.Stroke = brush;
             label.Foreground = brush;
@@ -2931,6 +3055,20 @@ namespace FishLens_App
         {
             arc.Data = Geometry.Empty;
             label.Foreground = (Brush)Application.Current.Resources["AccentBrush"];
+        }
+
+        private static Brush GetThemeBrush(string resourceKey, Brush fallback = null)
+        {
+            return Application.Current?.TryFindResource(resourceKey) as Brush
+                ?? fallback
+                ?? Brushes.Transparent;
+        }
+
+        private static Color GetThemeColor(string resourceKey, Color fallback)
+        {
+            return Application.Current?.TryFindResource(resourceKey) is SolidColorBrush brush
+                ? brush.Color
+                : fallback;
         }
 
         private static string FormatPercentValue(double percent)
@@ -3182,6 +3320,34 @@ namespace FishLens_App
             UpdateFishMarkers();
         }
 
+        public void RefreshAnalysisThemeStyles()
+        {
+            if (_currentTrackIndex >= 0 && _currentTrackIndex < _currentTracks.Count)
+            {
+                RefreshAnalysisConfidenceRings();
+            }
+            else
+            {
+                ClearRing(fishPresentRingArc, fishPresentConfidence);
+                ClearRing(fishSpeciesRingArc, fishSpeciesConfidence);
+            }
+        }
+
+        private void RefreshAnalysisConfidenceRings()
+        {
+            bool fishPresent = fishPresentStatus.SelectedIndex == 0;
+
+            if (fishPresent)
+                SetRingArc(fishPresentRingArc, fishPresentConfidence, ParseConfidenceText(fishPresentConfidence.Text) * 100);
+            else
+                ClearRing(fishPresentRingArc, fishPresentConfidence);
+
+            if (fishPresent && ParseConfidenceText(fishSpeciesConfidence.Text) > 0)
+                SetRingArc(fishSpeciesRingArc, fishSpeciesConfidence, ParseConfidenceText(fishSpeciesConfidence.Text) * 100);
+            else
+                ClearRing(fishSpeciesRingArc, fishSpeciesConfidence);
+        }
+
         private void SetPlayPauseButtonIcon(bool isPlaying)
         {
             if (playPauseButton == null) return;
@@ -3190,7 +3356,6 @@ namespace FishLens_App
 
         private FrameworkElement CreateTransportIcon(string iconName)
         {
-            var brush = (Brush)Application.Current.Resources["OnAccentForeground"];
             var canvas = new Canvas
             {
                 Width = 24,
@@ -3201,27 +3366,27 @@ namespace FishLens_App
             switch (iconName)
             {
                 case "pause":
-                    canvas.Children.Add(CreateIconRect(8, 6, 3, 12, brush));
-                    canvas.Children.Add(CreateIconRect(13, 6, 3, 12, brush));
+                    canvas.Children.Add(CreateIconRect(8, 6, 3, 12));
+                    canvas.Children.Add(CreateIconRect(13, 6, 3, 12));
                     break;
                 case "skip-back":
-                    canvas.Children.Add(CreateIconPath("M13,6 L7,12 L13,18 Z", brush));
-                    canvas.Children.Add(CreateIconPath("M18,6 L12,12 L18,18 Z", brush));
+                    canvas.Children.Add(CreateIconPath("M13,6 L7,12 L13,18 Z"));
+                    canvas.Children.Add(CreateIconPath("M18,6 L12,12 L18,18 Z"));
                     break;
                 case "skip-forward":
-                    canvas.Children.Add(CreateIconPath("M6,6 L12,12 L6,18 Z", brush));
-                    canvas.Children.Add(CreateIconPath("M11,6 L17,12 L11,18 Z", brush));
+                    canvas.Children.Add(CreateIconPath("M6,6 L12,12 L6,18 Z"));
+                    canvas.Children.Add(CreateIconPath("M11,6 L17,12 L11,18 Z"));
                     break;
                 case "track-previous":
-                    canvas.Children.Add(CreateIconRect(7, 6, 2, 12, brush));
-                    canvas.Children.Add(CreateIconPath("M17,6 L9,12 L17,18 Z", brush));
+                    canvas.Children.Add(CreateIconRect(7, 6, 2, 12));
+                    canvas.Children.Add(CreateIconPath("M17,6 L9,12 L17,18 Z"));
                     break;
                 case "track-next":
-                    canvas.Children.Add(CreateIconPath("M7,6 L15,12 L7,18 Z", brush));
-                    canvas.Children.Add(CreateIconRect(15, 6, 2, 12, brush));
+                    canvas.Children.Add(CreateIconPath("M7,6 L15,12 L7,18 Z"));
+                    canvas.Children.Add(CreateIconRect(15, 6, 2, 12));
                     break;
                 default:
-                    canvas.Children.Add(CreateIconPath("M8,6 L17,12 L8,18 Z", brush));
+                    canvas.Children.Add(CreateIconPath("M8,6 L17,12 L8,18 Z"));
                     break;
             }
 
@@ -3236,14 +3401,13 @@ namespace FishLens_App
 
         private static FrameworkElement CreateNavigatorIcon(bool leftFacing)
         {
-            var brush = (Brush)Application.Current.Resources["PrimaryText"];
             var canvas = new Canvas
             {
                 Width = 12,
                 Height = 12,
                 IsHitTestVisible = false
             };
-            canvas.Children.Add(CreateIconPath(leftFacing ? "M8,2 L3,6 L8,10 Z" : "M4,2 L9,6 L4,10 Z", brush));
+            canvas.Children.Add(CreateIconPath(leftFacing ? "M8,2 L3,6 L8,10 Z" : "M4,2 L9,6 L4,10 Z"));
 
             return new Viewbox
             {
@@ -3254,28 +3418,37 @@ namespace FishLens_App
             };
         }
 
-        private static System.Windows.Shapes.Rectangle CreateIconRect(double left, double top, double width, double height, Brush brush)
+        private static System.Windows.Shapes.Rectangle CreateIconRect(double left, double top, double width, double height)
         {
             var rect = new System.Windows.Shapes.Rectangle
             {
                 Width = width,
                 Height = height,
                 RadiusX = 0.8,
-                RadiusY = 0.8,
-                Fill = brush
+                RadiusY = 0.8
             };
+            BindShapeFillToButtonForeground(rect);
             Canvas.SetLeft(rect, left);
             Canvas.SetTop(rect, top);
             return rect;
         }
 
-        private static System.Windows.Shapes.Path CreateIconPath(string data, Brush brush)
+        private static System.Windows.Shapes.Path CreateIconPath(string data)
         {
-            return new System.Windows.Shapes.Path
+            var path = new System.Windows.Shapes.Path
             {
-                Data = Geometry.Parse(data),
-                Fill = brush
+                Data = Geometry.Parse(data)
             };
+            BindShapeFillToButtonForeground(path);
+            return path;
+        }
+
+        private static void BindShapeFillToButtonForeground(System.Windows.Shapes.Shape shape)
+        {
+            BindingOperations.SetBinding(shape, System.Windows.Shapes.Shape.FillProperty, new Binding("Foreground")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(Button), 1)
+            });
         }
 
         // **************************************************
@@ -3475,6 +3648,7 @@ namespace FishLens_App
 
         private static UIElement CreateMarkerFish(Brush brush, bool facesLeft, double left)
         {
+            var outline = GetThemeBrush("ScrubMarkerOutlineBrush", Brushes.White);
             var group = new Canvas
             {
                 Width = 18,
@@ -3486,14 +3660,18 @@ namespace FishLens_App
             var body = new System.Windows.Shapes.Path
             {
                 Data = Geometry.Parse("M3,6 C5,2.8 10.8,2.8 14,6 C10.8,9.2 5,9.2 3,6 Z"),
-                Fill = brush
+                Fill = brush,
+                Stroke = outline,
+                StrokeThickness = 0.7
             };
             group.Children.Add(body);
 
             var tail = new System.Windows.Shapes.Path
             {
                 Data = Geometry.Parse("M3,6 L0,3 L0,9 Z"),
-                Fill = brush
+                Fill = brush,
+                Stroke = outline,
+                StrokeThickness = 0.7
             };
             group.Children.Add(tail);
 
@@ -3514,10 +3692,13 @@ namespace FishLens_App
 
         private static UIElement CreateMarkerArrow(Brush brush, bool facesLeft, double left)
         {
+            var outline = GetThemeBrush("ScrubMarkerOutlineBrush", Brushes.White);
             var path = new System.Windows.Shapes.Path
             {
                 Data = Geometry.Parse(facesLeft ? "M6,2 L0,6 L6,10 Z" : "M0,2 L6,6 L0,10 Z"),
-                Fill = brush
+                Fill = brush,
+                Stroke = outline,
+                StrokeThickness = 0.7
             };
             Canvas.SetLeft(path, left);
             Canvas.SetTop(path, 1);
@@ -3581,6 +3762,8 @@ namespace FishLens_App
                     RadiusX = 2,
                     RadiusY = 2,
                     Fill = markerBrush,
+                    Stroke = GetThemeBrush("ScrubMarkerOutlineBrush", Brushes.White),
+                    StrokeThickness = 0.5,
                     Opacity = opacity,
                 };
                 Canvas.SetLeft(bar, startX);
@@ -3787,7 +3970,7 @@ namespace FishLens_App
 
             TextBox textBox = new TextBox();
             textBox.Text = displayText ?? GetSectionDisplayText(sectionContext);
-            textBox.Foreground = new SolidColorBrush(Colors.White);
+            textBox.Foreground = GetThemeBrush("SidebarTextBrush", Brushes.White);
             textBox.Background = Brushes.Transparent;
             textBox.BorderThickness = new Thickness(0);
             textBox.IsReadOnly = true;
@@ -3879,7 +4062,7 @@ namespace FishLens_App
             if (string.IsNullOrWhiteSpace(videoData.Name)) videoData.Name = videoFile.Name;
 
             var tierColor = GetTierColor(videoData.AvgConfidence);
-            bool isLow = tierColor == COLOR_LOW;
+            bool isLow = IsLowConfidence(videoData.AvgConfidence);
             var tierBrush = new SolidColorBrush(tierColor);
 
             var grid = new Grid { Margin = new Thickness(0) };
@@ -3917,14 +4100,14 @@ namespace FishLens_App
                 Text = videoFile.Name,
                 FontSize = 12.5,
                 FontWeight = FontWeights.Medium,
-                Foreground = (Brush)Application.Current.Resources["OnAccentForeground"],
+                Foreground = GetThemeBrush("SidebarTextBrush", Brushes.White),
                 TextTrimming = TextTrimming.CharacterEllipsis,
             });
             textStack.Children.Add(new TextBlock
             {
                 Text = metaText,
                 FontSize = 11,
-                Foreground = new SolidColorBrush(Color.FromArgb(180, 255, 255, 255)),
+                Foreground = GetThemeBrush("SidebarMutedTextBrush", Brushes.White),
                 Margin = new Thickness(0, 1, 0, 0),
             });
             Grid.SetColumn(textStack, 2);
@@ -3964,7 +4147,7 @@ namespace FishLens_App
 
             var hoverTrigger = new Trigger { Property = Button.IsMouseOverProperty, Value = true };
             hoverTrigger.Setters.Add(new Setter(Button.BackgroundProperty,
-                new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)), "bd"));
+                GetThemeBrush("SidebarHoverBackgroundBrush", new SolidColorBrush(Color.FromArgb(40, 255, 255, 255))), "bd"));
 
             var template = new ControlTemplate(typeof(Button));
             template.VisualTree = borderFactory;
@@ -3977,7 +4160,7 @@ namespace FishLens_App
                 Tag = videoFile.FullName,
                 DataContext = videoData,
                 Background = isLow
-                    ? new SolidColorBrush(Color.FromArgb(30, 0xE2, 0x4B, 0x4A))
+                    ? GetThemeBrush("LibraryLowConfidenceBackground", new SolidColorBrush(Color.FromArgb(30, 0xE2, 0x4B, 0x4A)))
                     : Brushes.Transparent,
                 BorderThickness = new Thickness(0),
                 Cursor = Cursors.Hand,
@@ -4012,7 +4195,7 @@ namespace FishLens_App
                     {
                         var tierColor = GetTierColor(video.AvgConfidence);
                         var tierBrush = new SolidColorBrush(tierColor);
-                        bool isLow = tierColor == COLOR_LOW;
+                        bool isLow = IsLowConfidence(video.AvgConfidence);
 
                         if (button.Content is Grid g)
                         {
@@ -4027,7 +4210,7 @@ namespace FishLens_App
                             }
                         }
                         button.Background = isLow
-                            ? new SolidColorBrush(Color.FromArgb(30, 0xE2, 0x4B, 0x4A))
+                            ? GetThemeBrush("LibraryLowConfidenceBackground", new SolidColorBrush(Color.FromArgb(30, 0xE2, 0x4B, 0x4A)))
                             : Brushes.Transparent;
                     }
                 }
@@ -4120,9 +4303,9 @@ namespace FishLens_App
             double threshold = (Application.Current as App)?.Configuration?.ConfidenceThreshold
                 ?? _config?.ConfidenceThreshold
                 ?? DEFAULT_CONFIDENCE_THRESHOLD;
-            if (confidence >= threshold) return COLOR_HIGH;
-            if (confidence >= threshold * 0.6) return COLOR_MID;
-            return COLOR_LOW;
+            if (confidence >= threshold) return GetThemeColor("LibraryConfidenceHighBrush", Color.FromRgb(0x5D, 0xCA, 0xA5));
+            if (confidence >= threshold * 0.6) return GetThemeColor("LibraryConfidenceMidBrush", Color.FromRgb(0xEF, 0x9F, 0x27));
+            return GetThemeColor("LibraryConfidenceLowBrush", Color.FromRgb(0xE2, 0x4B, 0x4A));
         }
 
         private Style CreateButtonStyle(bool isLowConfidence)

@@ -17,7 +17,7 @@
             <TextBlock Text="Account Settings" 
                        FontSize="{DynamicResource LargeHeaderFontSize}"
                        FontWeight="SemiBold"
-                       Foreground="{DynamicResource OnAccentForeground}"/>
+                       Foreground="{DynamicResource HeaderForegroundBrush}"/>
         </Border>
 
         <ScrollViewer Grid.Row="1" 
@@ -29,17 +29,17 @@
 
                 <!-- Analysis-in-progress warning banner -->
                 <Border x:Name="analysisWarningBanner"
-                        Background="#FFF3E0"
-                        BorderBrush="#FF9800"
+                        Background="{DynamicResource WarningBackgroundBrush}"
+                        BorderBrush="{DynamicResource WarningBorderBrush}"
                         BorderThickness="1"
                         CornerRadius="8"
                         Padding="16,12"
                         Margin="0,0,0,20"
                         Visibility="Collapsed">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#x26A0;" FontSize="16" Foreground="#E65100" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="&#x26A0;" FontSize="16" Foreground="{DynamicResource WarningTextBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
                         <TextBlock Text="Analysis is currently running. Run, location, and settings changes are locked until the analysis completes or is cancelled."
-                                   FontSize="13" Foreground="#E65100" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                   FontSize="13" Foreground="{DynamicResource WarningTextBrush}" TextWrapping="Wrap" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
@@ -73,7 +73,7 @@
                                  FontSize="{DynamicResource BaseFontSize}"
                                  Margin="0,5,0,15"/>
                         <TextBlock x:Name="CreateUserUsernameError"
-                                   FontSize="11" Foreground="#F44336"
+                                   FontSize="11" Foreground="{DynamicResource ErrorTextBrush}"
                                    TextWrapping="Wrap"
                                    Visibility="Collapsed"
                                    Margin="0,2,0,8"/>
@@ -88,7 +88,7 @@
                                  FontSize="{DynamicResource BaseFontSize}"
                                  Margin="0,5,0,15"/>
                         <TextBlock x:Name="CreateUserEmailError"
-                                   FontSize="11" Foreground="#F44336"
+                                   FontSize="11" Foreground="{DynamicResource ErrorTextBrush}"
                                    TextWrapping="Wrap"
                                    Visibility="Collapsed"
                                    Margin="0,2,0,8"/>
@@ -112,13 +112,14 @@
                                     VerticalAlignment="Center"
                                     Margin="0,0,4,0"
                                     Background="Transparent"
+                                    Foreground="{DynamicResource PrimaryText}"
                                     BorderThickness="0"
                                     FontSize="14"
                                     Cursor="Hand"
                                     Click="NewPasswordEye_Click"/>
                         </Grid>
                         <TextBlock x:Name="CreateUserPasswordError"
-                                   FontSize="11" Foreground="#F44336"
+                                   FontSize="11" Foreground="{DynamicResource ErrorTextBrush}"
                                    TextWrapping="Wrap"
                                    Visibility="Collapsed"
                                    Margin="0,2,0,8"/>
@@ -206,10 +207,10 @@
                                                 </Grid>
                                                 <ControlTemplate.Triggers>
                                                     <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource HeaderBackground}"/>
+                                                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                                                     </Trigger>
                                                     <Trigger Property="IsDropDownOpen" Value="True">
-                                                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource HeaderBackground}"/>
+                                                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                                                     </Trigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
@@ -238,7 +239,7 @@
                                                     </Trigger>
                                                     <Trigger Property="IsSelected" Value="True">
                                                         <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource HeaderBackground}"/>
-                                                        <Setter Property="Foreground" Value="{DynamicResource OnAccentForeground}"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource HeaderForegroundBrush}"/>
                                                     </Trigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
@@ -248,7 +249,7 @@
                             </ComboBox.ItemContainerStyle>
                         </ComboBox>
                         <TextBlock x:Name="CreateUserRoleError"
-                                   FontSize="11" Foreground="#F44336"
+                                   FontSize="11" Foreground="{DynamicResource ErrorTextBrush}"
                                    TextWrapping="Wrap"
                                    Visibility="Collapsed"
                                    Margin="0,2,0,8"/>
@@ -256,7 +257,7 @@
                         <Button Content="Create User"
                                 Width="140"
                                 Padding="10,6"
-                                Background="{DynamicResource HeaderBackground}"
+                                Background="{DynamicResource PrimaryColorBrush}"
                                 Foreground="{DynamicResource OnAccentForeground}"
                                 FontSize="{DynamicResource BaseFontSize}"
                                 FontWeight="SemiBold"
@@ -289,7 +290,7 @@
                         </Button>
                         <TextBlock x:Name="CreateUserSuccessMessage"
                                    Text="User created successfully!"
-                                   FontSize="11" Foreground="#4CAF50"
+                                   FontSize="11" Foreground="{DynamicResource SettingsSuccessTextBrush}"
                                    Visibility="Collapsed"
                                    Margin="0,5,0,0"/>
 
@@ -356,7 +357,7 @@
                                     <Style.Triggers>
                                         <Trigger Property="IsSelected" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource HeaderBackground}"/>
-                                            <Setter Property="Foreground" Value="{DynamicResource OnAccentForeground}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource HeaderForegroundBrush}"/>
                                         </Trigger>
                                     </Style.Triggers>
                                 </Style>
@@ -403,7 +404,7 @@
                                     </DataGridTemplateColumn.CellTemplate>
                                     <DataGridTemplateColumn.CellEditingTemplate>
                                         <DataTemplate>
-                                            <Border BorderBrush="#888888"
+                                            <Border BorderBrush="{DynamicResource BorderBrush}"
                                                     BorderThickness="1"
                                                     CornerRadius="6"
                                                     Background="{DynamicResource CardBackground}">
@@ -428,7 +429,7 @@
                                     </DataGridTemplateColumn.CellTemplate>
                                     <DataGridTemplateColumn.CellEditingTemplate>
                                         <DataTemplate>
-                                            <Border BorderBrush="#888888"
+                                            <Border BorderBrush="{DynamicResource BorderBrush}"
                                                     BorderThickness="1"
                                                     CornerRadius="6"
                                                     Background="{DynamicResource CardBackground}">
@@ -461,7 +462,7 @@
                                                     <Style TargetType="ComboBox">
                                                         <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
                                                         <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
-                                                        <Setter Property="BorderBrush" Value="#888888"/>
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
                                                         <Setter Property="BorderThickness" Value="1"/>
                                                         <Setter Property="Padding" Value="10,8"/>
                                                         <Setter Property="Template">
@@ -514,7 +515,7 @@
                                                Focusable="False"
                                                PopupAnimation="Slide">
                                                                             <Border Background="{DynamicResource CardBackground}"
-                                                    BorderBrush="#888888"
+                                                    BorderBrush="{DynamicResource BorderBrush}"
                                                     BorderThickness="1"
                                                     CornerRadius="6"
                                                     Margin="0,4,0,0"
@@ -529,10 +530,10 @@
                                                                     </Grid>
                                                                     <ControlTemplate.Triggers>
                                                                         <Trigger Property="IsMouseOver" Value="True">
-                                                                            <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource HeaderBackground}"/>
+                                                                            <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                                                                         </Trigger>
                                                                         <Trigger Property="IsDropDownOpen" Value="True">
-                                                                            <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource HeaderBackground}"/>
+                                                                            <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                                                                         </Trigger>
                                                                     </ControlTemplate.Triggers>
                                                                 </ControlTemplate>
@@ -561,7 +562,7 @@
                                                                         </Trigger>
                                                                         <Trigger Property="IsSelected" Value="True">
                                                                             <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource HeaderBackground}"/>
-                                                                            <Setter Property="Foreground" Value="{DynamicResource OnAccentForeground}"/>
+                                                                            <Setter Property="Foreground" Value="{DynamicResource HeaderForegroundBrush}"/>
                                                                         </Trigger>
                                                                     </ControlTemplate.Triggers>
                                                                 </ControlTemplate>
@@ -581,8 +582,8 @@
                                                 Click="DeleteUser_Click"
                                                 Margin="6,3,6,3"
                                                 Padding="8,4,8,4"
-                                                Background="IndianRed"
-                                                Foreground="White"
+                                                Background="{DynamicResource DestructiveButtonBackground}"
+                                                Foreground="{DynamicResource DestructiveButtonForeground}"
                                                 BorderThickness="0"
                                                 FontWeight="SemiBold"
                                                 Cursor="Hand" />
@@ -601,7 +602,7 @@
                             <Button Content="Refresh"
                                     Width="120"
                                     Padding="10,6"
-                                    Background="{DynamicResource HeaderBackground}"
+                                    Background="{DynamicResource PrimaryColorBrush}"
                                     Foreground="{DynamicResource OnAccentForeground}"
                                     FontSize="{DynamicResource BaseFontSize}"
                                     FontWeight="SemiBold"
@@ -635,7 +636,7 @@
                             <Button Content="Save Changes"
                                     Width="150"
                                     Padding="10,6"
-                                    Background="{DynamicResource HeaderBackground}"
+                                    Background="{DynamicResource PrimaryColorBrush}"
                                     Foreground="{DynamicResource OnAccentForeground}"
                                     FontSize="{DynamicResource BaseFontSize}"
                                     FontWeight="SemiBold"
@@ -667,12 +668,12 @@
 
                         </StackPanel>
                         <TextBlock x:Name="SaveUsersError"
-                                   FontSize="11" Foreground="#F44336"
+                                   FontSize="11" Foreground="{DynamicResource ErrorTextBrush}"
                                    TextWrapping="Wrap"
                                    Visibility="Collapsed"
                                    Margin="0,5,0,0"/>
                         <TextBlock x:Name="SaveUsersSuccess"
-                                   FontSize="11" Foreground="#4CAF50"
+                                   FontSize="11" Foreground="{DynamicResource SettingsSuccessTextBrush}"
                                    TextWrapping="Wrap"
                                    Visibility="Collapsed"
                                    Margin="0,5,0,0"/>

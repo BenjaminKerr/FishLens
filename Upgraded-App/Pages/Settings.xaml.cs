@@ -682,19 +682,19 @@ namespace FishLens_App
                 {
                     Text = loc.Name,
                     FontSize = (double)Application.Current.Resources["BaseFontSize"],
-                    Foreground = (Brush)Application.Current.Resources["PrimaryText"],
                     VerticalAlignment = VerticalAlignment.Center
                 };
+                nameBlock.SetResourceReference(TextBlock.ForegroundProperty, "PrimaryText");
                 Grid.SetColumn(nameBlock, 0);
 
                 var dirBlock = new TextBlock
                 {
                     Text = loc.UpstreamDirection == "right" ? "Upstream: Right" : "Upstream: Left",
                     FontSize = (double)Application.Current.Resources["BaseFontSize"],
-                    Foreground = (Brush)Application.Current.Resources["SecondaryText"],
                     VerticalAlignment = VerticalAlignment.Center,
                     Margin = new Thickness(12, 0, 12, 0)
                 };
+                dirBlock.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryText");
                 Grid.SetColumn(dirBlock, 1);
 
                 var deleteBtn = new Button
@@ -704,11 +704,12 @@ namespace FishLens_App
                     Height = 28,
                     Padding = new Thickness(10, 0, 10, 0),
                     FontSize = (double)Application.Current.Resources["BaseFontSize"],
-                    Background = Brushes.IndianRed,
-                    Foreground = Brushes.White,
+                    Style = FindResource("SettingsButton") as Style,
                     BorderThickness = new Thickness(0),
                     VerticalAlignment = VerticalAlignment.Center
                 };
+                deleteBtn.SetResourceReference(Button.BackgroundProperty, "DestructiveButtonBackground");
+                deleteBtn.SetResourceReference(Button.ForegroundProperty, "DestructiveButtonForeground");
                 deleteBtn.Click += DeleteLocation_Click;
                 Grid.SetColumn(deleteBtn, 2);
 
@@ -747,6 +748,7 @@ namespace FishLens_App
                         ThemeHelper.ThemeSwap(_config.HighContrastMode);
                         main.RefreshLibraryConfidenceStyles();
                         main.RefreshTransportButtonIcons();
+                        main.RefreshAnalysisThemeStyles();
                     });
                 }
             }
@@ -761,7 +763,7 @@ namespace FishLens_App
             if (saveStatusText == null) return;
 
             saveStatusText.Text = text;
-            saveStatusText.Foreground = System.Windows.Media.Brushes.ForestGreen;
+            saveStatusText.SetResourceReference(TextBlock.ForegroundProperty, "SettingsSuccessTextBrush");
             saveStatusText.Visibility = Visibility.Visible;
 
             // Auto-hide after 2 seconds
@@ -790,20 +792,20 @@ namespace FishLens_App
                 return;
 
             _hasUnsavedSettingsChanges = true;
-            UpdateSaveStatus("Unsaved Changes", Brushes.DarkOrange);
+            UpdateSaveStatus("Unsaved Changes", "WarningBrush");
         }
 
         private void SetSaveStatusSaved()
         {
             _hasUnsavedSettingsChanges = false;
-            UpdateSaveStatus("Saved Changes", Brushes.ForestGreen);
+            UpdateSaveStatus("Saved Changes", "SettingsSuccessTextBrush");
         }
 
         private void UpdateSaveStatusAfterImmediateRunPersist()
         {
             if (_hasUnsavedSettingsChanges)
             {
-                UpdateSaveStatus("Unsaved Changes", Brushes.DarkOrange);
+                UpdateSaveStatus("Unsaved Changes", "WarningBrush");
                 return;
             }
 
@@ -820,13 +822,13 @@ namespace FishLens_App
             }
         }
 
-        private void UpdateSaveStatus(string text, Brush brush)
+        private void UpdateSaveStatus(string text, string foregroundResourceKey)
         {
             if (saveStatusText == null)
                 return;
 
             saveStatusText.Text = text;
-            saveStatusText.Foreground = brush;
+            saveStatusText.SetResourceReference(TextBlock.ForegroundProperty, foregroundResourceKey);
             saveStatusText.Visibility = Visibility.Visible;
         }
     }
