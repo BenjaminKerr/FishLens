@@ -11,7 +11,6 @@ using FishLens_App.Interfaces;
 using FishLens_App.Models;
 using FishLens_App.Services;
 using FishLens_App.Helper_Classes;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Win32;
@@ -22,7 +21,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security;
-using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -52,8 +50,6 @@ namespace FishLens_App
         private const int CONTENT_PRESENTER_MARGIN = 8;
 
         // Directory paths
-        private const string SAVED_VIDEOS_FOLDER = "SavedVids";
-        private const string SAMPLE_DATA_FOLDER = "sample_data";
         private const string TRASH_FOLDER = ".trash";
         private const string FishExportHeader = "video_file,location,species,species_confidence,likely_class,confidence,direction,start_time_sec,end_time_sec,video_timestamp,run";
         private const string NoFishExportHeader = "video_file,location,video_timestamp";
@@ -653,7 +649,7 @@ namespace FishLens_App
 
         // **************************************************
         // Function: LocationDropdown_SelectionChanged
-        // Description: Persists the newly selected location to appsettings.json and updates App
+        // Description: Persists the newly selected location to the database and updates App
         // **************************************************
         private void LocationDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -681,15 +677,32 @@ namespace FishLens_App
                     app.Configuration.ActiveLocation = selected;
             }
 
-            // Persist active location to JSON as a startup fallback
+            SaveActiveLocationToDatabase(selected);
+        }
+
+        private void SaveActiveLocationToDatabase(string selectedLocation)
+        {
+            if (string.IsNullOrWhiteSpace(selectedLocation))
+                return;
+
+            if (Application.Current is not App app || app.CurrentUserId <= 0)
+                return;
+
             try
             {
-                string configPath = Path.Combine(_pathResolver.ResolveProjectRoot(), "appsettings.json");
-                var data = new System.Collections.Generic.Dictionary<string, string> { ["ActiveLocation"] = selected };
-                var options = new JsonSerializerOptions { WriteIndented = true };
-                File.WriteAllText(configPath, JsonSerializer.Serialize(data, options));
+                using var conn = new SqlConnection(app.connectionString);
+                conn.Open();
+
+                using var cmd = new SqlCommand($"{DatabaseConfig.Schema}.SaveUserActiveLocation", conn);
+                cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                cmd.Parameters.AddWithValue("@pUserId", app.CurrentUserId);
+                cmd.Parameters.AddWithValue("@pActiveLocation", selectedLocation);
+                cmd.ExecuteNonQuery();
             }
-            catch { /* non-critical */ }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist active location {Location}", selectedLocation);
+            }
         }
 
         // **************************************************

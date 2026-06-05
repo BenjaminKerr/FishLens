@@ -179,6 +179,8 @@ FPS_DEFAULT = 30
 MAX_EXPORT_PER_VIDEO = 5
 
 CLI_INPUT_PATH = next((arg.strip() for arg in sys.argv[1:] if not arg.startswith("--")), "")
+FALLBACK_RUN_FOLDER = os.path.join(PROJECT_ROOT, "All History")
+FALLBACK_OUTPUT_CSV = os.path.join(FALLBACK_RUN_FOLDER, "fallback.csv")
 
 
 def _resolve_run_folder():
@@ -186,16 +188,17 @@ def _resolve_run_folder():
     if env_run_folder:
         return env_run_folder
 
-    if CLI_INPUT_PATH:
-        return os.path.join(PROJECT_ROOT, "results", "cli")
+    if IS_WORKER_MODE or IS_CLASSIFIER_MODE:
+        return ""
 
-    return ""
+    return FALLBACK_RUN_FOLDER
 
 
 # Output files are determined by the active run folder passed via FISHLENS_RUN_FOLDER.
 _RUN_FOLDER = _resolve_run_folder()
 _IS_DEBUG_RUN = _RUN_FOLDER and os.path.basename(_RUN_FOLDER).lower() == "debug"
-OUTPUT_CSV = os.path.join(PROJECT_ROOT, "fish_summary.csv")
+_IS_FALLBACK_RUN = _RUN_FOLDER == FALLBACK_RUN_FOLDER
+OUTPUT_CSV = None
 FISH_IMAGE_DIR = os.path.join(PROJECT_ROOT, "fish_images")
 FISH_IMAGE_PENDING_DIR = ""
 
@@ -204,11 +207,16 @@ if not _RUN_FOLDER:
     print("[ERROR] FISHLENS_RUN_FOLDER is not set. A run must be active before starting analysis.", flush=True)
 
 os.makedirs(_RUN_FOLDER, exist_ok=True) if _RUN_FOLDER else None
-_ALL_HISTORY_DIR = os.path.dirname(_RUN_FOLDER) if _RUN_FOLDER else PROJECT_ROOT
+_ALL_HISTORY_DIR = FALLBACK_RUN_FOLDER if _IS_FALLBACK_RUN else (os.path.dirname(_RUN_FOLDER) if _RUN_FOLDER else PROJECT_ROOT)
 os.makedirs(_ALL_HISTORY_DIR, exist_ok=True)
-_RUN_NAME = os.path.basename(_RUN_FOLDER) if _RUN_FOLDER else ""
+_RUN_NAME = "fallback" if _IS_FALLBACK_RUN else (os.path.basename(_RUN_FOLDER) if _RUN_FOLDER else "")
 
-if _IS_DEBUG_RUN:
+if _IS_FALLBACK_RUN:
+    OUTPUT_CSV          = FALLBACK_OUTPUT_CSV
+    SESSION_CSV         = None
+    SESSION_NO_FISH_CSV = None
+    MASTER_FISH_CSV     = None
+elif _IS_DEBUG_RUN:
     # Debug mode: single CSV, never writes to all_history or session files
     OUTPUT_CSV          = os.path.join(_RUN_FOLDER, "debug.csv")
     SESSION_CSV         = None
@@ -350,7 +358,7 @@ def _init_csvs():
         for path, keys in [(OUTPUT_CSV, CSV_KEYS), (MASTER_FISH_CSV, CSV_KEYS)]:
             _initialize_csv_header(path, keys, overwrite=False)
 
-if not IS_WORKER_MODE and not IS_CLASSIFIER_MODE:
+if not IS_WORKER_MODE and not IS_CLASSIFIER_MODE and _RUN_FOLDER and (CLI_INPUT_PATH or os.getenv("FISHLENS_RUN_FOLDER", "").strip()):
     _init_csvs()
 
 # Signal to the host application that models are loaded and we are ready for work.
@@ -1841,10 +1849,10 @@ def _safe_path_component(value, default="unknown"):
 def _get_uncertain_timestamp_dir(source_video_path):
     """Build the output directory for uncertain-timestamp debug frames."""
     video_dir = os.path.basename(os.path.dirname(source_video_path)) or "root"
+    debug_root = _RUN_FOLDER or FALLBACK_RUN_FOLDER
 
     return os.path.join(
-        PROJECT_ROOT,
-        "results",
+        debug_root,
         "uncertain_timestamps",
         _safe_path_component(video_dir, default="root")
     )
@@ -2170,7 +2178,7 @@ def _process_video_file(item_path):
 def _apply_worker_context(context):
     """Apply per-job context supplied by the C# worker-pool coordinator."""
     global FISHLENS_LOCATION, FISHLENS_UPSTREAM_DIRECTION, FAST_MODE
-    global FRAME_STRIDE, _RUN_FOLDER, _IS_DEBUG_RUN, _ALL_HISTORY_DIR, _RUN_NAME
+    global FRAME_STRIDE, _RUN_FOLDER, _IS_DEBUG_RUN, _IS_FALLBACK_RUN, _ALL_HISTORY_DIR, _RUN_NAME
     global OUTPUT_CSV, SESSION_CSV, SESSION_NO_FISH_CSV, MASTER_FISH_CSV, FISH_IMAGE_PENDING_DIR
 
     context = context or {}
@@ -2182,13 +2190,19 @@ def _apply_worker_context(context):
 
     _RUN_FOLDER = str(context.get("run_folder") or "").strip()
     _IS_DEBUG_RUN = _RUN_FOLDER and os.path.basename(_RUN_FOLDER).lower() == "debug"
-    _ALL_HISTORY_DIR = os.path.dirname(_RUN_FOLDER) if _RUN_FOLDER else PROJECT_ROOT
-    _RUN_NAME = str(context.get("run_name") or (os.path.basename(_RUN_FOLDER) if _RUN_FOLDER else "")).strip()
+    _IS_FALLBACK_RUN = _RUN_FOLDER == FALLBACK_RUN_FOLDER
+    _ALL_HISTORY_DIR = FALLBACK_RUN_FOLDER if _IS_FALLBACK_RUN else (os.path.dirname(_RUN_FOLDER) if _RUN_FOLDER else PROJECT_ROOT)
+    _RUN_NAME = str(context.get("run_name") or ("fallback" if _IS_FALLBACK_RUN else (os.path.basename(_RUN_FOLDER) if _RUN_FOLDER else ""))).strip()
     FISH_IMAGE_PENDING_DIR = str(context.get("pending_image_folder") or "").strip()
     if FISH_IMAGE_PENDING_DIR:
         os.makedirs(FISH_IMAGE_PENDING_DIR, exist_ok=True)
 
-    if _IS_DEBUG_RUN:
+    if _IS_FALLBACK_RUN:
+        OUTPUT_CSV = FALLBACK_OUTPUT_CSV
+        SESSION_CSV = None
+        SESSION_NO_FISH_CSV = None
+        MASTER_FISH_CSV = None
+    elif _IS_DEBUG_RUN:
         OUTPUT_CSV = os.path.join(_RUN_FOLDER, "debug.csv") if _RUN_FOLDER else None
         SESSION_CSV = None
         SESSION_NO_FISH_CSV = None
@@ -2354,7 +2368,8 @@ def _run_classifier_server():
 def main(input_path=None):
     """Process either one video or every video in a folder and flush results per video."""
     if input_path is None:
-        input_path = os.path.join(PROJECT_ROOT, "SavedVids")
+        print("[ERROR] No input path provided. Select a video folder in the app or pass one to main.py.", flush=True)
+        return
 
     if os.path.isfile(input_path):
         video_folder = os.path.dirname(input_path)

@@ -8,43 +8,14 @@
 		<ApplicationManifest></ApplicationManifest>
 	</PropertyGroup>
 	<ItemGroup>
-	  <Compile Remove="SavedVids\**" />
-	  <EmbeddedResource Remove="SavedVids\**" />
-	  <None Remove="SavedVids\**" />
-	  <Page Remove="SavedVids\**" />
-	</ItemGroup>
-	<ItemGroup>
-	  <None Remove="appsettings.json" />
-	</ItemGroup>
-	<ItemGroup>
-	  <Content Include="appsettings.json">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	  </Content>
-	</ItemGroup>
-	<ItemGroup>
 		<PackageReference Include="ClosedXML" Version="0.105.0" />
 		<PackageReference Include="MailKit" Version="4.16.0" />
 		<PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
 		<PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.4" />
-		<PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.3" />
-		<PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.3" />
-		<PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.3" />
-		<PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" Version="10.0.3" />
-		<PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.3" />
-		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.1" />
 		<PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.1" />
 		<PackageReference Include="Microsoft.Identity.Client" Version="4.81.0" />
 		<PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
 		<PackageReference Include="System.Data.SqlClient" Version="4.9.0" />
-		<PackageReference Include="xunit.abstractions" Version="2.0.3" />
-		<PackageReference Include="xunit.assert" Version="2.9.3" />
-		<PackageReference Include="xunit.extensibility.core" Version="2.9.3" />
-	</ItemGroup>
-	<ItemGroup>
-	  <None Remove="appsettings.json" />
-	  <None Include="..\appsettings.json" Link="appsettings.json">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	  </None>
 	</ItemGroup>
 	<ItemGroup>
 	  <Folder Include="Themes\Controls\" />

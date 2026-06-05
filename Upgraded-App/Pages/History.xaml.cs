@@ -1990,35 +1990,6 @@ namespace FishLens_App
             return string.IsNullOrEmpty(parentDir) ? fileName : $"{parentDir}/{fileName}";
         }
 
-        // **************************************************
-        // Function: CreateReportFile
-        // Description: Creates a new report file and returns its path
-        private string CreateReportFile()
-        {
-            string csvPath = _pathResolver.ResolveCsvScriptPath();
-            string reportsDir = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(csvPath), "Reports");
-            Directory.CreateDirectory(reportsDir);
-
-            string reportFileName = $"FishLens_Report_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
-            string reportPath = System.IO.Path.Combine(reportsDir, reportFileName);
-
-            File.WriteAllText(reportPath, _currentReportText);
-
-            return reportPath;
-        }
-
-        // **************************************************
-        // Function: OpenReportFile
-        // Description: Opens a report file in the default system application
-        private void OpenReportFile(string reportPath)
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = reportPath,
-                UseShellExecute = true
-            });
-        }
-
         #endregion
 
         #region Helper Methods - View Configuration
